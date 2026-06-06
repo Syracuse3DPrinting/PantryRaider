@@ -9,7 +9,7 @@ services:
     volumes:
       - ./grocy/data:/config
     ports:
-      - "9283:80"
+      - "9285:80"
     restart: unless-stopped
 
   service:
@@ -19,7 +19,7 @@ services:
     volumes:
       - ./service/data:/app/data
     ports:
-      - "9284:8000"
+      - "9286:8000"
     depends_on:
       - grocy
     restart: unless-stopped
