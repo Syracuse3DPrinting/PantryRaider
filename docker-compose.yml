@@ -7,8 +7,6 @@ services:
       - ./service/data:/app/data
     ports:
       - "9284:8000"
-    depends_on:
-      - grocy
     restart: unless-stopped
 
   # Uncomment when switching to local vision
