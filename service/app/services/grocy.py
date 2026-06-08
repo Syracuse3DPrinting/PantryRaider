@@ -73,7 +73,6 @@ class GrocyClient:
             "product_group_id": group_id,
             "qu_id_purchase": qu_id,
             "qu_id_stock": qu_id,
-            "qu_factor_purchase_to_stock": "1",
             "default_best_before_days": -1,
             "description": item.notes or "",
         })
