@@ -4,6 +4,7 @@ services:
     container_name: foodassistant-service
     env_file: .env
     volumes:
+      - ./service/app:/app/app
       - ./service/data:/app/data
     ports:
       - "9284:8000"
