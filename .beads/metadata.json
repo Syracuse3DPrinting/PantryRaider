@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "FoodAssistant",
+  "project_id": "10875a72-337b-4e62-833c-1caef61bf22a"
+}
