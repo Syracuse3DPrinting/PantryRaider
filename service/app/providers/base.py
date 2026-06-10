@@ -1,5 +1,16 @@
+import json
+import re
 from abc import ABC, abstractmethod
 from ..models.food import AnalysisResult
+
+
+def parse_json_response(raw: str):
+    """Parse a model's JSON reply, tolerating markdown code fences."""
+    text = raw.strip()
+    fenced = re.match(r"^```(?:json)?\s*(.*?)\s*```$", text, re.DOTALL)
+    if fenced:
+        text = fenced.group(1)
+    return json.loads(text)
 
 
 class VisionProvider(ABC):

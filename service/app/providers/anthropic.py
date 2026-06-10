@@ -1,0 +1,70 @@
+import base64
+import json
+import time
+
+from anthropic import AsyncAnthropic
+
+from .base import VisionProvider, parse_json_response
+from .gemini import _parse_item, _FOOD_PROMPT, _RECEIPT_PROMPT, _ENRICH_PROMPT
+from ..models.food import AnalysisResult
+
+_HEALTH_CACHE_TTL = 3600  # seconds — avoid hammering the API on every /health poll
+
+
+class AnthropicProvider(VisionProvider):
+    def __init__(self, api_key: str, model: str = "claude-opus-4-8"):
+        self.client = AsyncAnthropic(api_key=api_key)
+        self.model = model
+        self._health_ok: bool | None = None
+        self._health_ts: float = 0.0
+
+    async def _generate(self, prompt: str, image_data: bytes = None,
+                        mime_type: str = None, max_tokens: int = 4096) -> str:
+        content = []
+        if image_data is not None:
+            content.append({
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": mime_type,
+                    "data": base64.standard_b64encode(image_data).decode(),
+                },
+            })
+        content.append({"type": "text", "text": prompt})
+        response = await self.client.messages.create(
+            model=self.model,
+            max_tokens=max_tokens,
+            messages=[{"role": "user", "content": content}],
+        )
+        return next(b.text for b in response.content if b.type == "text")
+
+    async def analyze_food(self, image_data: bytes, mime_type: str) -> AnalysisResult:
+        raw = await self._generate(_FOOD_PROMPT, image_data, mime_type, max_tokens=1024)
+        data = parse_json_response(raw)
+        item = _parse_item(data, default_confidence=0.85)
+        return AnalysisResult(items=[item], image_type="food", raw_response=raw)
+
+    async def analyze_receipt(self, image_data: bytes, mime_type: str) -> AnalysisResult:
+        raw = await self._generate(_RECEIPT_PROMPT, image_data, mime_type, max_tokens=8192)
+        data = parse_json_response(raw)
+        if isinstance(data, dict):
+            data = [data]
+        items = [_parse_item(d, default_confidence=0.85) for d in data]
+        return AnalysisResult(items=items, image_type="receipt", raw_response=raw)
+
+    async def enrich_product(self, info: dict) -> dict | None:
+        prompt = _ENRICH_PROMPT.format(info=json.dumps(info, ensure_ascii=False))
+        raw = await self._generate(prompt, max_tokens=512)
+        return parse_json_response(raw)
+
+    async def health_check(self) -> bool:
+        now = time.monotonic()
+        if self._health_ok is not None and now - self._health_ts < _HEALTH_CACHE_TTL:
+            return self._health_ok
+        try:
+            await self.client.models.retrieve(self.model)
+            self._health_ok = True
+        except Exception:
+            self._health_ok = False
+        self._health_ts = now
+        return self._health_ok

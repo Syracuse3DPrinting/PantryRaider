@@ -10,19 +10,41 @@ def get_vision_provider() -> VisionProvider:
 
 @lru_cache(maxsize=1)
 def get_enrich_provider() -> VisionProvider:
-    """Provider for text-only barcode enrichment; follows vision_provider unless overridden."""
+    """Provider for text-only barcode enrichment.
+
+    Follows vision_provider unless enrich_provider is set; enrich_model
+    overrides the provider's default model for enrichment only.
+    """
     name = settings.enrich_provider or settings.vision_provider
-    if name == settings.vision_provider:
+    if name == settings.vision_provider and not settings.enrich_model:
         return get_vision_provider()
-    return _build_provider(name)
+    return _build_provider(name, model=settings.enrich_model or None)
 
 
-def _build_provider(name: str) -> VisionProvider:
+def reset_providers() -> None:
+    """Drop cached provider instances so settings changes apply immediately."""
+    get_vision_provider.cache_clear()
+    get_enrich_provider.cache_clear()
+
+
+def _build_provider(name: str, model: str | None = None) -> VisionProvider:
     if name == "ollama":
         from .providers.ollama import OllamaProvider
-        return OllamaProvider(settings.ollama_base_url, settings.ollama_model)
+        return OllamaProvider(settings.ollama_base_url, model or settings.ollama_model)
+
+    if name == "openai":
+        from .providers.openai import OpenAIProvider
+        if not settings.openai_api_key:
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        return OpenAIProvider(settings.openai_api_key, model or settings.openai_model)
+
+    if name == "anthropic":
+        from .providers.anthropic import AnthropicProvider
+        if not settings.anthropic_api_key:
+            raise RuntimeError("ANTHROPIC_API_KEY is not set")
+        return AnthropicProvider(settings.anthropic_api_key, model or settings.anthropic_model)
 
     from .providers.gemini import GeminiProvider
     if not settings.gemini_api_key:
         raise RuntimeError("GEMINI_API_KEY is not set")
-    return GeminiProvider(settings.gemini_api_key, settings.gemini_model)
+    return GeminiProvider(settings.gemini_api_key, model or settings.gemini_model)

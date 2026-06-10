@@ -64,25 +64,18 @@
       <i class="bi bi-magic text-warning"></i> Vision / AI
       <span class="badge bg-danger badge-req">Required</span>
     </div>
+    <p class="text-secondary small">Analyzes food photos and receipts. Pick a provider; API keys entered here are saved for every provider so you can switch freely.</p>
     <div class="mb-3">
       <label class="form-label">Provider</label>
-      <div class="d-flex gap-3">
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="vision_provider" id="vp_gemini"
-                 value="gemini" {{ 'checked' if s.vision_provider == 'gemini' else '' }}
-                 onchange="showProvider()">
-          <label class="form-check-label" for="vp_gemini">Google Gemini <span class="text-secondary small">(cloud)</span></label>
-        </div>
-        <div class="form-check">
-          <input class="form-check-input" type="radio" name="vision_provider" id="vp_ollama"
-                 value="ollama" {{ 'checked' if s.vision_provider == 'ollama' else '' }}
-                 onchange="showProvider()">
-          <label class="form-check-label" for="vp_ollama">Ollama <span class="text-secondary small">(local)</span></label>
-        </div>
-      </div>
+      <select class="form-select" id="vision_provider" onchange="showProvider()">
+        <option value="gemini" {{ 'selected' if s.vision_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
+        <option value="openai" {{ 'selected' if s.vision_provider == 'openai' else '' }}>OpenAI (cloud)</option>
+        <option value="anthropic" {{ 'selected' if s.vision_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
+        <option value="ollama" {{ 'selected' if s.vision_provider == 'ollama' else '' }}>Ollama (local)</option>
+      </select>
     </div>
 
-    <div id="gemini-fields">
+    <div id="gemini-fields" class="provider-fields">
       <div class="mb-3">
         <label class="form-label">Gemini API Key</label>
         <div class="input-group">
@@ -101,7 +94,47 @@
       </div>
     </div>
 
-    <div id="ollama-fields" style="display:none">
+    <div id="openai-fields" class="provider-fields" style="display:none">
+      <div class="mb-3">
+        <label class="form-label">OpenAI API Key</label>
+        <div class="input-group">
+          <input type="password" class="form-control font-monospace" id="openai_api_key"
+                 placeholder="platform.openai.com → API keys"
+                 value="{{ s.openai_api_key }}">
+          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('openai_api_key')">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Model</label>
+        <input type="text" class="form-control" id="openai_model"
+               placeholder="gpt-4o-mini" value="{{ s.openai_model or 'gpt-4o-mini' }}">
+        <div class="form-text">Must be vision-capable (gpt-4o, gpt-4o-mini…).</div>
+      </div>
+    </div>
+
+    <div id="anthropic-fields" class="provider-fields" style="display:none">
+      <div class="mb-3">
+        <label class="form-label">Anthropic API Key</label>
+        <div class="input-group">
+          <input type="password" class="form-control font-monospace" id="anthropic_api_key"
+                 placeholder="console.anthropic.com → API Keys"
+                 value="{{ s.anthropic_api_key }}">
+          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('anthropic_api_key')">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Model</label>
+        <input type="text" class="form-control" id="anthropic_model"
+               placeholder="claude-opus-4-8" value="{{ s.anthropic_model or 'claude-opus-4-8' }}">
+        <div class="form-text">claude-haiku-4-5 is the budget option; claude-opus-4-8 the most capable.</div>
+      </div>
+    </div>
+
+    <div id="ollama-fields" class="provider-fields" style="display:none">
       <div class="mb-3">
         <label class="form-label">Ollama Base URL</label>
         <input type="url" class="form-control" id="ollama_base_url"
@@ -120,6 +153,48 @@
       <i class="bi bi-plug me-1"></i>Test Connection
     </button>
     <div class="test-result" id="vision-result"></div>
+  </div>
+
+  <!-- ── Barcode Enrichment ── -->
+  <div class="section-card">
+    <div class="section-title">
+      <i class="bi bi-upc-scan text-info"></i> Barcode Enrichment
+      <span class="badge bg-secondary badge-req">Optional</span>
+    </div>
+    <p class="text-secondary small">
+      Open Food Facts data is messy ("zero sugar" for Dr Pepper Zero). With enrichment on,
+      a small text-only LLM call per scan cleans up the name, category, storage location,
+      and shelf-life estimate. Falls back to heuristics if the call fails.
+    </p>
+    <div class="mb-3">
+      <label class="form-label">Mode</label>
+      <select class="form-select" id="barcode_enrichment">
+        <option value="llm" {{ 'selected' if s.barcode_enrichment == 'llm' else '' }}>LLM enrichment (recommended)</option>
+        <option value="off" {{ 'selected' if s.barcode_enrichment == 'off' else '' }}>Off — heuristics only</option>
+      </select>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Provider</label>
+      <select class="form-select" id="enrich_provider">
+        <option value="" {{ 'selected' if not s.enrich_provider else '' }}>Same as vision provider</option>
+        <option value="gemini" {{ 'selected' if s.enrich_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
+        <option value="openai" {{ 'selected' if s.enrich_provider == 'openai' else '' }}>OpenAI (cloud)</option>
+        <option value="anthropic" {{ 'selected' if s.enrich_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
+        <option value="ollama" {{ 'selected' if s.enrich_provider == 'ollama' else '' }}>Ollama (local)</option>
+      </select>
+      <div class="form-text">Uses the API key / base URL from the Vision section above. Pick Ollama here to keep scans fully local while using a cloud provider for photos.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Model Override <span class="text-secondary small">(optional)</span></label>
+      <input type="text" class="form-control" id="enrich_model"
+             placeholder="empty = the provider's model from above"
+             value="{{ s.enrich_model }}">
+      <div class="form-text">Enrichment is text-only, so a small/cheap model works well (e.g. claude-haiku-4-5, gpt-4o-mini, llama3.2:3b).</div>
+    </div>
+    <button class="btn btn-outline-info btn-sm" onclick="testEnrich()">
+      <i class="bi bi-plug me-1"></i>Test Connection
+    </button>
+    <div class="test-result" id="enrich-result"></div>
   </div>
 
   <!-- ── Authentication ── -->
@@ -170,9 +245,18 @@
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 function showProvider() {
-  const gemini = document.getElementById('vp_gemini').checked;
-  document.getElementById('gemini-fields').style.display = gemini ? '' : 'none';
-  document.getElementById('ollama-fields').style.display = gemini ? 'none' : '';
+  const provider = document.getElementById('vision_provider').value;
+  document.querySelectorAll('.provider-fields').forEach(el => el.style.display = 'none');
+  document.getElementById(`${provider}-fields`).style.display = '';
+}
+
+function providerTestPayload(provider, model) {
+  return {
+    provider,
+    api_key: val(`${provider}_api_key`),
+    model: model || val(`${provider}_model`),
+    base_url: val('ollama_base_url'),
+  };
 }
 
 function toggleVis(id) {
@@ -202,20 +286,26 @@ async function testGrocy() {
 
 async function testVision() {
   setResult('vision-result', true, 'Testing…');
-  const provider = document.querySelector('input[name=vision_provider]:checked').value;
-  const r = await fetch('/setup/test/vision', {
+  const provider = document.getElementById('vision_provider').value;
+  const r = await fetch('/setup/test/provider', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({
-      vision_provider: provider,
-      gemini_api_key: val('gemini_api_key'),
-      gemini_model:   val('gemini_model') || 'gemini-1.5-flash',
-      ollama_base_url: val('ollama_base_url'),
-      ollama_model:   val('ollama_model'),
-    }),
+    body: JSON.stringify(providerTestPayload(provider)),
   });
   const d = await r.json();
   setResult('vision-result', d.ok, d.ok ? d.message : d.error);
+}
+
+async function testEnrich() {
+  setResult('enrich-result', true, 'Testing…');
+  const provider = val('enrich_provider') || document.getElementById('vision_provider').value;
+  const r = await fetch('/setup/test/provider', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(providerTestPayload(provider, val('enrich_model'))),
+  });
+  const d = await r.json();
+  setResult('enrich-result', d.ok, d.ok ? d.message : d.error);
 }
 
 async function saveAll() {
@@ -223,13 +313,19 @@ async function saveAll() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
 
-  const provider = document.querySelector('input[name=vision_provider]:checked').value;
   const payload = {
-    vision_provider: provider,
+    vision_provider: document.getElementById('vision_provider').value,
     gemini_api_key:  val('gemini_api_key'),
     gemini_model:    val('gemini_model') || 'gemini-1.5-flash',
     ollama_base_url: val('ollama_base_url'),
     ollama_model:    val('ollama_model') || 'llava:7b',
+    openai_api_key:  val('openai_api_key'),
+    openai_model:    val('openai_model') || 'gpt-4o-mini',
+    anthropic_api_key: val('anthropic_api_key'),
+    anthropic_model: val('anthropic_model') || 'claude-opus-4-8',
+    barcode_enrichment: val('barcode_enrichment') || 'llm',
+    enrich_provider: val('enrich_provider'),
+    enrich_model:    val('enrich_model'),
     grocy_base_url:  val('grocy_base_url'),
     grocy_api_key:   val('grocy_api_key'),
     auth_password:   val('auth_password'),
