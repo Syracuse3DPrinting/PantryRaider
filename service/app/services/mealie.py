@@ -258,12 +258,23 @@ _STAPLE_GLUE_TOKENS = {
 _FREEBIE_TOKENS = {"water", "ice", "boiling", "warm", "cold", "hot", "tap"}
 
 
+def _active_staple_tokens() -> set[str]:
+    """Staple tokens from the user's settings list, or the built-in default."""
+    if settings.staple_items.strip():
+        toks: set[str] = set()
+        for item in settings.staple_items.split(","):
+            toks |= _tokens(item)
+        if toks:
+            return toks
+    return _STAPLE_TOKENS
+
+
 def _is_perishable(stock_item: dict) -> bool:
-    """Refrigerated items and anything expiring within two weeks."""
+    """Refrigerated items and anything expiring within the configured window."""
     if stock_item.get("storage_bucket") == "refrigerated":
         return True
     d = stock_item.get("days_remaining")
-    return d is not None and d <= 14
+    return d is not None and d <= settings.perishable_days
 
 
 def classify_recipes(recipes: list[dict], stock: list[dict],
@@ -285,6 +296,8 @@ def classify_recipes(recipes: list[dict], stock: list[dict],
                         "days_remaining": s.get("days_remaining"),
                         "perishable": _is_perishable(s)})
 
+    staple_tokens = _active_staple_tokens()
+    soon = settings.expiring_soon_days
     tiers: dict[str, list[dict]] = {"ready": [], "staples": [], "shopping": []}
     for r in recipes:
         ingredients = r.get("recipeIngredient") or []
@@ -303,10 +316,10 @@ def classify_recipes(recipes: list[dict], stock: list[dict],
                 if hit["perishable"]:
                     uses_perishable = True
                 d = hit["days_remaining"]
-                if d is not None and d <= 5 and hit["name"] not in expiring_used:
+                if d is not None and d <= soon and hit["name"] not in expiring_used:
                     expiring_used.append(hit["name"])
-            elif (ing_toks & _STAPLE_TOKENS
-                  and ing_toks <= (_STAPLE_TOKENS | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS)):
+            elif (ing_toks & staple_tokens
+                  and ing_toks <= (staple_tokens | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS)):
                 staples.append(text)
             else:
                 unmatched.append(text)

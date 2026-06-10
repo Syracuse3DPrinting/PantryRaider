@@ -1,0 +1,244 @@
+{% extends "base.html" %}
+{% block title %}What Can I Cook — FoodAssistant{% endblock %}
+{% block content %}
+
+{% if not mealie_configured %}
+<div class="alert alert-info mt-3">
+  <i class="bi bi-lightbulb me-2"></i>
+  Recipe suggestions are powered by <a href="https://mealie.io" target="_blank">Mealie</a>.
+  Add your Mealie URL and API token in <a href="/setup">Settings</a> to enable this page.
+</div>
+{% else %}
+
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-1">
+  <h4 class="mb-0"><i class="bi bi-lightbulb me-2"></i>What Can I Cook?</h4>
+  <button class="btn btn-sm btn-outline-secondary" onclick="loadSuggestions()" title="Refresh">
+    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+  </button>
+</div>
+<p class="text-secondary small mb-3" id="cook-meta">Matching recipes against your inventory…</p>
+
+<div class="row g-3" id="tiers">
+  <div class="col-12 text-secondary">
+    <span class="spinner-border spinner-border-sm me-2"></span>Checking your recipes and TheMealDB against current stock…
+  </div>
+</div>
+
+<!-- Add-to-mealplan modal -->
+<div class="modal fade" id="planModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h6 class="modal-title">Plan: <span id="plan-recipe-name"></span></h6>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body vstack gap-2">
+        <input type="date" class="form-control" id="plan-date">
+        <select class="form-select" id="plan-type">
+          <option value="breakfast">Breakfast</option>
+          <option value="lunch">Lunch</option>
+          <option value="dinner" selected>Dinner</option>
+          <option value="side">Side</option>
+        </select>
+        <div class="text-danger small d-none" id="plan-error"></div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+        <button class="btn btn-primary btn-sm" onclick="savePlan()">Add to Plan</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if mealie_configured %}
+<script>
+const MEALIE_URL = {{ mealie_url | tojson }};
+
+const TIER_META = {
+  ready:    {label: 'Ready to Cook',       icon: 'bi-check-circle',  color: 'success',
+             desc: 'Everything is already in stock.',
+             empty: 'Nothing cookable from stock alone yet.'},
+  staples:  {label: 'With Pantry Staples', icon: 'bi-egg-fried',     color: 'info',
+             desc: 'In stock plus basics like eggs, butter, flour, and spices.',
+             empty: 'Nothing within reach of basic staples.'},
+  shopping: {label: 'Worth a Shop Run',    icon: 'bi-cart-plus',     color: 'warning',
+             desc: 'Uses up your perishables but needs a few extra ingredients.',
+             empty: 'No recipes found that use your perishables.'},
+};
+
+let cardSeq = 0;
+
+function ingredientDetail(s, cid) {
+  const rows = [];
+  const block = (label, cls, items) => items.length &&
+    rows.push(`<div class="small ${cls}">${label}: ${items.join(', ')}</div>`);
+  block('Have', 'text-success', s.matched_ingredients);
+  block('Pantry', 'text-info', s.staple_ingredients || []);
+  block('Need', 'text-warning', s.unmatched_ingredients || []);
+  return `
+    <a class="small text-secondary" data-bs-toggle="collapse" href="#ing-${cid}" role="button">
+      <i class="bi bi-list-ul me-1"></i>${s.total_ingredients} ingredients
+    </a>
+    <div class="collapse mt-1" id="ing-${cid}">${rows.join('')}</div>`;
+}
+
+function actions(s, tier) {
+  const missing = (s.unmatched_ingredients || []).length;
+  const btns = [];
+  if (s.source === 'themealdb' || s.source === 'spoonacular') {
+    if (tier === 'shopping') {
+      btns.push(`<button class="btn btn-sm btn-outline-warning" onclick="importExternal('${s.external_id}', '${s.source}', true, this)"
+        title="Save to Mealie and add ${missing} missing ingredients to the shopping list">
+        <i class="bi bi-cart-plus me-1"></i>Save + list</button>`);
+    } else {
+      btns.push(`<button class="btn btn-sm btn-outline-info" onclick="importExternal('${s.external_id}', '${s.source}', false, this)"
+        title="Save this recipe into Mealie"><i class="bi bi-download me-1"></i>Save</button>`);
+    }
+  } else {
+    btns.push(`<button class="btn btn-sm btn-outline-primary" onclick="openPlan('${s.id}', '${(s.name || '').replace(/'/g, '&#39;')}')"
+      title="Add to meal plan"><i class="bi bi-calendar-plus me-1"></i>Plan</button>`);
+    if (tier === 'shopping' && missing) {
+      btns.push(`<button class="btn btn-sm btn-outline-warning" onclick="addMissing('${s.slug}', this)"
+        title="Add ${missing} missing ingredient${missing !== 1 ? 's' : ''} to the shopping list">
+        <i class="bi bi-cart-plus me-1"></i>${missing}</button>`);
+    }
+  }
+  return btns.join(' ');
+}
+
+function suggestionCard(s, tier) {
+  const cid = ++cardSeq;
+  const external = s.source !== 'mealie';
+  const title = external
+    ? `<span class="fw-semibold">${s.name}</span>
+       <span class="badge bg-dark border ms-1" title="External recipe — save it to keep it">web</span>`
+    : `<a href="${MEALIE_URL}/g/home/r/${s.slug}" target="_blank" class="fw-semibold">${s.name}</a>`;
+  return `
+  <div class="card h-100">
+    ${s.image ? `<img src="${s.image}" class="card-img-top" style="height:120px;object-fit:cover" loading="lazy" onerror="this.remove()">` : ''}
+    <div class="card-body py-2 d-flex flex-column">
+      <div class="d-flex justify-content-between align-items-start gap-2">
+        <div class="min-width-0">${title}</div>
+        <span class="badge bg-secondary flex-shrink-0" title="Ingredients you already have">
+          ${s.matched_ingredients.length}/${s.total_ingredients}</span>
+      </div>
+      ${s.expiring_items_used.length ? `
+        <div class="small urgency-3d mt-1"><i class="bi bi-clock-history me-1"></i>Uses expiring: ${s.expiring_items_used.join(', ')}</div>` : ''}
+      ${s.description ? `<div class="small text-secondary mt-1 text-truncate">${s.description}</div>` : ''}
+      <div class="mt-1">${ingredientDetail(s, cid)}</div>
+      <div class="mt-auto pt-2 d-flex gap-1 flex-wrap" id="actions-${cid}">${actions(s, tier)}</div>
+    </div>
+  </div>`;
+}
+
+async function loadSuggestions() {
+  const el = document.getElementById('tiers');
+  const meta = document.getElementById('cook-meta');
+  el.innerHTML = `<div class="col-12 text-secondary">
+    <span class="spinner-border spinner-border-sm me-2"></span>Checking your recipes and the web against current stock…</div>`;
+  try {
+    const r = await fetch('/mealie/suggest');
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    const data = await r.json();
+    const tiers = data.tiers || {};
+    meta.textContent = `${data.recipes_considered} recipes (${data.external_considered} from the web) matched against ${data.inventory_items} inventory items.`;
+    el.innerHTML = Object.entries(TIER_META).map(([key, m]) => {
+      const items = tiers[key] || [];
+      return `
+      <div class="col-12">
+        <div class="d-flex align-items-baseline gap-2 mb-1">
+          <h5 class="text-${m.color} mb-0"><i class="bi ${m.icon} me-1"></i>${m.label}</h5>
+          <span class="badge bg-${m.color} text-dark">${items.length}</span>
+          <span class="small text-secondary d-none d-md-inline">${m.desc}</span>
+        </div>
+        ${items.length ? `
+        <div class="row g-2 row-cols-1 row-cols-md-2 row-cols-lg-3 row-cols-xxl-4">
+          ${items.map(s => `<div class="col">${suggestionCard(s, key)}</div>`).join('')}
+        </div>` : `<div class="small text-secondary mb-2">${m.empty}</div>`}
+      </div>`;
+    }).join('');
+  } catch (e) {
+    el.innerHTML = `<div class="col-12"><div class="alert alert-danger">Could not load suggestions: ${e.message}</div></div>`;
+    meta.textContent = '';
+  }
+}
+
+async function addMissing(slug, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  try {
+    const r = await fetch('/mealie/suggest/add-missing', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slug}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    btn.outerHTML = `<span class="small text-success align-self-center"><i class="bi bi-check-circle me-1"></i>${d.message}</span>`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    alert('Failed: ' + e.message);
+  }
+}
+
+async function importExternal(externalId, source, addToList, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  try {
+    const r = await fetch('/mealie/recipes/import-external', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({external_id: externalId, source, add_missing_to_list: addToList}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    btn.outerHTML = `<span class="small text-success align-self-center"><i class="bi bi-check-circle me-1"></i>${d.message}
+      <a href="${d.mealie_url}/g/home/r/${d.slug}" target="_blank">View</a></span>`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    alert('Import failed: ' + e.message);
+  }
+}
+
+// ── Add to meal plan ─────────────────────────────────────────────────────────
+
+let planRecipeId = null;
+
+function openPlan(recipeId, name) {
+  planRecipeId = recipeId;
+  document.getElementById('plan-recipe-name').textContent = name;
+  document.getElementById('plan-date').value = new Date().toISOString().slice(0, 10);
+  document.getElementById('plan-error').classList.add('d-none');
+  new bootstrap.Modal(document.getElementById('planModal')).show();
+}
+
+async function savePlan() {
+  const err = document.getElementById('plan-error');
+  err.classList.add('d-none');
+  try {
+    const r = await fetch('/mealie/mealplan', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        date: document.getElementById('plan-date').value,
+        entry_type: document.getElementById('plan-type').value,
+        recipe_id: planRecipeId,
+      }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    bootstrap.Modal.getInstance(document.getElementById('planModal')).hide();
+  } catch (e) {
+    err.textContent = e.message;
+    err.classList.remove('d-none');
+  }
+}
+
+loadSuggestions();
+</script>
+{% endif %}
+{% endblock %}

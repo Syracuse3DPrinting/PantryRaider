@@ -28,47 +28,16 @@
       </button>
       <div class="collapse navbar-collapse" id="nav">
         <ul class="navbar-nav me-auto">
+          {% for tab in nav_tabs() %}
           <li class="nav-item">
-            <a class="nav-link {% if active == 'inventory' %}active{% endif %}" href="/ui/">
-              <i class="bi bi-grid me-1"></i>Inventory
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'expiring' %}active{% endif %}" href="/ui/expiring">
-              <i class="bi bi-clock-history me-1"></i>Expiring
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'add' %}active{% endif %}" href="/ui/add">
-              <i class="bi bi-plus-circle me-1"></i>Add Food
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'pending' %}active{% endif %}" href="/ui/pending">
-              <i class="bi bi-hourglass-split me-1"></i>Pending
+            <a class="nav-link {% if active == tab.key %}active{% endif %}" href="{{ tab.href }}">
+              <i class="bi {{ tab.icon }} me-1"></i>{{ tab.label }}
+              {%- if tab.key == 'pending' %}
               <span class="badge rounded-pill bg-warning text-dark d-none" id="pending-nav-badge">0</span>
+              {%- endif %}
             </a>
           </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'recipes' %}active{% endif %}" href="/ui/recipes">
-              <i class="bi bi-journal-richtext me-1"></i>Recipes
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'mealplan' %}active{% endif %}" href="/ui/mealplan">
-              <i class="bi bi-calendar-week me-1"></i>Meal Plan
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'shopping' %}active{% endif %}" href="/ui/shopping">
-              <i class="bi bi-cart me-1"></i>Shopping
-            </a>
-          </li>
-          <li class="nav-item">
-            <a class="nav-link {% if active == 'defaults' %}active{% endif %}" href="/ui/defaults">
-              <i class="bi bi-table me-1"></i>Defaults
-            </a>
-          </li>
+          {% endfor %}
           <li class="nav-item">
             <a class="nav-link" href="/docs" target="_blank">
               <i class="bi bi-code-square me-1"></i>API

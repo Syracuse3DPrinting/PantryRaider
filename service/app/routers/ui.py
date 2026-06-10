@@ -1,7 +1,6 @@
 import secrets
 from fastapi import APIRouter, Depends, Form, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
-from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -9,16 +8,16 @@ from ..config import settings
 from ..database import get_db
 from ..models.db_models import ExpiryDefault
 from ..services.grocy import GrocyClient
+from ..templating import templates
 
 router = APIRouter(prefix="/ui", tags=["ui"])
-templates = Jinja2Templates(directory="app/templates")
 
 
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     if not settings.auth_password or request.session.get("authed"):
         return RedirectResponse("/ui/", status_code=303)
-    return templates.TemplateResponse("login.html", {"request": request, "error": None})
+    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
 
 
 @router.post("/login")
@@ -26,8 +25,7 @@ def login(request: Request, password: str = Form(...)):
     if settings.auth_password and secrets.compare_digest(password, settings.auth_password):
         request.session["authed"] = True
         return RedirectResponse("/ui/", status_code=303)
-    return templates.TemplateResponse(
-        "login.html",
+    return templates.TemplateResponse(request, "login.html",
         {"request": request, "error": "Incorrect password"},
         status_code=401,
     )
@@ -42,7 +40,7 @@ def logout(request: Request):
 @router.get("/", response_class=HTMLResponse)
 @router.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request):
-    return templates.TemplateResponse("inventory.html", {
+    return templates.TemplateResponse(request, "inventory.html", {
         "request": request,
         "active": "inventory",
         "message": request.query_params.get("msg"),
@@ -52,7 +50,7 @@ async def inventory_page(request: Request):
 
 @router.get("/add", response_class=HTMLResponse)
 async def add_page(request: Request):
-    return templates.TemplateResponse("add.html", {
+    return templates.TemplateResponse(request, "add.html", {
         "request": request,
         "active": "add",
     })
@@ -60,7 +58,7 @@ async def add_page(request: Request):
 
 @router.get("/pending", response_class=HTMLResponse)
 async def pending_page(request: Request):
-    return templates.TemplateResponse("pending.html", {
+    return templates.TemplateResponse(request, "pending.html", {
         "request": request,
         "active": "pending",
     })
@@ -68,7 +66,7 @@ async def pending_page(request: Request):
 
 @router.get("/recipes", response_class=HTMLResponse)
 async def recipes_page(request: Request):
-    return templates.TemplateResponse("recipes.html", {
+    return templates.TemplateResponse(request, "recipes.html", {
         "request": request,
         "active": "recipes",
         "mealie_configured": settings.mealie_configured(),
@@ -76,9 +74,19 @@ async def recipes_page(request: Request):
     })
 
 
+@router.get("/cook", response_class=HTMLResponse)
+async def cook_page(request: Request):
+    return templates.TemplateResponse(request, "cook.html", {
+        "request": request,
+        "active": "cook",
+        "mealie_configured": settings.mealie_configured(),
+        "mealie_url": settings.mealie_link_url(),
+    })
+
+
 @router.get("/mealplan", response_class=HTMLResponse)
 async def mealplan_page(request: Request):
-    return templates.TemplateResponse("mealplan.html", {
+    return templates.TemplateResponse(request, "mealplan.html", {
         "request": request,
         "active": "mealplan",
         "mealie_configured": settings.mealie_configured(),
@@ -88,7 +96,7 @@ async def mealplan_page(request: Request):
 
 @router.get("/shopping", response_class=HTMLResponse)
 async def shopping_page(request: Request):
-    return templates.TemplateResponse("shopping.html", {
+    return templates.TemplateResponse(request, "shopping.html", {
         "request": request,
         "active": "shopping",
         "mealie_configured": settings.mealie_configured(),
@@ -103,7 +111,7 @@ async def expiring_page(request: Request, days: int = 7):
         items = await grocy.get_expiring(days)
     except Exception:
         items = []
-    return templates.TemplateResponse("expiring.html", {
+    return templates.TemplateResponse(request, "expiring.html", {
         "request": request,
         "items": items,
         "days": days,
@@ -135,7 +143,7 @@ def defaults_page(
         ExpiryDefault.category, ExpiryDefault.name_pattern
     ).all()
     categories = sorted(set(r.category for r in rows))
-    return templates.TemplateResponse("defaults.html", {
+    return templates.TemplateResponse(request, "defaults.html", {
         "request": request,
         "defaults": rows,
         "categories": categories,

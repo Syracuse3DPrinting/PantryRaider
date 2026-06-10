@@ -30,17 +30,16 @@
   </div>
 
   <div class="col-lg-4">
-    <div class="card">
-      <div class="card-header d-flex align-items-center justify-content-between">
-        <span><i class="bi bi-lightbulb me-2"></i>What can I cook?</span>
-        <button class="btn btn-sm btn-outline-secondary" onclick="loadSuggestions()" title="Refresh">
-          <i class="bi bi-arrow-clockwise"></i>
-        </button>
+    <a href="/ui/cook" class="card text-decoration-none">
+      <div class="card-body d-flex align-items-center gap-3">
+        <i class="bi bi-lightbulb fs-2 text-warning"></i>
+        <div>
+          <div class="fw-semibold">What can I cook?</div>
+          <div class="small text-secondary">Recipe ideas ranked by what's in stock — ready now, with pantry staples, or worth a shop run.</div>
+        </div>
+        <i class="bi bi-chevron-right ms-auto text-secondary"></i>
       </div>
-      <div class="card-body" id="suggestions">
-        <div class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Matching recipes to your inventory…</div>
-      </div>
-    </div>
+    </a>
   </div>
 </div>
 
@@ -149,140 +148,6 @@ async function removeEntry(id) {
   loadPlan();
 }
 
-const TIER_META = {
-  ready:    {label: 'Ready to cook',       icon: 'bi-check-circle',  color: 'success',
-             empty: 'Nothing cookable from stock alone yet.'},
-  staples:  {label: 'With pantry staples', icon: 'bi-egg-fried',     color: 'info',
-             empty: 'Nothing within reach of basic staples.'},
-  shopping: {label: 'Worth a shop run',    icon: 'bi-cart-plus',     color: 'warning',
-             empty: 'No recipes found that use your perishables.'},
-};
-
-function recipeLink(s) {
-  if (s.source === 'themealdb') {
-    return `<span class="fw-semibold">${s.name}</span>
-      <span class="badge bg-dark border ms-1" title="From TheMealDB — save it to keep it">web</span>`;
-  }
-  return `<a href="${MEALIE_URL}/g/home/r/${s.slug}" target="_blank" class="fw-semibold">${s.name}</a>`;
-}
-
-function suggestionCard(s, tier) {
-  const missing = s.unmatched_ingredients || [];
-  const missingPreview = missing.slice(0, 4).join(', ') + (missing.length > 4 ? `… +${missing.length - 4}` : '');
-  const external = s.source === 'themealdb';
-  let action = '';
-  if (tier === 'shopping') {
-    action = external
-      ? `<button class="btn btn-sm btn-outline-warning flex-shrink-0" onclick="importExternal('${s.external_id}', true, this)"
-           title="Save recipe to Mealie and add ${missing.length} missing ingredients to your shopping list">
-           <i class="bi bi-cart-plus me-1"></i>Save + list</button>`
-      : `<button class="btn btn-sm btn-outline-warning flex-shrink-0" onclick="addMissing('${s.slug}', this)"
-           title="Add ${missing.length} missing ingredient${missing.length !== 1 ? 's' : ''} to your shopping list">
-           <i class="bi bi-cart-plus me-1"></i>${missing.length}</button>`;
-  } else if (external) {
-    action = `<button class="btn btn-sm btn-outline-info flex-shrink-0" onclick="importExternal('${s.external_id}', false, this)"
-        title="Save this recipe into Mealie">
-        <i class="bi bi-download me-1"></i>Save</button>`;
-  }
-  return `
-  <div class="border-bottom pb-2 mb-2">
-    <div class="d-flex justify-content-between align-items-start">
-      <div class="min-width-0">${recipeLink(s)}</div>
-      <span class="badge bg-secondary ms-2 flex-shrink-0" title="Ingredients you already have">
-        ${s.matched_ingredients.length}/${s.total_ingredients}</span>
-    </div>
-    ${s.expiring_items_used.length ? `
-      <div class="small urgency-3d mt-1">
-        <i class="bi bi-clock-history me-1"></i>Uses expiring: ${s.expiring_items_used.join(', ')}
-      </div>` : ''}
-    <div class="small text-secondary mt-1">Have: ${s.matched_ingredients.slice(0, 5).join(', ')}${s.matched_ingredients.length > 5 ? '…' : ''}</div>
-    ${s.staple_ingredients && s.staple_ingredients.length ? `
-      <div class="small text-info mt-1">Pantry: ${s.staple_ingredients.slice(0, 5).join(', ')}${s.staple_ingredients.length > 5 ? '…' : ''}</div>` : ''}
-    ${missing.length ? `
-    <div class="d-flex align-items-center justify-content-between mt-2 gap-2">
-      <span class="small text-warning"><i class="bi bi-cart-plus me-1"></i>Need: ${missingPreview}</span>
-      ${action}
-    </div>` : (action ? `<div class="d-flex justify-content-end mt-2">${action}</div>` : '')}
-  </div>`;
-}
-
-async function loadSuggestions() {
-  const el = document.getElementById('suggestions');
-  el.innerHTML = '<div class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Matching recipes to your inventory…</div>';
-  try {
-    const r = await fetch('/mealie/suggest?top=6');
-    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
-    const data = await r.json();
-    const tiers = data.tiers || {};
-    const total = Object.values(tiers).reduce((n, t) => n + t.length, 0);
-    if (!total) {
-      el.innerHTML = `<div class="text-secondary small">No matches yet
-        (${data.recipes_considered} recipes checked against ${data.inventory_items} inventory items).</div>`;
-      return;
-    }
-    el.innerHTML = Object.entries(TIER_META).map(([key, meta]) => {
-      const items = tiers[key] || [];
-      return `
-      <div class="mb-3">
-        <div class="fw-semibold text-${meta.color} mb-2">
-          <i class="bi ${meta.icon} me-1"></i>${meta.label}
-          <span class="badge bg-${meta.color} text-dark ms-1">${items.length}</span>
-        </div>
-        ${items.length ? items.map(s => suggestionCard(s, key)).join('')
-                       : `<div class="small text-secondary mb-2">${meta.empty}</div>`}
-      </div>`;
-    }).join('');
-  } catch (e) {
-    el.innerHTML = `<div class="text-danger small">Could not load suggestions: ${e.message}</div>`;
-  }
-}
-
-async function importExternal(externalId, addToList, btn) {
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  try {
-    const r = await fetch('/mealie/recipes/import-external', {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({external_id: externalId, add_missing_to_list: addToList}),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || r.statusText);
-    btn.outerHTML = `<span class="small text-success"><i class="bi bi-check-circle me-1"></i>${d.message}
-      <a href="${d.mealie_url}/g/home/r/${d.slug}" target="_blank">View</a></span>`;
-  } catch (e) {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-    alert('Import failed: ' + e.message);
-  }
-}
-
-async function addMissing(slug, btn) {
-  const orig = btn.innerHTML;
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
-  try {
-    const r = await fetch('/mealie/suggest/add-missing', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({slug}),
-    });
-    const d = await r.json();
-    if (!r.ok) throw new Error(d.detail || r.statusText);
-    // Replace the action row with a success note
-    const row = btn.closest('.d-flex');
-    row.outerHTML = `<div class="small text-success mt-2"><i class="bi bi-check-circle me-1"></i>${d.message}</div>`;
-  } catch (e) {
-    btn.disabled = false;
-    btn.innerHTML = orig;
-    const row = btn.closest('.d-flex');
-    const err = document.createElement('div');
-    err.className = 'small text-danger mt-1';
-    err.textContent = 'Failed: ' + e.message;
-    row.after(err);
-    setTimeout(() => err.remove(), 4000);
-  }
-}
 
 // Recipe search in the add-entry modal (debounced)
 let searchTimer = null;
@@ -335,7 +200,6 @@ async function saveEntry() {
 
 document.getElementById('entry-date').value = new Date().toISOString().slice(0, 10);
 loadPlan();
-loadSuggestions();
 </script>
 {% endif %}
 {% endblock %}

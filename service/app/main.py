@@ -1,3 +1,5 @@
+import secrets
+
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, RedirectResponse
@@ -39,7 +41,7 @@ app.add_middleware(
 # Paths that bypass both setup-redirect and auth checks
 _SETUP_BYPASS = {
     "/setup", "/setup/save", "/setup/test/grocy", "/setup/test/vision",
-    "/setup/test/provider", "/setup/test/mealie",
+    "/setup/test/provider", "/setup/test/mealie", "/setup/test/recipes",
     "/health", "/docs", "/openapi.json", "/redoc",
 }
 _PUBLIC_PATHS = _SETUP_BYPASS | {"/ui/login"}
@@ -63,7 +65,8 @@ async def require_auth(request: Request, call_next):
         return await call_next(request)
 
     session_ok = request.session.get("authed", False)
-    key_ok = bool(settings.api_key) and request.headers.get("X-API-Key") == settings.api_key
+    key_ok = bool(settings.api_key) and secrets.compare_digest(
+        request.headers.get("X-API-Key", ""), settings.api_key)
     if session_ok or key_ok:
         return await call_next(request)
 

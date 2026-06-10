@@ -11,6 +11,9 @@ _SAVEABLE = [
     "barcode_enrichment", "enrich_provider", "enrich_model",
     "grocy_base_url", "grocy_api_key",
     "mealie_base_url", "mealie_api_key", "mealie_public_url",
+    "recipe_source", "themealdb_api_key", "spoonacular_api_key",
+    "staple_items", "perishable_days", "expiring_soon_days", "suggest_per_tier",
+    "nav_order", "nav_hidden",
     "secret_key", "auth_password", "api_key",
 ]
 
@@ -61,6 +64,25 @@ class Settings(BaseSettings):
         """URL for browser-facing links (public address if set, else base)."""
         return (self.mealie_public_url or self.mealie_base_url).rstrip("/")
 
+    # External recipe suggestions: themealdb | spoonacular | off.
+    # TheMealDB's public test key "1" is free; a premium (supporter) key or
+    # a Spoonacular key unlocks bigger catalogs.
+    recipe_source: str = "themealdb"
+    themealdb_api_key: str = "1"
+    spoonacular_api_key: str = ""
+
+    # Suggestion tuning. staple_items: comma-separated pantry items assumed
+    # on hand (empty = built-in list). Thresholds in days.
+    staple_items: str = ""
+    perishable_days: int = 14
+    expiring_soon_days: int = 5
+    suggest_per_tier: int = 8
+
+    # Navigation: comma-separated tab keys. nav_order sets display order
+    # (unlisted tabs follow in default order); nav_hidden hides tabs.
+    nav_order: str = ""
+    nav_hidden: str = ""
+
     data_dir: str = "/app/data"
     secret_key: str = ""
 
@@ -102,6 +124,7 @@ class Settings(BaseSettings):
                 pass
         existing.update({k: v for k, v in data.items() if k in _SAVEABLE and v is not None})
         sf.write_text(json.dumps(existing, indent=2))
+        sf.chmod(0o600)  # settings.json holds API keys — owner-only
         self.apply(existing)
 
 

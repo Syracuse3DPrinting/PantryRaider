@@ -3,310 +3,386 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Setup — FoodAssistant</title>
+  <title>Settings — FoodAssistant</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
   <style>
     body { background: #0d1117; }
-    .setup-wrap { max-width: 640px; margin: 2rem auto; padding: 0 1rem 4rem; }
+    .setup-wrap { max-width: 980px; margin: 1.5rem auto; padding: 0 1rem 4rem; }
     .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.25rem; }
-    .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .section-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     .test-result { font-size: 0.82rem; margin-top: 0.4rem; min-height: 1.2rem; }
     .badge-req { font-size: 0.65rem; vertical-align: middle; }
-    .logo { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+    .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
+    .side-menu { position: sticky; top: 1rem; }
+    .side-menu .nav-link { text-align: left; }
+    .nav-tab-row { background: #0d1117; border: 1px solid #30363d; border-radius: 0.5rem; }
+    @media (max-width: 767px) {
+      .side-menu { position: static; }
+      .side-menu .nav { flex-direction: row !important; flex-wrap: nowrap; overflow-x: auto; }
+      .side-menu .nav-link { white-space: nowrap; }
+    }
   </style>
 </head>
 <body>
+
+{% macro secret_input(id, placeholder) -%}
+<div class="input-group">
+  <input type="password" class="form-control font-monospace" id="{{ id }}" autocomplete="new-password"
+         placeholder="{{ '•••• saved — leave blank to keep' if has[id] else placeholder }}">
+  <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('{{ id }}')" title="Show/hide">
+    <i class="bi bi-eye"></i>
+  </button>
+  {% if has[id] %}
+  <button class="btn btn-outline-danger" type="button" onclick="clearSecret('{{ id }}')" title="Forget the saved value on next save">
+    <i class="bi bi-trash3"></i>
+  </button>
+  {% endif %}
+</div>
+{%- endmacro %}
+
 <div class="setup-wrap">
 
-  <div class="text-center my-4">
-    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant</div>
+  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 my-3">
+    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant
+      <span class="text-secondary fw-normal fs-6 ms-1">Settings</span></div>
     {% if configured %}
-    <p class="text-secondary mt-1 mb-0">Update your configuration below.</p>
+    <a href="/ui/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to app</a>
     {% else %}
-    <p class="text-secondary mt-1 mb-0">Welcome! Fill in the details below to get started.</p>
+    <span class="text-secondary small">Welcome! Configure Grocy and an AI provider to get started.</span>
     {% endif %}
   </div>
 
-  <!-- ── Grocy ── -->
-  <div class="section-card">
-    <div class="section-title">
-      <i class="bi bi-fridge text-info"></i> Grocy
-      <span class="badge bg-danger badge-req">Required</span>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Grocy URL</label>
-      <input type="url" class="form-control" id="grocy_base_url"
-             placeholder="http://192.168.1.10:9283"
-             value="{{ s.grocy_base_url if s.grocy_base_url != 'http://grocy:80' else '' }}">
-      <div class="form-text">Full URL to your Grocy instance — no trailing slash.</div>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Grocy API Key</label>
-      <div class="input-group">
-        <input type="password" class="form-control font-monospace" id="grocy_api_key"
-               placeholder="Grocy → Profile → Manage API Keys"
-               value="{{ s.grocy_api_key }}">
-        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('grocy_api_key')">
-          <i class="bi bi-eye"></i>
-        </button>
-      </div>
-    </div>
-    <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
-      <i class="bi bi-plug me-1"></i>Test Connection
-    </button>
-    <div class="test-result" id="grocy-result"></div>
-  </div>
+  <div class="row g-3">
 
-  <!-- ── Vision / AI ── -->
-  <div class="section-card">
-    <div class="section-title">
-      <i class="bi bi-magic text-warning"></i> Vision / AI
-      <span class="badge bg-danger badge-req">Required</span>
-    </div>
-    <p class="text-secondary small">Analyzes food photos and receipts. Pick a provider; API keys entered here are saved for every provider so you can switch freely.</p>
-    <div class="mb-3">
-      <label class="form-label">Provider</label>
-      <select class="form-select" id="vision_provider" onchange="showProvider()">
-        <option value="gemini" {{ 'selected' if s.vision_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
-        <option value="openai" {{ 'selected' if s.vision_provider == 'openai' else '' }}>OpenAI (cloud)</option>
-        <option value="anthropic" {{ 'selected' if s.vision_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
-        <option value="ollama" {{ 'selected' if s.vision_provider == 'ollama' else '' }}>Ollama (local)</option>
-      </select>
-    </div>
-
-    <div id="gemini-fields" class="provider-fields">
-      <div class="mb-3">
-        <label class="form-label">Gemini API Key</label>
-        <div class="input-group">
-          <input type="password" class="form-control font-monospace" id="gemini_api_key"
-                 placeholder="aistudio.google.com → Get API Key"
-                 value="{{ s.gemini_api_key }}">
-          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('gemini_api_key')">
-            <i class="bi bi-eye"></i>
+    <!-- ── Side menu ── -->
+    <div class="col-md-3">
+      <div class="side-menu">
+        <div class="nav flex-column nav-pills gap-1" role="tablist">
+          <button class="nav-link active" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
+            <i class="bi bi-fridge me-2"></i>Inventory
+            <span class="badge bg-danger badge-req ms-1">Required</span>
+          </button>
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-ai" type="button">
+            <i class="bi bi-magic me-2"></i>AI Providers
+            <span class="badge bg-danger badge-req ms-1">Required</span>
+          </button>
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-recipes" type="button">
+            <i class="bi bi-journal-richtext me-2"></i>Recipes
+          </button>
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
+            <i class="bi bi-layout-sidebar me-2"></i>Interface
+          </button>
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
+            <i class="bi bi-shield-lock me-2"></i>Security
           </button>
         </div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Model</label>
-        <input type="text" class="form-control" id="gemini_model"
-               value="{{ s.gemini_model or 'gemini-1.5-flash' }}">
+        <button class="btn btn-primary w-100 mt-3" onclick="saveAll()" id="saveBtn">
+          <i class="bi bi-check-lg me-1"></i>Save All
+        </button>
+        <div id="save-result" class="mt-2 text-center small"></div>
       </div>
     </div>
 
-    <div id="openai-fields" class="provider-fields" style="display:none">
-      <div class="mb-3">
-        <label class="form-label">OpenAI API Key</label>
-        <div class="input-group">
-          <input type="password" class="form-control font-monospace" id="openai_api_key"
-                 placeholder="platform.openai.com → API keys"
-                 value="{{ s.openai_api_key }}">
-          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('openai_api_key')">
-            <i class="bi bi-eye"></i>
-          </button>
+    <!-- ── Content panes ── -->
+    <div class="col-md-9">
+      <div class="tab-content">
+
+        <!-- ════ Inventory (Grocy) ════ -->
+        <div class="tab-pane fade show active" id="pane-inventory">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-fridge text-info"></i> Grocy — Inventory Backend</div>
+            <p class="text-secondary small">Grocy stores your stock, locations, and consumption history.
+              Run one with <code>docker compose --profile with-grocy up -d</code> (port 9383).</p>
+            <div class="mb-3">
+              <label class="form-label">Grocy URL</label>
+              <input type="url" class="form-control" id="grocy_base_url"
+                     placeholder="http://192.168.1.10:9383"
+                     value="{{ s.grocy_base_url if s.grocy_base_url != 'http://grocy:80' else '' }}">
+              <div class="form-text">Full URL to your Grocy instance — no trailing slash.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Grocy API Key</label>
+              {{ secret_input('grocy_api_key', 'Grocy → Profile → Manage API Keys') }}
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
+              <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <div class="test-result" id="grocy-result"></div>
+          </div>
         </div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Model</label>
-        <input type="text" class="form-control" id="openai_model"
-               placeholder="gpt-4o-mini" value="{{ s.openai_model or 'gpt-4o-mini' }}">
-        <div class="form-text">Must be vision-capable (gpt-4o, gpt-4o-mini…).</div>
-      </div>
-    </div>
 
-    <div id="anthropic-fields" class="provider-fields" style="display:none">
-      <div class="mb-3">
-        <label class="form-label">Anthropic API Key</label>
-        <div class="input-group">
-          <input type="password" class="form-control font-monospace" id="anthropic_api_key"
-                 placeholder="console.anthropic.com → API Keys"
-                 value="{{ s.anthropic_api_key }}">
-          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('anthropic_api_key')">
-            <i class="bi bi-eye"></i>
-          </button>
+        <!-- ════ AI Providers ════ -->
+        <div class="tab-pane fade" id="pane-ai">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-magic text-warning"></i> Vision Provider</div>
+            <p class="text-secondary small">Analyzes food photos, receipts, and photographed recipes.
+              Keys entered here are saved per provider so you can switch freely.</p>
+            <div class="mb-3">
+              <label class="form-label">Provider</label>
+              <select class="form-select" id="vision_provider" onchange="showProvider()">
+                <option value="gemini" {{ 'selected' if s.vision_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
+                <option value="openai" {{ 'selected' if s.vision_provider == 'openai' else '' }}>OpenAI (cloud)</option>
+                <option value="anthropic" {{ 'selected' if s.vision_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
+                <option value="ollama" {{ 'selected' if s.vision_provider == 'ollama' else '' }}>Ollama (local)</option>
+              </select>
+            </div>
+
+            <div class="provider-fields" id="fields-gemini">
+              <div class="mb-3">
+                <label class="form-label">Gemini API Key</label>
+                {{ secret_input('gemini_api_key', 'Free key at aistudio.google.com') }}
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Model</label>
+                <input type="text" class="form-control" id="gemini_model" value="{{ s.gemini_model }}">
+              </div>
+            </div>
+            <div class="provider-fields" id="fields-openai">
+              <div class="mb-3">
+                <label class="form-label">OpenAI API Key</label>
+                {{ secret_input('openai_api_key', 'platform.openai.com → API keys') }}
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Model <span class="text-secondary small">(must be vision-capable)</span></label>
+                <input type="text" class="form-control" id="openai_model" value="{{ s.openai_model }}">
+              </div>
+            </div>
+            <div class="provider-fields" id="fields-anthropic">
+              <div class="mb-3">
+                <label class="form-label">Anthropic API Key</label>
+                {{ secret_input('anthropic_api_key', 'console.anthropic.com → API Keys') }}
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Model</label>
+                <input type="text" class="form-control" id="anthropic_model" value="{{ s.anthropic_model }}">
+                <div class="form-text">claude-opus-4-8 is the most capable; claude-haiku-4-5 the budget option.</div>
+              </div>
+            </div>
+            <div class="provider-fields" id="fields-ollama">
+              <div class="mb-3">
+                <label class="form-label">Ollama URL</label>
+                <input type="url" class="form-control" id="ollama_base_url"
+                       placeholder="http://ollama:11434" value="{{ s.ollama_base_url }}">
+                <div class="form-text">Run with <code>docker compose --profile with-ollama up -d</code>, then pull a vision model.</div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label">Model</label>
+                <input type="text" class="form-control" id="ollama_model" value="{{ s.ollama_model }}">
+              </div>
+            </div>
+
+            <button class="btn btn-outline-info btn-sm" onclick="testVision()">
+              <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <div class="test-result" id="vision-result"></div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-stars text-warning"></i> Barcode Enrichment</div>
+            <p class="text-secondary small">Open Food Facts names are often messy ("zero sugar" for Dr Pepper Zero).
+              LLM enrichment cleans up the name, category, storage, and shelf life per scan — one small text call.</p>
+            <div class="mb-3">
+              <label class="form-label">Mode</label>
+              <select class="form-select" id="barcode_enrichment">
+                <option value="llm" {{ 'selected' if s.barcode_enrichment == 'llm' else '' }}>LLM enrichment (recommended)</option>
+                <option value="off" {{ 'selected' if s.barcode_enrichment == 'off' else '' }}>Heuristics only (no LLM call)</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Provider Override <span class="text-secondary small">(optional)</span></label>
+              <select class="form-select" id="enrich_provider">
+                <option value="" {{ 'selected' if not s.enrich_provider else '' }}>Same as vision provider</option>
+                <option value="gemini" {{ 'selected' if s.enrich_provider == 'gemini' else '' }}>Google Gemini</option>
+                <option value="openai" {{ 'selected' if s.enrich_provider == 'openai' else '' }}>OpenAI</option>
+                <option value="anthropic" {{ 'selected' if s.enrich_provider == 'anthropic' else '' }}>Anthropic Claude</option>
+                <option value="ollama" {{ 'selected' if s.enrich_provider == 'ollama' else '' }}>Ollama (local)</option>
+              </select>
+              <div class="form-text">Uses the key/URL from the Vision section. Pick Ollama to keep scans fully local.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Model Override <span class="text-secondary small">(optional)</span></label>
+              <input type="text" class="form-control" id="enrich_model"
+                     placeholder="empty = the provider's model above" value="{{ s.enrich_model }}">
+              <div class="form-text">Text-only, so a small model works well (claude-haiku-4-5, gpt-4o-mini, llama3.2:3b).</div>
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="testEnrich()">
+              <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <div class="test-result" id="enrich-result"></div>
+          </div>
         </div>
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Model</label>
-        <input type="text" class="form-control" id="anthropic_model"
-               placeholder="claude-opus-4-8" value="{{ s.anthropic_model or 'claude-opus-4-8' }}">
-        <div class="form-text">claude-haiku-4-5 is the budget option; claude-opus-4-8 the most capable.</div>
-      </div>
-    </div>
 
-    <div id="ollama-fields" class="provider-fields" style="display:none">
-      <div class="mb-3">
-        <label class="form-label">Ollama Base URL</label>
-        <input type="url" class="form-control" id="ollama_base_url"
-               placeholder="http://192.168.1.10:11434"
-               value="{{ s.ollama_base_url }}">
-      </div>
-      <div class="mb-3">
-        <label class="form-label">Model</label>
-        <input type="text" class="form-control" id="ollama_model"
-               placeholder="llava:7b" value="{{ s.ollama_model }}">
-        <div class="form-text">Must be a vision-capable model (llava, bakllava, moondream…).</div>
-      </div>
-    </div>
+        <!-- ════ Recipes ════ -->
+        <div class="tab-pane fade" id="pane-recipes">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-journal-richtext text-primary"></i> Mealie — Recipe Manager
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">Enables the Recipes, Cook, Meal Plan, and Shopping pages.
+              Run one with <code>docker compose --profile with-mealie up -d</code> (port 9285).</p>
+            <div class="mb-3">
+              <label class="form-label">Mealie URL <span class="text-secondary small">(internal — used for API calls)</span></label>
+              <input type="url" class="form-control" id="mealie_base_url"
+                     placeholder="http://192.168.1.10:9285" value="{{ s.mealie_base_url }}">
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Mealie Public URL <span class="text-secondary small">(optional — used for browser links)</span></label>
+              <input type="url" class="form-control" id="mealie_public_url"
+                     placeholder="https://mealie.example.com" value="{{ s.mealie_public_url }}">
+              <div class="form-text">External address used when the UI links you to Mealie. Empty = internal URL.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Mealie API Token</label>
+              {{ secret_input('mealie_api_key', 'Mealie → User Profile → API Tokens') }}
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="testMealie()">
+              <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <div class="test-result" id="mealie-result"></div>
+          </div>
 
-    <button class="btn btn-outline-warning btn-sm" onclick="testVision()">
-      <i class="bi bi-plug me-1"></i>Test Connection
-    </button>
-    <div class="test-result" id="vision-result"></div>
-  </div>
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-globe2 text-primary"></i> External Recipe Suggestions</div>
+            <p class="text-secondary small">"What can I cook?" can pull recipe ideas from the web in addition to
+              your Mealie library. Picked recipes are saved into Mealie.</p>
+            <div class="mb-3">
+              <label class="form-label">Source</label>
+              <select class="form-select" id="recipe_source" onchange="showRecipeSource()">
+                <option value="themealdb" {{ 'selected' if s.recipe_source == 'themealdb' else '' }}>TheMealDB (free, default)</option>
+                <option value="spoonacular" {{ 'selected' if s.recipe_source == 'spoonacular' else '' }}>Spoonacular (API key required)</option>
+                <option value="off" {{ 'selected' if s.recipe_source == 'off' else '' }}>Off — Mealie recipes only</option>
+              </select>
+            </div>
+            <div id="source-themealdb">
+              <div class="mb-3">
+                <label class="form-label">TheMealDB API Key <span class="text-secondary small">(optional)</span></label>
+                {{ secret_input('themealdb_api_key', 'empty = free public key "1"') }}
+                <div class="form-text">The public key works out of the box (~300 recipes). A
+                  <a href="https://www.themealdb.com/api.php" target="_blank">premium supporter key</a>
+                  unlocks the full catalog and removes rate limits.</div>
+              </div>
+            </div>
+            <div id="source-spoonacular">
+              <div class="mb-3">
+                <label class="form-label">Spoonacular API Key</label>
+                {{ secret_input('spoonacular_api_key', 'spoonacular.com/food-api → My Console') }}
+                <div class="form-text">Much larger catalog with ingredient-aware search. Free tier is ~150
+                  points/day — results are cached for an hour to stretch it.</div>
+              </div>
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="testRecipes()">
+              <i class="bi bi-plug me-1"></i>Test Source
+            </button>
+            <div class="test-result" id="recipes-result"></div>
+          </div>
+        </div>
 
-  <!-- ── Barcode Enrichment ── -->
-  <div class="section-card">
-    <div class="section-title">
-      <i class="bi bi-upc-scan text-info"></i> Barcode Enrichment
-      <span class="badge bg-secondary badge-req">Optional</span>
-    </div>
-    <p class="text-secondary small">
-      Open Food Facts data is messy ("zero sugar" for Dr Pepper Zero). With enrichment on,
-      a small text-only LLM call per scan cleans up the name, category, storage location,
-      and shelf-life estimate. Falls back to heuristics if the call fails.
-    </p>
-    <div class="mb-3">
-      <label class="form-label">Mode</label>
-      <select class="form-select" id="barcode_enrichment">
-        <option value="llm" {{ 'selected' if s.barcode_enrichment == 'llm' else '' }}>LLM enrichment (recommended)</option>
-        <option value="off" {{ 'selected' if s.barcode_enrichment == 'off' else '' }}>Off — heuristics only</option>
-      </select>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Provider</label>
-      <select class="form-select" id="enrich_provider">
-        <option value="" {{ 'selected' if not s.enrich_provider else '' }}>Same as vision provider</option>
-        <option value="gemini" {{ 'selected' if s.enrich_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
-        <option value="openai" {{ 'selected' if s.enrich_provider == 'openai' else '' }}>OpenAI (cloud)</option>
-        <option value="anthropic" {{ 'selected' if s.enrich_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
-        <option value="ollama" {{ 'selected' if s.enrich_provider == 'ollama' else '' }}>Ollama (local)</option>
-      </select>
-      <div class="form-text">Uses the API key / base URL from the Vision section above. Pick Ollama here to keep scans fully local while using a cloud provider for photos.</div>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Model Override <span class="text-secondary small">(optional)</span></label>
-      <input type="text" class="form-control" id="enrich_model"
-             placeholder="empty = the provider's model from above"
-             value="{{ s.enrich_model }}">
-      <div class="form-text">Enrichment is text-only, so a small/cheap model works well (e.g. claude-haiku-4-5, gpt-4o-mini, llama3.2:3b).</div>
-    </div>
-    <button class="btn btn-outline-info btn-sm" onclick="testEnrich()">
-      <i class="bi bi-plug me-1"></i>Test Connection
-    </button>
-    <div class="test-result" id="enrich-result"></div>
-  </div>
+        <!-- ════ Interface ════ -->
+        <div class="tab-pane fade" id="pane-interface">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-layout-sidebar text-success"></i> Navigation Tabs</div>
+            <p class="text-secondary small">Re-order tabs and hide the ones you don't use. Tabs for services that
+              aren't configured (e.g. Mealie pages) hide automatically. Pages stay reachable by direct URL.</p>
+            <div class="vstack gap-1" id="nav-editor"></div>
+          </div>
 
-  <!-- ── Mealie ── -->
-  <div class="section-card">
-    <div class="section-title">
-      <i class="bi bi-journal-richtext text-primary"></i> Mealie (Recipes &amp; Meal Planning)
-      <span class="badge bg-secondary badge-req">Optional</span>
-    </div>
-    <p class="text-secondary small">
-      Connect a <a href="https://mealie.io" target="_blank">Mealie</a> instance to enable the
-      Meal Plan and Shopping List pages, plus recipe suggestions based on what's in your
-      inventory. Start one with <code>docker compose --profile with-mealie up -d</code>.
-    </p>
-    <div class="mb-3">
-      <label class="form-label">Mealie URL <span class="text-secondary small">(internal — used for API calls)</span></label>
-      <input type="url" class="form-control" id="mealie_base_url"
-             placeholder="http://192.168.1.10:9285"
-             value="{{ s.mealie_base_url }}">
-      <div class="form-text">LAN or docker address FoodAssistant uses to talk to Mealie's API.</div>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Mealie Public URL <span class="text-secondary small">(optional — used for browser links)</span></label>
-      <input type="url" class="form-control" id="mealie_public_url"
-             placeholder="https://mealie.example.com"
-             value="{{ s.mealie_public_url }}">
-      <div class="form-text">External address used when the UI links you to Mealie (e.g. behind a reverse proxy). Leave empty to use the internal URL for links too.</div>
-    </div>
-    <div class="mb-3">
-      <label class="form-label">Mealie API Token</label>
-      <div class="input-group">
-        <input type="password" class="form-control font-monospace" id="mealie_api_key"
-               placeholder="Mealie → User Profile → API Tokens"
-               value="{{ s.mealie_api_key }}">
-        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('mealie_api_key')">
-          <i class="bi bi-eye"></i>
-        </button>
-      </div>
-    </div>
-    <button class="btn btn-outline-info btn-sm" onclick="testMealie()">
-      <i class="bi bi-plug me-1"></i>Test Connection
-    </button>
-    <div class="test-result" id="mealie-result"></div>
-  </div>
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-sliders text-success"></i> Suggestion Tuning</div>
+            <div class="mb-3">
+              <label class="form-label">Pantry Staples <span class="text-secondary small">(comma-separated)</span></label>
+              <textarea class="form-control" id="staple_items" rows="3"
+                        placeholder="empty = built-in list: eggs, butter, flour, sugar, salt, pepper, oil, milk, garlic, onion, vinegar, honey, mustard, ketchup, mayonnaise, soy sauce, common dried spices">{{ s.staple_items }}</textarea>
+              <div class="form-text">Items assumed on hand even when not in inventory — used by the
+                "With Pantry Staples" tier of recipe suggestions.</div>
+            </div>
+            <div class="row g-2">
+              <div class="col-sm-4">
+                <label class="form-label">Perishable window <span class="text-secondary small">(days)</span></label>
+                <input type="number" class="form-control" id="perishable_days" min="1" max="60" value="{{ s.perishable_days }}">
+                <div class="form-text">Non-refrigerated items expiring within this count as perishable.</div>
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">Expiring soon <span class="text-secondary small">(days)</span></label>
+                <input type="number" class="form-control" id="expiring_soon_days" min="1" max="30" value="{{ s.expiring_soon_days }}">
+                <div class="form-text">"Uses expiring" highlight threshold.</div>
+              </div>
+              <div class="col-sm-4">
+                <label class="form-label">Suggestions per tier</label>
+                <input type="number" class="form-control" id="suggest_per_tier" min="1" max="20" value="{{ s.suggest_per_tier }}">
+                <div class="form-text">Cards shown in each Cook tier.</div>
+              </div>
+            </div>
+          </div>
+        </div>
 
-  <!-- ── Authentication ── -->
-  <div class="section-card">
-    <div class="section-title">
-      <i class="bi bi-shield-lock text-success"></i> Authentication
-      <span class="badge bg-secondary badge-req">Optional</span>
-    </div>
-    <p class="text-secondary small">Leave both fields empty to disable auth entirely. If you're behind a reverse proxy (like Pangolin) that handles auth, you may not need this.</p>
-    <div class="mb-3">
-      <label class="form-label">UI Password</label>
-      <div class="input-group">
-        <input type="password" class="form-control" id="auth_password"
-               placeholder="Protects the web UI login page"
-               value="{{ s.auth_password }}">
-        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('auth_password')">
-          <i class="bi bi-eye"></i>
-        </button>
+        <!-- ════ Security ════ -->
+        <div class="tab-pane fade" id="pane-security">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">Leave both empty to disable auth — fine when a reverse proxy
+              (Pangolin, Authelia…) already gates access.</p>
+            <div class="mb-3">
+              <label class="form-label">UI Password</label>
+              {{ secret_input('auth_password', 'Protects the web UI login page') }}
+            </div>
+            <div class="mb-3">
+              <label class="form-label">API Key <span class="text-secondary small">(Home Assistant / headless clients)</span></label>
+              {{ secret_input('api_key', 'Sent as X-API-Key header') }}
+              <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
+            </div>
+          </div>
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are handled</div>
+            <ul class="small text-secondary mb-0">
+              <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
+              <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
+              <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
+              <li>Connection-test errors have key material redacted before display.</li>
+              <li>To rotate a key: paste the new value and save — the old one is overwritten immediately.</li>
+            </ul>
+          </div>
+        </div>
+
       </div>
-    </div>
-    <div class="mb-1">
-      <label class="form-label">API Key <span class="text-secondary small">(for Home Assistant / headless clients)</span></label>
-      <div class="input-group">
-        <input type="password" class="form-control font-monospace" id="api_key"
-               placeholder="Send as X-API-Key header"
-               value="{{ s.api_key }}">
-        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('api_key')">
-          <i class="bi bi-eye"></i>
-        </button>
-      </div>
-      <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
     </div>
   </div>
-
-  <!-- ── Save ── -->
-  <button class="btn btn-primary w-100 py-2" onclick="saveAll()" id="saveBtn">
-    <i class="bi bi-check-lg me-1"></i>Save &amp; Continue
-  </button>
-  <div id="save-result" class="mt-3 text-center"></div>
-  {% if configured %}
-  <div class="text-center mt-3">
-    <a href="/ui/" class="text-secondary small">← Back to app</a>
-  </div>
-  {% endif %}
-
-</div><!-- /setup-wrap -->
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
 <script>
-function showProvider() {
-  const provider = document.getElementById('vision_provider').value;
-  document.querySelectorAll('.provider-fields').forEach(el => el.style.display = 'none');
-  document.getElementById(`${provider}-fields`).style.display = '';
+const TABS = {{ tabs | tojson }};
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
+
+function val(id) { return document.getElementById(id)?.value.trim() || ''; }
+function num(id, fallback) { const v = parseInt(val(id), 10); return isNaN(v) ? fallback : v; }
+
+function secretVal(id) {
+  const el = document.getElementById(id);
+  if (!el) return '';
+  if (el.dataset.clear === '1') return '__CLEAR__';
+  return el.value.trim();
 }
 
-function providerTestPayload(provider, model) {
-  return {
-    provider,
-    api_key: val(`${provider}_api_key`),
-    model: model || val(`${provider}_model`),
-    base_url: val('ollama_base_url'),
-  };
+function clearSecret(id) {
+  const el = document.getElementById(id);
+  if (el.dataset.clear === '1') {
+    el.dataset.clear = '';
+    el.disabled = false;
+    el.placeholder = '•••• saved — leave blank to keep';
+  } else {
+    el.dataset.clear = '1';
+    el.value = '';
+    el.disabled = true;
+    el.placeholder = 'will be erased on save';
+  }
 }
 
 function toggleVis(id) {
   const el = document.getElementById(id);
   el.type = el.type === 'password' ? 'text' : 'password';
 }
-
-function val(id) { return document.getElementById(id)?.value.trim() || ''; }
 
 function setResult(id, ok, msg) {
   const el = document.getElementById(id);
@@ -315,51 +391,105 @@ function setResult(id, ok, msg) {
     : `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${msg}</span>`;
 }
 
+function showProvider() {
+  const p = document.getElementById('vision_provider').value;
+  document.querySelectorAll('.provider-fields').forEach(d => d.style.display = 'none');
+  document.getElementById('fields-' + p).style.display = '';
+}
+
+function showRecipeSource() {
+  const src = document.getElementById('recipe_source').value;
+  document.getElementById('source-themealdb').style.display = src === 'themealdb' ? '' : 'none';
+  document.getElementById('source-spoonacular').style.display = src === 'spoonacular' ? '' : 'none';
+}
+
+// ── Connection tests (blank key = server uses the saved one) ─────────────────
+
+async function postJson(url, body) {
+  const r = await fetch(url, {
+    method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
 async function testGrocy() {
   setResult('grocy-result', true, 'Testing…');
-  const r = await fetch('/setup/test/grocy', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ grocy_base_url: val('grocy_base_url'), grocy_api_key: val('grocy_api_key') }),
-  });
-  const d = await r.json();
+  const d = await postJson('/setup/test/grocy',
+    {grocy_base_url: val('grocy_base_url'), grocy_api_key: secretVal('grocy_api_key')});
   setResult('grocy-result', d.ok, d.ok ? d.message : d.error);
+}
+
+async function testMealie() {
+  setResult('mealie-result', true, 'Testing…');
+  const d = await postJson('/setup/test/mealie',
+    {mealie_base_url: val('mealie_base_url'), mealie_api_key: secretVal('mealie_api_key')});
+  setResult('mealie-result', d.ok, d.ok ? d.message : d.error);
+}
+
+function providerTestPayload(provider, modelOverride = '') {
+  return {
+    provider,
+    api_key: secretVal(provider + '_api_key'),
+    model: modelOverride || val(provider + '_model'),
+    base_url: val('ollama_base_url'),
+  };
 }
 
 async function testVision() {
   setResult('vision-result', true, 'Testing…');
-  const provider = document.getElementById('vision_provider').value;
-  const r = await fetch('/setup/test/provider', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(providerTestPayload(provider)),
-  });
-  const d = await r.json();
+  const d = await postJson('/setup/test/provider',
+    providerTestPayload(document.getElementById('vision_provider').value));
   setResult('vision-result', d.ok, d.ok ? d.message : d.error);
 }
 
 async function testEnrich() {
   setResult('enrich-result', true, 'Testing…');
   const provider = val('enrich_provider') || document.getElementById('vision_provider').value;
-  const r = await fetch('/setup/test/provider', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify(providerTestPayload(provider, val('enrich_model'))),
-  });
-  const d = await r.json();
+  const d = await postJson('/setup/test/provider', providerTestPayload(provider, val('enrich_model')));
   setResult('enrich-result', d.ok, d.ok ? d.message : d.error);
 }
 
-async function testMealie() {
-  setResult('mealie-result', true, 'Testing…');
-  const r = await fetch('/setup/test/mealie', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({ mealie_base_url: val('mealie_base_url'), mealie_api_key: val('mealie_api_key') }),
-  });
-  const d = await r.json();
-  setResult('mealie-result', d.ok, d.ok ? d.message : d.error);
+async function testRecipes() {
+  setResult('recipes-result', true, 'Testing…');
+  const src = document.getElementById('recipe_source').value;
+  const d = await postJson('/setup/test/recipes',
+    {source: src, api_key: secretVal(src === 'spoonacular' ? 'spoonacular_api_key' : 'themealdb_api_key')});
+  setResult('recipes-result', d.ok, d.ok ? d.message : d.error);
 }
+
+// ── Navigation tab editor ─────────────────────────────────────────────────────
+
+let navState = TABS.map(t => ({key: t.key, label: t.label, icon: t.icon,
+                               hidden: t.hidden, available: t.available}));
+
+function renderNavEditor() {
+  document.getElementById('nav-editor').innerHTML = navState.map((t, i) => `
+    <div class="nav-tab-row d-flex align-items-center gap-2 px-2 py-1 ${t.hidden ? 'opacity-50' : ''}">
+      <div class="btn-group-vertical btn-group-sm">
+        <button class="btn btn-outline-secondary py-0 px-1" onclick="moveTab(${i}, -1)" ${i === 0 ? 'disabled' : ''} title="Move up">
+          <i class="bi bi-chevron-up"></i></button>
+        <button class="btn btn-outline-secondary py-0 px-1" onclick="moveTab(${i}, 1)" ${i === navState.length - 1 ? 'disabled' : ''} title="Move down">
+          <i class="bi bi-chevron-down"></i></button>
+      </div>
+      <i class="bi ${t.icon}"></i>
+      <span class="flex-grow-1">${t.label}
+        ${!t.available ? '<span class="badge bg-secondary ms-1" title="Hidden automatically until its service is configured">auto-hidden</span>' : ''}
+      </span>
+      <div class="form-check form-switch mb-0" title="Show this tab">
+        <input class="form-check-input" type="checkbox" ${t.hidden ? '' : 'checked'}
+               onchange="navState[${i}].hidden = !this.checked; renderNavEditor()">
+      </div>
+    </div>`).join('');
+}
+
+function moveTab(i, delta) {
+  const j = i + delta;
+  if (j < 0 || j >= navState.length) return;
+  [navState[i], navState[j]] = [navState[j], navState[i]];
+  renderNavEditor();
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
 
 async function saveAll() {
   const btn = document.getElementById('saveBtn');
@@ -368,24 +498,33 @@ async function saveAll() {
 
   const payload = {
     vision_provider: document.getElementById('vision_provider').value,
-    gemini_api_key:  val('gemini_api_key'),
+    gemini_api_key:  secretVal('gemini_api_key'),
     gemini_model:    val('gemini_model') || 'gemini-1.5-flash',
     ollama_base_url: val('ollama_base_url'),
     ollama_model:    val('ollama_model') || 'llava:7b',
-    openai_api_key:  val('openai_api_key'),
+    openai_api_key:  secretVal('openai_api_key'),
     openai_model:    val('openai_model') || 'gpt-4o-mini',
-    anthropic_api_key: val('anthropic_api_key'),
+    anthropic_api_key: secretVal('anthropic_api_key'),
     anthropic_model: val('anthropic_model') || 'claude-opus-4-8',
     barcode_enrichment: val('barcode_enrichment') || 'llm',
     enrich_provider: val('enrich_provider'),
     enrich_model:    val('enrich_model'),
     grocy_base_url:  val('grocy_base_url'),
-    grocy_api_key:   val('grocy_api_key'),
+    grocy_api_key:   secretVal('grocy_api_key'),
     mealie_base_url: val('mealie_base_url'),
-    mealie_api_key:  val('mealie_api_key'),
+    mealie_api_key:  secretVal('mealie_api_key'),
     mealie_public_url: val('mealie_public_url'),
-    auth_password:   val('auth_password'),
-    api_key:         val('api_key'),
+    recipe_source:   document.getElementById('recipe_source').value,
+    themealdb_api_key: secretVal('themealdb_api_key'),
+    spoonacular_api_key: secretVal('spoonacular_api_key'),
+    staple_items:    val('staple_items'),
+    perishable_days: num('perishable_days', 14),
+    expiring_soon_days: num('expiring_soon_days', 5),
+    suggest_per_tier: num('suggest_per_tier', 8),
+    nav_order:       navState.map(t => t.key).join(','),
+    nav_hidden:      navState.filter(t => t.hidden).map(t => t.key).join(','),
+    auth_password:   secretVal('auth_password'),
+    api_key:         secretVal('api_key'),
   };
 
   try {
@@ -400,16 +539,18 @@ async function saveAll() {
     } else {
       throw new Error(d.detail || 'Unknown error');
     }
-  } catch(e) {
+  } catch (e) {
     document.getElementById('save-result').innerHTML =
       `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</span>`;
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save &amp; Continue';
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save All';
   }
 }
 
 // Init
 showProvider();
+showRecipeSource();
+renderNavEditor();
 </script>
 </body>
 </html>

@@ -203,12 +203,13 @@ async def create_recipe(payload: CreateRecipePayload):
 
 
 @router.get("/suggest")
-async def suggest(top: int = Query(8, ge=1, le=20), external: bool = True):
+async def suggest(top: int = Query(0, ge=0, le=20), external: bool = True):
     """Recipes sorted into three cookability tiers against current inventory:
     ready (stock only), staples (stock + pantry basics), shopping (uses
     perishable stock but needs extra ingredients). Candidates come from
     Mealie plus TheMealDB when external=true."""
     m = _client()
+    top = top or settings.suggest_per_tier
     try:
         recipes = await m.get_recipes_with_ingredients()
     except MealieError as e:
@@ -245,18 +246,19 @@ async def suggest(top: int = Query(8, ge=1, le=20), external: bool = True):
 
 class ImportExternalPayload(BaseModel):
     external_id: str
+    source: str = "themealdb"
     add_missing_to_list: bool = False
     list_id: str = ""
 
 
 @router.post("/recipes/import-external")
 async def import_external_recipe(payload: ImportExternalPayload):
-    """Save a TheMealDB recipe into Mealie; optionally also send its
+    """Save an external recipe into Mealie; optionally also send its
     missing ingredients to the shopping list in the same click."""
     m = _client()
-    recipe = await recipes_external.get_external_recipe(payload.external_id)
+    recipe = await recipes_external.get_external_recipe(payload.external_id, payload.source)
     if not recipe:
-        raise HTTPException(404, "Recipe not found in TheMealDB.")
+        raise HTTPException(404, "Recipe not found at the external source.")
     try:
         slug = await m.create_recipe(recipe)
     except MealieError as e:
