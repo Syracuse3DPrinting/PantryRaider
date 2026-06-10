@@ -161,21 +161,64 @@ async function loadSuggestions() {
         (${data.recipes_considered} recipes checked against ${data.inventory_items} inventory items).</div>`;
       return;
     }
-    el.innerHTML = data.suggestions.map(s => `
-      <div class="border-bottom pb-2 mb-2">
+    el.innerHTML = data.suggestions.map(s => {
+      const hasMissing = s.unmatched_ingredients && s.unmatched_ingredients.length > 0;
+      const missingPreview = hasMissing
+        ? s.unmatched_ingredients.slice(0, 4).join(', ') + (s.unmatched_ingredients.length > 4 ? `… +${s.unmatched_ingredients.length - 4}` : '')
+        : '';
+      return `
+      <div class="border-bottom pb-2 mb-2" id="suggestion-${s.slug}">
         <div class="d-flex justify-content-between align-items-start">
           <a href="${MEALIE_URL}/g/home/r/${s.slug}" target="_blank" class="fw-semibold">${s.name}</a>
-          <span class="badge bg-secondary ms-2" title="Ingredients you already have">
+          <span class="badge bg-secondary ms-2 flex-shrink-0" title="Ingredients you already have">
             ${s.matched_ingredients.length}/${s.total_ingredients}</span>
         </div>
         ${s.expiring_items_used.length ? `
           <div class="small urgency-3d mt-1">
             <i class="bi bi-clock-history me-1"></i>Uses expiring: ${s.expiring_items_used.join(', ')}
           </div>` : ''}
-        <div class="small text-secondary mt-1">Have: ${s.matched_ingredients.slice(0, 6).join(', ')}${s.matched_ingredients.length > 6 ? '…' : ''}</div>
-      </div>`).join('');
+        <div class="small text-secondary mt-1">Have: ${s.matched_ingredients.slice(0, 5).join(', ')}${s.matched_ingredients.length > 5 ? '…' : ''}</div>
+        ${hasMissing ? `
+        <div class="d-flex align-items-center justify-content-between mt-2 gap-2">
+          <span class="small text-warning"><i class="bi bi-cart-plus me-1"></i>Need: ${missingPreview}</span>
+          <button class="btn btn-sm btn-outline-warning flex-shrink-0"
+                  onclick="addMissing('${s.slug}', this)"
+                  title="Add ${s.unmatched_ingredients.length} missing ingredient${s.unmatched_ingredients.length !== 1 ? 's' : ''} to your shopping list">
+            <i class="bi bi-cart-plus me-1"></i>${s.unmatched_ingredients.length}
+          </button>
+        </div>` : `
+        <div class="small text-success mt-1"><i class="bi bi-check-circle me-1"></i>You have everything!</div>`}
+      </div>`;
+    }).join('');
   } catch (e) {
     el.innerHTML = `<div class="text-danger small">Could not load suggestions: ${e.message}</div>`;
+  }
+}
+
+async function addMissing(slug, btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  try {
+    const r = await fetch('/mealie/suggest/add-missing', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({slug}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    // Replace the action row with a success note
+    const row = btn.closest('.d-flex');
+    row.outerHTML = `<div class="small text-success mt-2"><i class="bi bi-check-circle me-1"></i>${d.message}</div>`;
+  } catch (e) {
+    btn.disabled = false;
+    btn.innerHTML = orig;
+    const row = btn.closest('.d-flex');
+    const err = document.createElement('div');
+    err.className = 'small text-danger mt-1';
+    err.textContent = 'Failed: ' + e.message;
+    row.after(err);
+    setTimeout(() => err.remove(), 4000);
   }
 }
 

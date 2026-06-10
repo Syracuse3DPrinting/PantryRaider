@@ -116,6 +116,74 @@ async def suggest(top: int = Query(10, ge=1, le=30)):
     }
 
 
+class AddMissingPayload(BaseModel):
+    slug: str
+    list_id: str = ""   # empty = use first available list
+
+
+@router.post("/suggest/add-missing")
+async def add_missing_ingredients(payload: AddMissingPayload):
+    """Add unmatched ingredients of a recipe to the Mealie shopping list.
+
+    Re-runs the match logic against the current inventory so the list
+    reflects what you actually have right now, not a cached snapshot.
+    """
+    m = _client()
+    try:
+        recipe = await m.get_recipe(payload.slug)
+    except MealieError as e:
+        raise HTTPException(502, str(e))
+
+    try:
+        stock = await GrocyClient().get_full_stock()
+    except Exception:
+        stock = []
+
+    # Replicate the matching logic from suggest_recipes for this one recipe
+    from ..services.mealie import _tokens, _ingredient_text
+    inv_tokens = [{"tokens": _tokens(s["name"])} for s in stock if _tokens(s["name"])]
+
+    missing = []
+    for ing in recipe.get("recipeIngredient") or []:
+        text = _ingredient_text(ing).strip()
+        if not text:
+            continue
+        ing_toks = _tokens(text)
+        if not ing_toks:
+            continue
+        already_have = any(ing_toks & s["tokens"] for s in inv_tokens)
+        if not already_have:
+            missing.append(text)
+
+    if not missing:
+        return {"ok": True, "added": 0, "message": "You already have all ingredients."}
+
+    # Resolve shopping list
+    try:
+        lists = await m.get_shopping_lists()
+    except MealieError as e:
+        raise HTTPException(502, str(e))
+    if not lists:
+        raise HTTPException(400, "No shopping lists found in Mealie — create one first.")
+
+    target = next((l for l in lists if l.get("id") == payload.list_id), lists[0])
+    list_id = target["id"]
+
+    import asyncio
+    results = await asyncio.gather(
+        *(m.add_shopping_item(list_id, item) for item in missing),
+        return_exceptions=True,
+    )
+    added = sum(1 for r in results if not isinstance(r, Exception))
+    return {
+        "ok": True,
+        "added": added,
+        "list_name": target.get("name", ""),
+        "items": missing,
+        "message": f"Added {added} item{'s' if added != 1 else ''} to \"{target.get('name', 'Shopping List')}\".",
+    }
+
+
 # ── Shopping lists ───────────────────────────────────────────────────────────
 
 @router.get("/shopping")

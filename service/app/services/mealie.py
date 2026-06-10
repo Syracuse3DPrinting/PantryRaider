@@ -209,17 +209,20 @@ def suggest_recipes(recipes: list[dict], stock: list[dict], top: int = 10) -> li
         ingredients = r.get("recipeIngredient") or []
         if not ingredients:
             continue
-        matched, expiring_used = [], []
+        matched, unmatched, expiring_used = [], [], []
         for ing in ingredients:
             ing_toks = _tokens(_ingredient_text(ing))
-            if not ing_toks:
+            text = _ingredient_text(ing).strip()
+            if not ing_toks or not text:
                 continue
             hit = next((s for s in inv if ing_toks & s["tokens"]), None)
             if hit:
-                matched.append(_ingredient_text(ing).strip())
+                matched.append(text)
                 d = hit["days_remaining"]
                 if d is not None and d <= 5 and hit["name"] not in expiring_used:
                     expiring_used.append(hit["name"])
+            else:
+                unmatched.append(text)
         if not matched:
             continue
         coverage = len(matched) / len(ingredients)
@@ -227,9 +230,11 @@ def suggest_recipes(recipes: list[dict], stock: list[dict], top: int = 10) -> li
         results.append({
             "name": r.get("name"),
             "slug": r.get("slug"),
+            "id": r.get("id"),
             "description": (r.get("description") or "")[:160],
             "total_ingredients": len(ingredients),
             "matched_ingredients": matched,
+            "unmatched_ingredients": unmatched,
             "expiring_items_used": expiring_used,
             "coverage": round(coverage, 2),
             "score": round(score, 3),
