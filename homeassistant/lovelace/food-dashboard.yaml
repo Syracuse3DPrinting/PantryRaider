@@ -43,19 +43,24 @@ views:
 
       # ── Quick Links ──────────────────────────────────────────────────────────
       - type: entities
-        title: Quick Links
+        title: FoodAssistant
         entities:
           - type: weblink
-            name: Open Grocy (Stock Overview)
+            name: Expiring Items
+            url: http://192.168.1.170:9284/ui/
+            icon: mdi:clock-alert-outline
+
+          - type: weblink
+            name: Add Food (Scan / Photo / Manual)
+            url: http://192.168.1.170:9284/ui/add
+            icon: mdi:barcode-scan
+
+          - type: weblink
+            name: Expiry Defaults
+            url: http://192.168.1.170:9284/ui/defaults
+            icon: mdi:table-edit
+
+          - type: weblink
+            name: Grocy (Stock Overview)
             url: http://192.168.1.170:9383/stockoverview
             icon: mdi:fridge
-
-          - type: weblink
-            name: FoodAssistant API Docs
-            url: http://192.168.1.170:9284/docs
-            icon: mdi:api
-
-          - type: weblink
-            name: Analyze Food Photo
-            url: http://192.168.1.170:9284/docs#/analyze/analyze_food_analyze_food_post
-            icon: mdi:camera-plus
