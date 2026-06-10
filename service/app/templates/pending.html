@@ -1,0 +1,202 @@
+{% extends "base.html" %}
+{% block title %}Pending — FoodAssistant{% endblock %}
+{% block content %}
+<style>
+  .pending-card.failed { border-color: #4d2a0a !important; }
+  .field-saved { box-shadow: 0 0 0 2px rgba(105,219,124,0.5) !important; transition: box-shadow 0.2s; }
+  .meta-text { font-size: 0.75rem; color: var(--bs-secondary-color); }
+</style>
+
+<div class="d-flex justify-content-between align-items-center my-3 flex-wrap gap-2">
+  <h4 class="mb-0">
+    <i class="bi bi-hourglass-split me-2"></i>Pending Scans
+    <span class="badge bg-warning text-dark ms-1" id="pending-count">0</span>
+  </h4>
+  <div class="d-flex gap-2">
+    <button class="btn btn-outline-secondary btn-sm" onclick="loadPending()" title="Refresh">
+      <i class="bi bi-arrow-clockwise"></i>
+    </button>
+    <button class="btn btn-success" onclick="commitAll()" id="commitAllBtn">
+      <i class="bi bi-cloud-upload me-1"></i>Commit All to Grocy
+    </button>
+  </div>
+</div>
+
+<p class="text-secondary small">
+  Items scanned by a headless barcode scanner land here with defaults applied.
+  Edit anything inline (changes save automatically), then commit.
+  <i class="bi bi-exclamation-triangle text-warning"></i> = barcode lookup failed, fix the name before committing.
+</p>
+
+<div id="pending-list"></div>
+<div id="pending-empty" class="text-center text-secondary py-5 d-none">
+  <i class="bi bi-check2-circle fs-1 d-block mb-2 text-success"></i>
+  No pending scans — all caught up.
+</div>
+<div id="commit-status" class="mt-2"></div>
+
+<!-- Toast -->
+<div class="position-fixed bottom-0 end-0 p-3" style="z-index:9999">
+  <div id="pToast" class="toast align-items-center text-bg-success border-0" role="alert">
+    <div class="d-flex">
+      <div class="toast-body" id="pToastMsg"></div>
+      <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const CATEGORIES = ['Poultry','Meat','Seafood','Dairy','Produce','Grains','Condiments','Beverages','Snacks','Frozen','Canned','Other'];
+const STORAGES = {refrigerated:'Refrigerated', frozen:'Frozen', room_temp:'Room Temp', dry:'Dry'};
+
+function esc(s) {
+  return (s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;');
+}
+
+function options(list, selected) {
+  if (Array.isArray(list)) {
+    return list.map(v => `<option value="${v}" ${v===selected?'selected':''}>${v}</option>`).join('');
+  }
+  return Object.entries(list).map(([v,label]) =>
+    `<option value="${v}" ${v===selected?'selected':''}>${label}</option>`).join('');
+}
+
+async function loadPending() {
+  const r = await fetch('/pending/');
+  const data = await r.json();
+  const items = data.items || [];
+  document.getElementById('pending-count').textContent = items.length;
+  document.getElementById('pending-empty').classList.toggle('d-none', items.length > 0);
+  document.getElementById('commitAllBtn').disabled = items.length === 0;
+
+  document.getElementById('pending-list').innerHTML = items.map(item => `
+    <div class="card mb-2 pending-card ${item.lookup_failed ? 'failed' : ''}" id="pending-${item.id}">
+      <div class="card-body py-2">
+        <div class="row g-2 align-items-center">
+          <div class="col-md-3">
+            <input class="form-control form-control-sm ${item.lookup_failed ? 'border-warning' : ''}"
+                   value="${esc(item.name)}" placeholder="Name"
+                   onchange="patchItem(${item.id}, 'name', this.value, this)">
+          </div>
+          <div class="col-4 col-md-1">
+            <input class="form-control form-control-sm" type="number" value="${item.quantity}"
+                   min="0.01" step="0.01"
+                   onchange="patchItem(${item.id}, 'quantity', parseFloat(this.value), this)">
+          </div>
+          <div class="col-4 col-md-1">
+            <input class="form-control form-control-sm" value="${esc(item.unit || 'item')}"
+                   onchange="patchItem(${item.id}, 'unit', this.value, this)">
+          </div>
+          <div class="col-4 col-md-2">
+            <select class="form-select form-select-sm" onchange="patchItem(${item.id}, 'category', this.value, this)">
+              ${options(CATEGORIES, item.category)}
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <select class="form-select form-select-sm" onchange="patchItem(${item.id}, 'storage_type', this.value, this)">
+              ${options(STORAGES, item.storage_type)}
+            </select>
+          </div>
+          <div class="col-6 col-md-2">
+            <input class="form-control form-control-sm" type="date" value="${item.best_by_date || ''}"
+                   onchange="patchItem(${item.id}, 'best_by_date', this.value, this)">
+          </div>
+          <div class="col-md-1 text-end d-flex gap-1 justify-content-end">
+            <button class="btn btn-sm btn-outline-success btn-icon" title="Commit this item"
+                    onclick="commitOne(${item.id})">
+              <i class="bi bi-cloud-upload"></i>
+            </button>
+            <button class="btn btn-sm btn-outline-danger btn-icon" title="Discard"
+                    onclick="discardItem(${item.id})">
+              <i class="bi bi-x-lg"></i>
+            </button>
+          </div>
+        </div>
+        <div class="meta-text mt-1 ms-1">
+          ${item.lookup_failed ? '<i class="bi bi-exclamation-triangle text-warning me-1"></i>lookup failed — ' : ''}
+          ${item.barcode ? `barcode ${esc(item.barcode)} · ` : ''}
+          ${item.brand ? `${esc(item.brand)} · ` : ''}
+          scanned ${item.created_at ? item.created_at.replace('T',' ').slice(0,16) : '?'}
+          ${item.source ? ` via ${esc(item.source)}` : ''}
+        </div>
+      </div>
+    </div>
+  `).join('');
+}
+
+async function patchItem(id, field, value, el) {
+  try {
+    const r = await fetch(`/pending/${id}`, {
+      method: 'PATCH',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ [field]: value }),
+    });
+    if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
+    if (el) {
+      el.classList.add('field-saved');
+      setTimeout(() => el.classList.remove('field-saved'), 800);
+    }
+  } catch(e) {
+    showToast(`Save failed: ${e.message}`, true);
+  }
+}
+
+async function commitOne(id) {
+  await doCommit([id]);
+}
+
+async function commitAll() {
+  await doCommit(null);
+}
+
+async function doCommit(ids) {
+  document.getElementById('commit-status').innerHTML =
+    '<div class="alert alert-info py-1 px-2 small"><span class="spinner-border spinner-border-sm me-1"></span>Committing…</div>';
+  try {
+    const r = await fetch('/pending/commit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ ids }),
+    });
+    const d = await r.json();
+    const errs = (d.results || []).filter(x => x.status === 'error');
+    if (errs.length === 0) {
+      document.getElementById('commit-status').innerHTML = '';
+      showToast(`✓ Imported ${d.imported} item(s) to Grocy`);
+    } else {
+      document.getElementById('commit-status').innerHTML =
+        `<div class="alert alert-warning py-1 px-2 small">${d.imported} imported, ${errs.length} failed: ${errs.map(x => esc(x.error)).join('; ')}</div>`;
+    }
+    await loadPending();
+  } catch(e) {
+    document.getElementById('commit-status').innerHTML =
+      `<div class="alert alert-danger py-1 px-2 small">Commit failed: ${esc(e.message)}</div>`;
+  }
+}
+
+async function discardItem(id) {
+  try {
+    await fetch(`/pending/${id}`, { method: 'DELETE' });
+    document.getElementById(`pending-${id}`)?.remove();
+    const cnt = document.getElementById('pending-count');
+    cnt.textContent = Math.max(0, parseInt(cnt.textContent) - 1);
+    if (cnt.textContent === '0') loadPending();
+  } catch(e) {
+    showToast(`Delete failed: ${e.message}`, true);
+  }
+}
+
+function showToast(msg, isError = false) {
+  const toast = document.getElementById('pToast');
+  toast.className = `toast align-items-center border-0 text-bg-${isError ? 'danger' : 'success'}`;
+  document.getElementById('pToastMsg').textContent = msg;
+  new bootstrap.Toast(toast, { delay: 3000 }).show();
+}
+
+loadPending();
+// Headless scanners add items while this page is open — keep it fresh
+setInterval(loadPending, 15000);
+</script>
+{% endblock %}

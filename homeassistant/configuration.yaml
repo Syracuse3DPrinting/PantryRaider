@@ -63,3 +63,27 @@ rest:
           - room_temp
           - pantry
 
+  # Pending scans waiting for review on the /ui/pending page
+  - resource: http://192.168.1.170:9284/pending/count
+    scan_interval: 60
+    # headers:
+    #   X-API-Key: !secret foodassistant_api_key
+    sensor:
+      - name: "Food Pending Scans"
+        unique_id: food_pending_scans
+        value_template: "{{ value_json.count }}"
+        unit_of_measurement: "items"
+        icon: mdi:barcode-scan
+
+# ─── Barcode Scanner → Pending Queue ─────────────────────────────────────────
+# Sends a scanned barcode to FoodAssistant's pending queue. Call this from an
+# automation (see homeassistant/barcode-scanner.md for full setup).
+rest_command:
+  foodassistant_scan:
+    url: http://192.168.1.170:9284/pending/scan
+    method: POST
+    content_type: "application/json"
+    # headers:
+    #   X-API-Key: !secret foodassistant_api_key
+    payload: '{"barcode": "{{ barcode }}", "source": "ha"}'
+

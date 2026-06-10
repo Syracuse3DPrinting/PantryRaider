@@ -58,6 +58,14 @@ async def add_page(request: Request):
     })
 
 
+@router.get("/pending", response_class=HTMLResponse)
+async def pending_page(request: Request):
+    return templates.TemplateResponse("pending.html", {
+        "request": request,
+        "active": "pending",
+    })
+
+
 @router.get("/expiring", response_class=HTMLResponse)
 async def expiring_page(request: Request, days: int = 7):
     grocy = GrocyClient()

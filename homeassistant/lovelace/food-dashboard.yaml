@@ -30,6 +30,14 @@ views:
             name: 7 Days
             icon: mdi:food-apple
             color: green
+          - type: tile
+            entity: sensor.food_pending_scans
+            name: Pending Scans
+            icon: mdi:barcode-scan
+            color: purple
+            tap_action:
+              action: url
+              url_path: https://fass.korolev.link/ui/pending
 
       # ── Alerts (only shows when something needs attention) ──────────────────
       - type: conditional
@@ -141,6 +149,13 @@ views:
             tap_action:
               action: url
               url_path: https://fass.korolev.link/ui/defaults
+          - type: button
+            name: Pending Scans
+            icon: mdi:barcode-scan
+            icon_height: 44px
+            tap_action:
+              action: url
+              url_path: https://fass.korolev.link/ui/pending
           - type: button
             name: Grocy Stock
             icon: mdi:fridge

@@ -44,6 +44,12 @@
             </a>
           </li>
           <li class="nav-item">
+            <a class="nav-link {% if active == 'pending' %}active{% endif %}" href="/ui/pending">
+              <i class="bi bi-hourglass-split me-1"></i>Pending
+              <span class="badge rounded-pill bg-warning text-dark d-none" id="pending-nav-badge">0</span>
+            </a>
+          </li>
+          <li class="nav-item">
             <a class="nav-link {% if active == 'defaults' %}active{% endif %}" href="/ui/defaults">
               <i class="bi bi-table me-1"></i>Defaults
             </a>
@@ -83,6 +89,16 @@
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Pending-scan badge in the navbar
+    fetch('/pending/count').then(r => r.json()).then(d => {
+      if (d.count > 0) {
+        const b = document.getElementById('pending-nav-badge');
+        b.textContent = d.count;
+        b.classList.remove('d-none');
+      }
+    }).catch(() => {});
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -8,7 +8,7 @@ from .config import settings
 from .database import engine, get_db, Base
 from .models import db_models  # noqa: F401 — registers models with Base
 from .services.defaults import seed_defaults
-from .routers import analyze, defaults, inventory, expiring, ui, setup
+from .routers import analyze, defaults, inventory, expiring, ui, setup, pending
 
 
 @asynccontextmanager
@@ -75,6 +75,7 @@ async def require_auth(request: Request, call_next):
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=60 * 60 * 24 * 30)
 
 app.include_router(setup.router)
+app.include_router(pending.router)
 app.include_router(analyze.router)
 app.include_router(defaults.router)
 app.include_router(inventory.router)
