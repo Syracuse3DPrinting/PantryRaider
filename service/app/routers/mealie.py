@@ -270,6 +270,16 @@ async def suggest(top: int = Query(0, ge=0, le=20), mealie: bool = True, externa
     }
 
 
+@router.get("/recipes/external-detail")
+async def external_recipe_detail(external_id: str, source: str = "themealdb"):
+    """Full external recipe (ingredients, instructions, image) for previewing
+    before the user decides to save it into Mealie."""
+    recipe = await recipes_external.get_external_recipe(external_id, source)
+    if not recipe:
+        raise HTTPException(404, "Recipe not found at the external source.")
+    return recipe
+
+
 class ImportExternalPayload(BaseModel):
     external_id: str
     source: str = "themealdb"
