@@ -1,6 +1,6 @@
-# Headless Bluetooth Barcode Scanner → Pending Queue
+# Headless Wireless Barcode Scanner → Pending Queue
 
-Scan groceries with a dedicated Bluetooth barcode scanner — no phone, no
+Scan groceries with a dedicated wireless barcode scanner — no phone, no
 browser. Each scan lands in FoodAssistant's **Pending** page
 (`/ui/pending`) with name, category, storage, and best-by date pre-filled
 from Open Food Facts + your defaults rules. Review and commit when ready.
@@ -8,22 +8,31 @@ from Open Food Facts + your defaults rules. Review and commit when ready.
 ## How it works
 
 ```
-BT scanner ──HID──► Home Assistant host ──keyboard_remote──► automation
-                                                              │
-                                          rest_command ◄──────┘
-                                              │
-                                              ▼
-                            POST /pending/scan  (FoodAssistant)
-                                              │
-                                              ▼
-                                     /ui/pending  (review + commit)
+scanner ──HID──► Home Assistant host ──keyboard_remote──► automation
+                                                           │
+                                       rest_command ◄──────┘
+                                           │
+                                           ▼
+                         POST /pending/scan  (FoodAssistant)
+                                           │
+                                           ▼
+                                  /ui/pending  (review + commit)
 ```
 
-Almost every Bluetooth barcode scanner (Eyoyo, Tera, Inateck, NETUM…)
-pairs as a **HID keyboard**: it "types" the barcode digits followed by
-Enter. Home Assistant's
+Almost every wireless barcode scanner (Eyoyo, Tera, Inateck, NETUM…)
+presents itself as a **HID keyboard**: it "types" the barcode digits
+followed by Enter. Home Assistant's
 [`keyboard_remote`](https://www.home-assistant.io/integrations/keyboard_remote/)
 integration listens to that input device and fires an event per keypress.
+
+How the scanner reaches the host depends on the model — most support one
+or both of:
+
+- **2.4 GHz / 433 MHz USB dongle** — a receiver that plugs into a USB port
+  and shows up as a keyboard. *Easiest and most reliable; use this if your
+  scanner came with one.* → Option A below.
+- **Classic Bluetooth HID** — pairs directly with the host's Bluetooth
+  adapter. → Option B below.
 
 > **Requirement:** `keyboard_remote` only works on Home Assistant OS /
 > Supervised / Core on Linux with access to `/dev/input`. It does not work
@@ -31,7 +40,29 @@ integration listens to that input device and fires an event per keypress.
 
 ## Setup
 
-### 1. Pair the scanner with the HA host
+### 1. Connect the scanner to the HA host
+
+#### Option A: USB receiver dongle (recommended)
+
+If your scanner came with a wireless USB dongle, just plug it into a USB
+port on the HA host — the scanner and dongle are factory-paired, so there
+is nothing to configure. No re-pairing after reboots, no Bluetooth
+disconnect issues, and usually better range than BT.
+
+The dongle registers as a USB keyboard. Note that its device name often
+won't mention "barcode" — expect something generic like
+`Telink Wireless Receiver` or `SM SM-2D PRODUCT HID KBW`. To find it:
+
+- **HA UI:** Settings → System → Hardware → ⋮ → All Hardware — look for
+  the new input device that appeared after plugging in the dongle, or
+- **Shell:** `cat /proc/bus/input/devices` and check which entry is new.
+
+Note the exact name and skip to Step 2.
+
+> If HA runs in Docker (not HA OS/Supervised), pass the device through
+> with `--device /dev/input/eventX` as noted above.
+
+#### Option B: Bluetooth pairing
 
 HA's Bluetooth integration is for BLE sensors — it won't pair a classic
 Bluetooth HID device like a barcode scanner. Pairing happens at the OS
