@@ -9,7 +9,7 @@ barcode lookup, and Home Assistant integration. Uses
 - **Inventory dashboard** — 4-panel view (Refrigerated / Frozen / Room Temp / Pantry) with drag-and-drop moves, inline edits, and sorting
 - **Photo analysis** — snap a food item; a vision LLM (Gemini or Ollama) extracts name, brand, quantity, and any printed best-by date
 - **Receipt import** — photograph a grocery receipt; every food item is extracted and queued for import
-- **Barcode lookup** — camera scanner or manual entry, backed by Open Food Facts; expiry defaults applied automatically
+- **Barcode lookup** — camera scanner, headless wireless scanner, or manual entry, backed by Open Food Facts; the LLM cleans up messy product names and picks the right category/storage/shelf-life (`BARCODE_ENRICHMENT=llm`, works fully local with Ollama)
 - **Expiry defaults** — editable rules table fills in best-by dates automatically; everything is overridable before import
 - **Web UI** — inventory dashboard, expiring-items view, add-food page, defaults editor
 - **Home Assistant** — REST sensors, notification automations, Lovelace dashboard with inventory panels

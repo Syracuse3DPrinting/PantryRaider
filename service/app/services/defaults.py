@@ -146,31 +146,42 @@ def seed_defaults(db: Session) -> None:
         db.commit()
 
 
-def apply_defaults(item: FoodItem, db: Session, extra_match_text: str = "") -> FoodItem:
+def apply_defaults(item: FoodItem, db: Session, extra_match_text: str = "",
+                   infer_storage: bool = False) -> FoodItem:
     """Fill in best_by_date if not already set, using the defaults table.
 
     extra_match_text lets callers supply additional keywords to match patterns
     against — e.g. Open Food Facts category tags, so a branded product like
     "Chobani Vanilla Greek" still hits the "yogurt" rule.
+
+    infer_storage lets a matching rule override the item's storage_type when
+    no rule exists for the guessed storage — e.g. mayonnaise guessed "dry"
+    from OFF tags adopts the "mayonnaise → refrigerated" rule's storage.
     """
     if item.best_by_date is not None:
         return item
 
     haystack = f"{item.name} {extra_match_text}".lower()
-    storage = item.storage_type.value
-
-    rows = (
-        db.query(ExpiryDefault)
-        .filter(ExpiryDefault.storage_type == storage)
-        .all()
-    )
 
     # name_pattern is a substring match; rules whose category matches the
     # item's category win over name-only matches so e.g. "Chicken of the Sea"
     # canned tuna doesn't inherit the fresh-chicken expiry.
+    rows = db.query(ExpiryDefault).all()
     matches = [r for r in rows if r.name_pattern.lower() in haystack]
     category_matches = [r for r in matches if r.category.lower() == item.category.value.lower()]
     pool = category_matches or matches
+
+    if infer_storage and pool:
+        same_storage = [r for r in pool if r.storage_type == item.storage_type.value]
+        if not same_storage:
+            best = max(pool, key=lambda r: (len(r.name_pattern), r.priority))
+            try:
+                item.storage_type = StorageType(best.storage_type)
+            except ValueError:
+                pass
+
+    storage = item.storage_type.value
+    pool = [r for r in pool if r.storage_type == storage]
 
     if pool:
         best_match = max(pool, key=lambda r: (len(r.name_pattern), r.priority))

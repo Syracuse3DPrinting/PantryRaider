@@ -41,6 +41,26 @@ Infer storage_type and category from your knowledge of the product.
 Return ONLY a valid JSON array. No markdown, no explanation.
 """.strip()
 
+_ENRICH_PROMPT = """
+You are normalizing a grocery product scanned by barcode for a home food inventory.
+Open Food Facts returned this raw data (fields may be missing, generic, or badly cased):
+
+{info}
+
+Use your knowledge of the actual product. Return a JSON object with these exact fields:
+{{
+  "name": "clean display name including brand, e.g. 'Kewpie Mayonnaise', 'Dr Pepper Zero Sugar'",
+  "category": "Poultry | Meat | Seafood | Dairy | Produce | Grains | Condiments | Beverages | Snacks | Frozen | Canned | Other",
+  "storage_type": "refrigerated | frozen | room_temp | dry",
+  "shelf_life_days": 60,
+  "brand": "brand name or null"
+}}
+storage_type is where this product is typically kept at home (e.g. Kewpie mayonnaise
+is refrigerated, canned soup is dry, soda is room_temp). shelf_life_days is a realistic
+integer estimate of days from purchase until best-by for that storage.
+Return ONLY valid JSON. No markdown, no explanation.
+""".strip()
+
 _HEALTH_CACHE_TTL = 3600  # seconds — avoid hammering the API on every /health poll
 
 
@@ -72,6 +92,11 @@ class GeminiProvider(VisionProvider):
             data = [data]
         items = [_parse_item(d, default_confidence=0.8) for d in data]
         return AnalysisResult(items=items, image_type="receipt", raw_response=raw)
+
+    async def enrich_product(self, info: dict) -> dict | None:
+        prompt = _ENRICH_PROMPT.format(info=json.dumps(info, ensure_ascii=False))
+        response = await self.model.generate_content_async([prompt])
+        return json.loads(response.text)
 
     async def health_check(self) -> bool:
         # Metadata lookup, not a billed generation; cached to keep /health cheap.

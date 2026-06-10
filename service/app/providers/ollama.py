@@ -3,7 +3,7 @@ import httpx
 import base64
 from .base import VisionProvider
 from ..models.food import AnalysisResult
-from .gemini import _parse_item, _FOOD_PROMPT, _RECEIPT_PROMPT
+from .gemini import _parse_item, _FOOD_PROMPT, _RECEIPT_PROMPT, _ENRICH_PROMPT
 
 # Reuses the same prompts as Gemini — structured JSON output works with llava/llama3.2-vision
 
@@ -40,6 +40,20 @@ class OllamaProvider(VisionProvider):
             data = [data]
         items = [_parse_item(d, default_confidence=0.75) for d in data]
         return AnalysisResult(items=items, image_type="receipt", raw_response=raw)
+
+    async def enrich_product(self, info: dict) -> dict | None:
+        # Text-only generation — llava and other multimodal models handle this fine
+        prompt = _ENRICH_PROMPT.format(info=json.dumps(info, ensure_ascii=False))
+        payload = {
+            "model": self.model,
+            "prompt": prompt,
+            "stream": False,
+            "format": "json",
+        }
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            response = await client.post(f"{self.base_url}/api/generate", json=payload)
+            response.raise_for_status()
+            return json.loads(response.json()["response"])
 
     async def health_check(self) -> bool:
         try:

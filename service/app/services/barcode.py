@@ -1,8 +1,14 @@
 """Open Food Facts barcode lookup, shared by /analyze/barcode and /pending/scan."""
+import logging
+from datetime import date, timedelta
+
 import httpx
 from sqlalchemy.orm import Session
+from ..config import settings
 from ..models.food import FoodItem, FoodCategory, StorageType
 from .defaults import apply_defaults
+
+logger = logging.getLogger(__name__)
 
 OFF_UA = "FoodAssistant/1.0 (github.com/Syracuse3DPrinting/FoodAssistant)"
 
@@ -110,6 +116,14 @@ async def lookup_barcode(barcode: str, db: Session) -> FoodItem:
     tags = product.get("categories_tags", []) + product.get("labels_tags", [])
     category = _off_category(tags)
     storage = _off_storage(tags, category)
+    generic = (product.get("generic_name_en") or product.get("generic_name") or "")
+
+    # OFF names are contributor-entered: often SHOUTING or missing the brand
+    # entirely (Dr Pepper Zero's name is just "zero sugar").
+    if name.isupper():
+        name = name.title()
+    if brand and brand.lower() not in name.lower():
+        name = f"{brand} {name}"
 
     item = FoodItem(
         name=name,
@@ -120,8 +134,52 @@ async def lookup_barcode(barcode: str, db: Session) -> FoodItem:
         brand=brand,
         confidence=0.9,
     )
+
+    enriched = await _llm_enrich(item, product, generic, tags)
+
     # OFF tags ("en:yogurts", "en:potato-chips") let branded names match
-    # generic defaults rules like "yogurt" or "chips".
-    generic = (product.get("generic_name_en") or product.get("generic_name") or "")
+    # generic defaults rules like "yogurt" or "chips". When the LLM didn't
+    # answer, also let rules correct the tag-based storage guess.
     tag_text = " ".join(tags).replace("-", " ")
-    return apply_defaults(item, db, extra_match_text=f"{generic} {tag_text}")
+    return apply_defaults(item, db, extra_match_text=f"{generic} {tag_text}",
+                          infer_storage=not enriched)
+
+
+async def _llm_enrich(item: FoodItem, product: dict, generic: str, tags: list[str]) -> bool:
+    """Refine name/category/storage/best-by via the LLM. Returns True on success."""
+    if settings.barcode_enrichment != "llm":
+        return False
+    try:
+        from ..dependencies import get_enrich_provider
+        result = await get_enrich_provider().enrich_product({
+            "product_name": product.get("product_name_en") or product.get("product_name"),
+            "generic_name": generic or None,
+            "brands": product.get("brands"),
+            "categories_tags": tags[:20],
+            "quantity": product.get("quantity"),
+        })
+    except Exception as e:
+        logger.warning("Barcode LLM enrichment failed, using heuristics: %s", e)
+        return False
+    if not isinstance(result, dict):
+        return False
+
+    if result.get("name"):
+        item.name = str(result["name"]).strip()
+    if result.get("brand"):
+        item.brand = str(result["brand"]).strip()
+    try:
+        item.category = FoodCategory(result.get("category"))
+    except (ValueError, TypeError):
+        pass
+    try:
+        item.storage_type = StorageType(result.get("storage_type"))
+    except (ValueError, TypeError):
+        pass
+    try:
+        days = int(result.get("shelf_life_days"))
+        if 0 < days <= 3650:
+            item.best_by_date = date.today() + timedelta(days=days)
+    except (ValueError, TypeError):
+        pass
+    return True

@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 _SAVEABLE = [
     "vision_provider", "gemini_api_key", "gemini_model",
     "ollama_base_url", "ollama_model",
+    "barcode_enrichment", "enrich_provider",
     "grocy_base_url", "grocy_api_key",
     "secret_key", "auth_password", "api_key",
 ]
@@ -22,6 +23,14 @@ class Settings(BaseSettings):
 
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llava:7b"
+
+    # Barcode-scan enrichment: "llm" cleans up name/category/storage/shelf-life
+    # via the LLM; "off" uses Open Food Facts heuristics only.
+    barcode_enrichment: str = "llm"
+    # Which provider enriches scans: "gemini", "ollama", or "" to follow
+    # vision_provider. Set VISION_PROVIDER=ollama (or this to "ollama") for a
+    # fully local pipeline.
+    enrich_provider: str = ""
 
     grocy_base_url: str = _DEFAULT_GROCY_URL
     grocy_api_key: str = ""
