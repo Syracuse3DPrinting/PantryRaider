@@ -105,8 +105,9 @@ async def save_setup(payload: SetupPayload):
             data[f] = ""             # explicit clear
     settings.save(data)
     reset_providers()   # apply new provider/model/key without a restart
-    from ..services.mealie import reset_cache as reset_mealie_cache
+    from ..services.mealie import reset_cache as reset_mealie_cache, reset_staple_cache
     reset_mealie_cache()
+    reset_staple_cache()
     return {"ok": True}
 
 

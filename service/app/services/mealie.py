@@ -7,6 +7,7 @@ server speaks, so both v1.x and v2.x installs work.
 import asyncio
 import re
 import time
+from pathlib import Path
 
 import httpx
 
@@ -258,8 +259,63 @@ _STAPLE_GLUE_TOKENS = {
 _FREEBIE_TOKENS = {"water", "ice", "boiling", "warm", "cold", "hot", "tap"}
 
 
+def _load_staples_file() -> list[frozenset[str]] | None:
+    """Read staples.txt and return each line as a frozen token set.
+
+    Uses phrase-level matching rather than a merged token soup so that
+    "Chicken stock" in the file does NOT make bare "chicken" a staple.
+
+    Search order:
+      1. <data_dir>/staples.txt  — user-customisable, gitignored volume file
+      2. <app>/data/staples_default.txt — bundled default, shipped with the image
+    Returns None only when both files are absent or yield no phrases.
+    """
+    candidates = [
+        Path(settings.data_dir) / "staples.txt",
+        Path(__file__).parent.parent / "data" / "staples_default.txt",
+    ]
+    for staples_path in candidates:
+        if not staples_path.exists():
+            continue
+        phrases: list[frozenset[str]] = []
+        for line in staples_path.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line and not line.startswith("#"):
+                toks = _tokens(line)
+                if toks:
+                    phrases.append(frozenset(toks))
+        if phrases:
+            return phrases
+    return None
+
+
+# Cached list of phrase token-sets built from staples.txt (invalidated on save).
+_staple_phrases_cache: list[frozenset[str]] | None = None
+_staple_phrases_loaded: bool = False
+
+
+def _active_staple_phrases() -> list[frozenset[str]] | None:
+    """Phrase token-sets from staples.txt, loaded once and cached."""
+    global _staple_phrases_cache, _staple_phrases_loaded
+    if not _staple_phrases_loaded:
+        _staple_phrases_cache = _load_staples_file()
+        _staple_phrases_loaded = True
+    return _staple_phrases_cache
+
+
+def reset_staple_cache() -> None:
+    """Invalidate the staples file cache (call after settings save)."""
+    global _staple_phrases_loaded
+    _staple_phrases_loaded = False
+
+
 def _active_staple_tokens() -> set[str]:
-    """Staple tokens from the user's settings list, or the built-in default."""
+    """Fuzzy staple token set: settings UI field → built-in fallback.
+
+    The staples.txt file is handled separately via phrase matching in
+    classify_recipes (see _active_staple_phrases) to avoid false positives
+    like "chicken" matching because "chicken stock" is in the file.
+    """
     if settings.staple_items.strip():
         toks: set[str] = set()
         for item in settings.staple_items.split(","):
@@ -267,6 +323,53 @@ def _active_staple_tokens() -> set[str]:
         if toks:
             return toks
     return _STAPLE_TOKENS
+
+
+# Modifier/packaging tokens stripped from phrase token sets before matching.
+# "canned chickpeas" → core tokens {"chickpea"}, so "chickpeas" in a recipe matches.
+# "chicken stock" → core tokens {"chicken", "stock"} (stock is NOT a modifier),
+# so bare "chicken" does NOT match.
+_PHRASE_MODIFIERS = {
+    "canned", "dried", "smoked", "ground", "crushed", "whole",
+    "hard", "dry", "extra", "virgin", "unsalted", "salted",
+    "granulated", "confectioner", "table", "white", "brown",
+    "black", "red", "grating", "large", "small", "medium",
+}
+
+
+def _phrase_core(phrase: frozenset[str]) -> frozenset[str]:
+    """Return phrase tokens with modifier-only tokens removed."""
+    core = phrase - _PHRASE_MODIFIERS
+    return core if core else phrase   # keep original if modifiers consumed everything
+
+
+def _is_staple_ingredient(ing_toks: set[str]) -> bool:
+    """True if the ingredient tokens match any active staple definition.
+
+    Two pathways:
+    1. Fuzzy token check: all ingredient tokens are staple/glue/freebie tokens
+       (handles loose pantry items like "flour", "unsalted butter", "table salt").
+    2. Phrase core match: the ingredient's token set equals the core tokens of a
+       staple phrase after stripping modifier words.  "chickpeas" matches
+       "canned chickpeas" but bare "chicken" does NOT match "chicken stock".
+    """
+    staple_toks = _active_staple_tokens()
+    # Pathway 1: original fuzzy check
+    if (ing_toks & staple_toks
+            and ing_toks <= (staple_toks | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS)):
+        return True
+    # Pathway 2: phrase core match (requires file to be present).
+    # Strip modifier tokens from BOTH sides so "canned chickpeas" ingredient
+    # matches "Canned chickpeas" phrase, while bare "chicken" still does NOT
+    # match "chicken stock" (neither side has modifier tokens to strip).
+    phrases = _active_staple_phrases()
+    if phrases:
+        ing_core = ing_toks - _PHRASE_MODIFIERS
+        if ing_core:
+            for phrase in phrases:
+                if ing_core == _phrase_core(phrase):
+                    return True
+    return False
 
 
 def _is_perishable(stock_item: dict) -> bool:
@@ -296,7 +399,6 @@ def classify_recipes(recipes: list[dict], stock: list[dict],
                         "days_remaining": s.get("days_remaining"),
                         "perishable": _is_perishable(s)})
 
-    staple_tokens = _active_staple_tokens()
     soon = settings.expiring_soon_days
     tiers: dict[str, list[dict]] = {"ready": [], "staples": [], "shopping": []}
     for r in recipes:
@@ -318,8 +420,7 @@ def classify_recipes(recipes: list[dict], stock: list[dict],
                 d = hit["days_remaining"]
                 if d is not None and d <= soon and hit["name"] not in expiring_used:
                     expiring_used.append(hit["name"])
-            elif (ing_toks & staple_tokens
-                  and ing_toks <= (staple_tokens | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS)):
+            elif _is_staple_ingredient(ing_toks):
                 staples.append(text)
             else:
                 unmatched.append(text)
