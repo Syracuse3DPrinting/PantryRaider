@@ -88,13 +88,51 @@ _SEED_DEFAULTS = [
     ("Canned", "canned goods", "dry", 1095, "unopened"),
     ("Canned", "canned beans", "dry", 1095, "unopened"),
     ("Canned", "canned soup", "dry", 1095, "unopened"),
+    # Beverages
+    ("Beverages", "soda", "room_temp", 270, "unopened"),
+    ("Beverages", "sparkling water", "room_temp", 365, None),
+    ("Beverages", "juice", "refrigerated", 10, "fresh, unopened"),
+    ("Beverages", "juice", "room_temp", 270, "shelf-stable, unopened"),
+    ("Beverages", "coffee", "dry", 365, "ground or beans"),
+    ("Beverages", "tea", "dry", 730, None),
+    # Snacks
+    ("Snacks", "chips", "room_temp", 75, "unopened"),
+    ("Snacks", "crackers", "room_temp", 180, "unopened"),
+    ("Snacks", "cookie", "room_temp", 60, "packaged"),
+    ("Snacks", "granola bar", "room_temp", 240, None),
+    ("Snacks", "popcorn", "room_temp", 240, "unpopped"),
+    ("Snacks", "chocolate", "room_temp", 365, None),
+    ("Snacks", "nuts", "room_temp", 180, "unopened"),
+    # Frozen packaged
+    ("Frozen", "ice cream", "frozen", 120, None),
+    ("Frozen", "frozen pizza", "frozen", 180, None),
+    ("Frozen", "frozen vegetables", "frozen", 240, None),
+    ("Frozen", "frozen fruit", "frozen", 240, None),
+    ("Frozen", "frozen meal", "frozen", 120, None),
+    # More pantry staples
+    ("Grains", "cereal", "room_temp", 240, "unopened"),
+    ("Grains", "tortilla", "room_temp", 30, None),
+    ("Condiments", "peanut butter", "dry", 270, "unopened"),
+    ("Condiments", "jam", "refrigerated", 180, "opened"),
+    ("Condiments", "honey", "dry", 1095, None),
+    ("Condiments", "olive oil", "dry", 540, "unopened"),
 ]
 
 
 def seed_defaults(db: Session) -> None:
-    if db.query(ExpiryDefault).count() > 0:
-        return
+    """Insert any seed rules not already present (keyed by category+pattern+storage).
+
+    Top-up rather than all-or-nothing so new seed rules reach existing
+    installs without clobbering user edits to existing rules.
+    """
+    existing = {
+        (d.category, d.name_pattern, d.storage_type)
+        for d in db.query(ExpiryDefault).all()
+    }
+    added = False
     for category, pattern, storage, days, notes in _SEED_DEFAULTS:
+        if (category, pattern, storage) in existing:
+            continue
         db.add(ExpiryDefault(
             category=category,
             name_pattern=pattern,
@@ -103,15 +141,22 @@ def seed_defaults(db: Session) -> None:
             notes=notes,
             priority=1,
         ))
-    db.commit()
+        added = True
+    if added:
+        db.commit()
 
 
-def apply_defaults(item: FoodItem, db: Session) -> FoodItem:
-    """Fill in best_by_date if not already set, using the defaults table."""
+def apply_defaults(item: FoodItem, db: Session, extra_match_text: str = "") -> FoodItem:
+    """Fill in best_by_date if not already set, using the defaults table.
+
+    extra_match_text lets callers supply additional keywords to match patterns
+    against — e.g. Open Food Facts category tags, so a branded product like
+    "Chobani Vanilla Greek" still hits the "yogurt" rule.
+    """
     if item.best_by_date is not None:
         return item
 
-    name_lower = item.name.lower()
+    haystack = f"{item.name} {extra_match_text}".lower()
     storage = item.storage_type.value
 
     rows = (
@@ -123,7 +168,7 @@ def apply_defaults(item: FoodItem, db: Session) -> FoodItem:
     # name_pattern is a substring match; rules whose category matches the
     # item's category win over name-only matches so e.g. "Chicken of the Sea"
     # canned tuna doesn't inherit the fresh-chicken expiry.
-    matches = [r for r in rows if r.name_pattern.lower() in name_lower]
+    matches = [r for r in rows if r.name_pattern.lower() in haystack]
     category_matches = [r for r in matches if r.category.lower() == item.category.value.lower()]
     pool = category_matches or matches
 
@@ -147,5 +192,8 @@ _CATEGORY_FALLBACKS: dict[str, dict[str, int]] = {
     "Grains":      {"refrigerated": 14, "frozen": 365, "room_temp": 14, "dry": 730},
     "Condiments":  {"refrigerated": 90, "frozen": 0,   "room_temp": 30, "dry": 365},
     "Canned":      {"refrigerated": 0,  "frozen": 0,   "room_temp": 0,  "dry": 1095},
+    "Beverages":   {"refrigerated": 10, "frozen": 365, "room_temp": 270, "dry": 365},
+    "Snacks":      {"refrigerated": 30, "frozen": 180, "room_temp": 90,  "dry": 180},
+    "Frozen":      {"refrigerated": 3,  "frozen": 180, "room_temp": 0,   "dry": 0},
     "Other":       {"refrigerated": 7,  "frozen": 180, "room_temp": 7,  "dry": 365},
 }

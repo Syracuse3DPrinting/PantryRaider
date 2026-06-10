@@ -5,62 +5,83 @@ views:
     icon: mdi:fridge-outline
     cards:
 
-      # ── Summary Row ──────────────────────────────────────────────────────────
-      - type: glance
-        title: Food Status
-        entities:
-          - entity: sensor.food_expired
+      # ── Status Tiles ─────────────────────────────────────────────────────────
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: tile
+            entity: sensor.food_expired
             name: Expired
-          - entity: sensor.food_expiring_today
+            icon: mdi:food-off
+            color: red
+          - type: tile
+            entity: sensor.food_expiring_today
             name: Today
-          - entity: sensor.food_expiring_3_days
+            icon: mdi:food-variant-off
+            color: deep-orange
+          - type: tile
+            entity: sensor.food_expiring_3_days
             name: 3 Days
-          - entity: sensor.food_expiring_7_days
+            icon: mdi:food-drumstick
+            color: amber
+          - type: tile
+            entity: sensor.food_expiring_7_days
             name: 7 Days
+            icon: mdi:food-apple
+            color: green
 
-      # ── Status Summary ───────────────────────────────────────────────────────
-      - type: markdown
-        title: Alerts
-        content: >
-          {% set expired = states('sensor.food_expired') | int(-1) %}
-          {% set today = states('sensor.food_expiring_today') | int(-1) %}
-          {% set d3 = states('sensor.food_expiring_3_days') | int(-1) %}
-          {% set d7 = states('sensor.food_expiring_7_days') | int(-1) %}
-          {% if expired > 0 %}❌ **{{ expired }} item(s) EXPIRED** — check fridge
+      # ── Alerts (only shows when something needs attention) ──────────────────
+      - type: conditional
+        conditions:
+          - condition: or
+            conditions:
+              - condition: numeric_state
+                entity: sensor.food_expired
+                above: 0
+              - condition: numeric_state
+                entity: sensor.food_expiring_today
+                above: 0
+        card:
+          type: markdown
+          content: >
+            {% set expired = states('sensor.food_expired') | int(0) %}
+            {% set today = states('sensor.food_expiring_today') | int(0) %}
+            {% if expired > 0 %}❌ **{{ expired }} item(s) EXPIRED** — check the fridge
 
-          {% endif %}
-          {% if today > 0 %}🔴 **{{ today }} expiring today** — use them up!
+            {% endif %}
+            {% if today > 0 %}🔴 **{{ today }} expiring today** — use them up!{% endif %}
 
-          {% endif %}
-          {% if d3 > 0 %}🟠 {{ d3 }} expiring within 3 days
-
-          {% endif %}
-          {% if d7 > 0 %}🟡 {{ d7 }} expiring within 7 days
-
-          {% endif %}
-          {% if expired == 0 and today == 0 and d3 == 0 and d7 == 0 %}✅ Nothing expiring in the next 7 days{% endif %}
-          {% if expired < 0 %}*Sensors loading...*{% endif %}
-
-      # ── Quick Links ──────────────────────────────────────────────────────────
-      - type: entities
-        title: FoodAssistant
-        entities:
-          - type: weblink
-            name: Expiring Items
-            url: https://fass.korolev.link/ui/
-            icon: mdi:clock-alert-outline
-
-          - type: weblink
-            name: Add Food (Scan / Photo / Manual)
-            url: https://fass.korolev.link/ui/add
+      # ── Action Buttons ───────────────────────────────────────────────────────
+      - type: grid
+        columns: 2
+        square: false
+        cards:
+          - type: button
+            name: Add Food
             icon: mdi:barcode-scan
-
-          - type: weblink
+            icon_height: 48px
+            tap_action:
+              action: url
+              url_path: https://fass.korolev.link/ui/add
+          - type: button
+            name: Expiring Items
+            icon: mdi:clock-alert-outline
+            icon_height: 48px
+            tap_action:
+              action: url
+              url_path: https://fass.korolev.link/ui/
+          - type: button
             name: Expiry Defaults
-            url: https://fass.korolev.link/ui/defaults
             icon: mdi:table-edit
-
-          - type: weblink
-            name: Grocy (Stock Overview)
-            url: http://192.168.1.170:9383/stockoverview
+            icon_height: 48px
+            tap_action:
+              action: url
+              url_path: https://fass.korolev.link/ui/defaults
+          - type: button
+            name: Grocy Stock
             icon: mdi:fridge
+            icon_height: 48px
+            tap_action:
+              action: url
+              url_path: http://192.168.1.170:9383/stockoverview

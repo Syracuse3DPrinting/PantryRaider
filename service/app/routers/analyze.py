@@ -73,6 +73,8 @@ def _off_storage(tags: list[str], category: FoodCategory) -> StorageType:
     joined = " ".join(tags).lower()
     if "frozen" in joined:
         return StorageType.frozen
+    if "refrigerated" in joined or "fresh" in joined:
+        return StorageType.refrigerated
     if category in _REFRIGERATED_CATEGORIES:
         return StorageType.refrigerated
     if category in _DRY_CATEGORIES:
@@ -134,7 +136,7 @@ async def analyze_barcode(barcode: str, db: Session = Depends(get_db)):
         raise HTTPException(404, "Product found but has no name")
 
     brand = (product.get("brands") or "").split(",")[0].strip() or None
-    tags = product.get("categories_tags", [])
+    tags = product.get("categories_tags", []) + product.get("labels_tags", [])
     category = _off_category(tags)
     storage = _off_storage(tags, category)
 
@@ -147,7 +149,11 @@ async def analyze_barcode(barcode: str, db: Session = Depends(get_db)):
         brand=brand,
         confidence=0.9,
     )
-    item = apply_defaults(item, db)
+    # OFF tags ("en:yogurts", "en:potato-chips") let branded names match
+    # generic defaults rules like "yogurt" or "chips".
+    generic = (product.get("generic_name_en") or product.get("generic_name") or "")
+    tag_text = " ".join(tags).replace("-", " ")
+    item = apply_defaults(item, db, extra_match_text=f"{generic} {tag_text}")
     return AnalysisResult(items=[item], image_type="barcode")
 
 
