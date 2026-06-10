@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Setup — FoodAssistant</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <style>
+    body { background: #0d1117; }
+    .setup-wrap { max-width: 640px; margin: 2rem auto; padding: 0 1rem 4rem; }
+    .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.25rem; }
+    .section-title { font-size: 1rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .test-result { font-size: 0.82rem; margin-top: 0.4rem; min-height: 1.2rem; }
+    .badge-req { font-size: 0.65rem; vertical-align: middle; }
+    .logo { font-size: 1.6rem; font-weight: 700; letter-spacing: -0.5px; }
+  </style>
+</head>
+<body>
+<div class="setup-wrap">
+
+  <div class="text-center my-4">
+    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant</div>
+    {% if configured %}
+    <p class="text-secondary mt-1 mb-0">Update your configuration below.</p>
+    {% else %}
+    <p class="text-secondary mt-1 mb-0">Welcome! Fill in the details below to get started.</p>
+    {% endif %}
+  </div>
+
+  <!-- ── Grocy ── -->
+  <div class="section-card">
+    <div class="section-title">
+      <i class="bi bi-fridge text-info"></i> Grocy
+      <span class="badge bg-danger badge-req">Required</span>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Grocy URL</label>
+      <input type="url" class="form-control" id="grocy_base_url"
+             placeholder="http://192.168.1.10:9283"
+             value="{{ s.grocy_base_url if s.grocy_base_url != 'http://grocy:80' else '' }}">
+      <div class="form-text">Full URL to your Grocy instance — no trailing slash.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Grocy API Key</label>
+      <div class="input-group">
+        <input type="password" class="form-control font-monospace" id="grocy_api_key"
+               placeholder="Grocy → Profile → Manage API Keys"
+               value="{{ s.grocy_api_key }}">
+        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('grocy_api_key')">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+    </div>
+    <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
+      <i class="bi bi-plug me-1"></i>Test Connection
+    </button>
+    <div class="test-result" id="grocy-result"></div>
+  </div>
+
+  <!-- ── Vision / AI ── -->
+  <div class="section-card">
+    <div class="section-title">
+      <i class="bi bi-magic text-warning"></i> Vision / AI
+      <span class="badge bg-danger badge-req">Required</span>
+    </div>
+    <div class="mb-3">
+      <label class="form-label">Provider</label>
+      <div class="d-flex gap-3">
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="vision_provider" id="vp_gemini"
+                 value="gemini" {{ 'checked' if s.vision_provider == 'gemini' else '' }}
+                 onchange="showProvider()">
+          <label class="form-check-label" for="vp_gemini">Google Gemini <span class="text-secondary small">(cloud)</span></label>
+        </div>
+        <div class="form-check">
+          <input class="form-check-input" type="radio" name="vision_provider" id="vp_ollama"
+                 value="ollama" {{ 'checked' if s.vision_provider == 'ollama' else '' }}
+                 onchange="showProvider()">
+          <label class="form-check-label" for="vp_ollama">Ollama <span class="text-secondary small">(local)</span></label>
+        </div>
+      </div>
+    </div>
+
+    <div id="gemini-fields">
+      <div class="mb-3">
+        <label class="form-label">Gemini API Key</label>
+        <div class="input-group">
+          <input type="password" class="form-control font-monospace" id="gemini_api_key"
+                 placeholder="aistudio.google.com → Get API Key"
+                 value="{{ s.gemini_api_key }}">
+          <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('gemini_api_key')">
+            <i class="bi bi-eye"></i>
+          </button>
+        </div>
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Model</label>
+        <input type="text" class="form-control" id="gemini_model"
+               value="{{ s.gemini_model or 'gemini-1.5-flash' }}">
+      </div>
+    </div>
+
+    <div id="ollama-fields" style="display:none">
+      <div class="mb-3">
+        <label class="form-label">Ollama Base URL</label>
+        <input type="url" class="form-control" id="ollama_base_url"
+               placeholder="http://192.168.1.10:11434"
+               value="{{ s.ollama_base_url }}">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Model</label>
+        <input type="text" class="form-control" id="ollama_model"
+               placeholder="llava:7b" value="{{ s.ollama_model }}">
+        <div class="form-text">Must be a vision-capable model (llava, bakllava, moondream…).</div>
+      </div>
+    </div>
+
+    <button class="btn btn-outline-warning btn-sm" onclick="testVision()">
+      <i class="bi bi-plug me-1"></i>Test Connection
+    </button>
+    <div class="test-result" id="vision-result"></div>
+  </div>
+
+  <!-- ── Authentication ── -->
+  <div class="section-card">
+    <div class="section-title">
+      <i class="bi bi-shield-lock text-success"></i> Authentication
+      <span class="badge bg-secondary badge-req">Optional</span>
+    </div>
+    <p class="text-secondary small">Leave both fields empty to disable auth entirely. If you're behind a reverse proxy (like Pangolin) that handles auth, you may not need this.</p>
+    <div class="mb-3">
+      <label class="form-label">UI Password</label>
+      <div class="input-group">
+        <input type="password" class="form-control" id="auth_password"
+               placeholder="Protects the web UI login page"
+               value="{{ s.auth_password }}">
+        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('auth_password')">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+    </div>
+    <div class="mb-1">
+      <label class="form-label">API Key <span class="text-secondary small">(for Home Assistant / headless clients)</span></label>
+      <div class="input-group">
+        <input type="password" class="form-control font-monospace" id="api_key"
+               placeholder="Send as X-API-Key header"
+               value="{{ s.api_key }}">
+        <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('api_key')">
+          <i class="bi bi-eye"></i>
+        </button>
+      </div>
+      <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
+    </div>
+  </div>
+
+  <!-- ── Save ── -->
+  <button class="btn btn-primary w-100 py-2" onclick="saveAll()" id="saveBtn">
+    <i class="bi bi-check-lg me-1"></i>Save &amp; Continue
+  </button>
+  <div id="save-result" class="mt-3 text-center"></div>
+  {% if configured %}
+  <div class="text-center mt-3">
+    <a href="/ui/" class="text-secondary small">← Back to app</a>
+  </div>
+  {% endif %}
+
+</div><!-- /setup-wrap -->
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+function showProvider() {
+  const gemini = document.getElementById('vp_gemini').checked;
+  document.getElementById('gemini-fields').style.display = gemini ? '' : 'none';
+  document.getElementById('ollama-fields').style.display = gemini ? 'none' : '';
+}
+
+function toggleVis(id) {
+  const el = document.getElementById(id);
+  el.type = el.type === 'password' ? 'text' : 'password';
+}
+
+function val(id) { return document.getElementById(id)?.value.trim() || ''; }
+
+function setResult(id, ok, msg) {
+  const el = document.getElementById(id);
+  el.innerHTML = ok
+    ? `<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>${msg}</span>`
+    : `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${msg}</span>`;
+}
+
+async function testGrocy() {
+  setResult('grocy-result', true, 'Testing…');
+  const r = await fetch('/setup/test/grocy', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ grocy_base_url: val('grocy_base_url'), grocy_api_key: val('grocy_api_key') }),
+  });
+  const d = await r.json();
+  setResult('grocy-result', d.ok, d.ok ? d.message : d.error);
+}
+
+async function testVision() {
+  setResult('vision-result', true, 'Testing…');
+  const provider = document.querySelector('input[name=vision_provider]:checked').value;
+  const r = await fetch('/setup/test/vision', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      vision_provider: provider,
+      gemini_api_key: val('gemini_api_key'),
+      gemini_model:   val('gemini_model') || 'gemini-1.5-flash',
+      ollama_base_url: val('ollama_base_url'),
+      ollama_model:   val('ollama_model'),
+    }),
+  });
+  const d = await r.json();
+  setResult('vision-result', d.ok, d.ok ? d.message : d.error);
+}
+
+async function saveAll() {
+  const btn = document.getElementById('saveBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+
+  const provider = document.querySelector('input[name=vision_provider]:checked').value;
+  const payload = {
+    vision_provider: provider,
+    gemini_api_key:  val('gemini_api_key'),
+    gemini_model:    val('gemini_model') || 'gemini-1.5-flash',
+    ollama_base_url: val('ollama_base_url'),
+    ollama_model:    val('ollama_model') || 'llava:7b',
+    grocy_base_url:  val('grocy_base_url'),
+    grocy_api_key:   val('grocy_api_key'),
+    auth_password:   val('auth_password'),
+    api_key:         val('api_key'),
+  };
+
+  try {
+    const r = await fetch('/setup/save', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      window.location.href = '/ui/';
+    } else {
+      throw new Error(d.detail || 'Unknown error');
+    }
+  } catch(e) {
+    document.getElementById('save-result').innerHTML =
+      `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</span>`;
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save &amp; Continue';
+  }
+}
+
+// Init
+showProvider();
+</script>
+</body>
+</html>

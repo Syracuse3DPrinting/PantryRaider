@@ -8,7 +8,7 @@ from .config import settings
 from .database import engine, get_db, Base
 from .models import db_models  # noqa: F401 — registers models with Base
 from .services.defaults import seed_defaults
-from .routers import analyze, defaults, inventory, expiring, ui
+from .routers import analyze, defaults, inventory, expiring, ui, setup
 
 
 @asynccontextmanager
@@ -36,7 +36,20 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-_PUBLIC_PATHS = {"/health", "/ui/login"}
+# Paths that bypass both setup-redirect and auth checks
+_SETUP_BYPASS = {
+    "/setup", "/setup/save", "/setup/test/grocy", "/setup/test/vision",
+    "/health", "/docs", "/openapi.json", "/redoc",
+}
+_PUBLIC_PATHS = _SETUP_BYPASS | {"/ui/login"}
+
+
+@app.middleware("http")
+async def redirect_if_unconfigured(request: Request, call_next):
+    """Send new installs to /setup until Grocy + vision provider are configured."""
+    if not settings.is_configured() and request.url.path not in _SETUP_BYPASS:
+        return RedirectResponse("/setup", status_code=303)
+    return await call_next(request)
 
 
 @app.middleware("http")
@@ -58,9 +71,10 @@ async def require_auth(request: Request, call_next):
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 
-# Added after the auth middleware so it runs first and request.session exists
+# SessionMiddleware runs after middlewares above so request.session is available
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=60 * 60 * 24 * 30)
 
+app.include_router(setup.router)
 app.include_router(analyze.router)
 app.include_router(defaults.router)
 app.include_router(inventory.router)
@@ -70,6 +84,8 @@ app.include_router(ui.router)
 
 @app.get("/health")
 async def health():
+    if not settings.is_configured():
+        return {"status": "unconfigured", "setup": "/setup"}
     from .dependencies import get_vision_provider
     from .services.grocy import GrocyClient
     provider = get_vision_provider()

@@ -1,28 +1,81 @@
-from pydantic_settings import BaseSettings
+import json
+import secrets as _secrets
+from pathlib import Path
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_SAVEABLE = [
+    "vision_provider", "gemini_api_key", "gemini_model",
+    "ollama_base_url", "ollama_model",
+    "grocy_base_url", "grocy_api_key",
+    "secret_key", "auth_password", "api_key",
+]
+
+_DEFAULT_GROCY_URL = "http://grocy:80"
 
 
 class Settings(BaseSettings):
-    vision_provider: str = "gemini"
+    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
+    vision_provider: str = "gemini"
     gemini_api_key: str = ""
     gemini_model: str = "gemini-1.5-flash"
 
     ollama_base_url: str = "http://ollama:11434"
     ollama_model: str = "llava:7b"
 
-    grocy_base_url: str = "http://grocy:80"
+    grocy_base_url: str = _DEFAULT_GROCY_URL
     grocy_api_key: str = ""
 
     data_dir: str = "/app/data"
-    secret_key: str = "change_me"
+    secret_key: str = ""
 
-    # Auth — leave auth_password empty to disable auth entirely.
-    # api_key lets headless clients (HA, ESPHome) authenticate via X-API-Key.
     auth_password: str = ""
     api_key: str = ""
 
-    class Config:
-        env_file = ".env"
+    def is_configured(self) -> bool:
+        """True when the minimum required settings have been supplied."""
+        if not self.grocy_api_key:
+            return False
+        if not self.grocy_base_url or self.grocy_base_url == _DEFAULT_GROCY_URL:
+            return False
+        if self.vision_provider == "gemini" and not self.gemini_api_key:
+            return False
+        return True
+
+    def apply(self, data: dict) -> None:
+        for k, v in data.items():
+            if k in _SAVEABLE and hasattr(self, k) and v is not None:
+                object.__setattr__(self, k, v)
+
+    def save(self, data: dict) -> None:
+        """Merge data into settings.json and apply values to the live object."""
+        sf = Path(self.data_dir) / "settings.json"
+        sf.parent.mkdir(parents=True, exist_ok=True)
+        existing: dict = {}
+        if sf.exists():
+            try:
+                existing = json.loads(sf.read_text())
+            except Exception:
+                pass
+        existing.update({k: v for k, v in data.items() if k in _SAVEABLE and v is not None})
+        sf.write_text(json.dumps(existing, indent=2))
+        self.apply(existing)
 
 
 settings = Settings()
+
+# Overlay: fill any empty fields from data/settings.json (env vars always win)
+_sf = Path(settings.data_dir) / "settings.json"
+if _sf.exists():
+    try:
+        _saved = json.loads(_sf.read_text())
+        for _k, _v in _saved.items():
+            if _k in _SAVEABLE and _v and not getattr(settings, _k, ""):
+                object.__setattr__(settings, _k, _v)
+    except Exception:
+        pass
+
+# Auto-generate SECRET_KEY on first run so it stays stable across restarts
+if not settings.secret_key:
+    object.__setattr__(settings, "secret_key", _secrets.token_hex(32))
+    settings.save({"secret_key": settings.secret_key})

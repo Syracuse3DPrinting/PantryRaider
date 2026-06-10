@@ -6,17 +6,14 @@ barcode lookup, and Home Assistant integration. Uses
 
 ## Features
 
-- **Photo analysis** — snap a food item; a vision LLM (Gemini now, Ollama-ready)
-  extracts name, brand, quantity, and any printed best-by date
-- **Receipt import** — photograph a grocery receipt; every food item is
-  extracted and queued for import
-- **Barcode lookup** — camera scanner or manual entry, backed by Open Food Facts
-- **Expiry defaults** — editable rules table ("fresh chicken: 5 days,
-  frozen: 365") fills in best-by dates automatically; everything is
-  overridable before import
-- **Web UI** — expiring-items dashboard with one-click consume, add-food page,
-  defaults editor (`/ui/`)
-- **Home Assistant** — REST sensors, notification automations, Lovelace dashboard
+- **Inventory dashboard** — 4-panel view (Refrigerated / Frozen / Room Temp / Pantry) with drag-and-drop moves, inline edits, and sorting
+- **Photo analysis** — snap a food item; a vision LLM (Gemini or Ollama) extracts name, brand, quantity, and any printed best-by date
+- **Receipt import** — photograph a grocery receipt; every food item is extracted and queued for import
+- **Barcode lookup** — camera scanner or manual entry, backed by Open Food Facts; expiry defaults applied automatically
+- **Expiry defaults** — editable rules table fills in best-by dates automatically; everything is overridable before import
+- **Web UI** — inventory dashboard, expiring-items view, add-food page, defaults editor
+- **Home Assistant** — REST sensors, notification automations, Lovelace dashboard with inventory panels
+- **Web setup wizard** — configure everything at `/setup` with connection testers; no file editing required
 - **Auth** — optional password login for the UI + API key for headless clients
 
 ## Architecture
@@ -26,51 +23,87 @@ Browser/Phone ──► FoodAssistant service (FastAPI, :9284)
                     ├─► Gemini or Ollama (vision LLM)
                     ├─► Open Food Facts (barcode lookup)
                     └─► Grocy (:9383) — inventory, stock, consumption log
-Home Assistant ◄── REST sensors ◄── /expiring endpoints
+Home Assistant ◄── REST sensors ◄── /expiring and /inventory endpoints
 ```
 
-## Setup
+## Quick Start
 
-1. **Grocy** — run your own instance (e.g. Unraid app / linuxserver image) and
-   generate an API key: user icon → Manage API Keys.
+### Option A — FoodAssistant only (you already have Grocy)
 
-2. **Configure:**
-   ```bash
-   cp .env.example .env
-   # fill in GEMINI_API_KEY, GROCY_BASE_URL, GROCY_API_KEY
-   # recommended: set AUTH_PASSWORD and API_KEY (openssl rand -hex 24)
-   ```
+```bash
+git clone https://github.com/Syracuse3DPrinting/FoodAssistant.git
+cd FoodAssistant
+docker compose up -d --build
+```
 
-3. **Run:**
-   ```bash
-   docker compose up -d --build
-   curl http://localhost:9284/health
-   # {"status":"ok","vision_provider":"ok","grocy":"ok"}
-   ```
+Open **http://localhost:9284/setup**, fill in your Grocy URL/API key and Gemini key,
+click **Test Connection** for each, then **Save & Continue**.
 
-4. **Home Assistant** — see [homeassistant/README.md](homeassistant/README.md)
-   for sensors, automations, and the Lovelace dashboard.
+### Option B — FoodAssistant + Grocy (all-in-one)
+
+```bash
+docker compose --profile with-grocy up -d --build
+```
+
+Grocy will be available at **http://localhost:9383**.
+Open its UI, set a password, then generate an API key under
+**Profile → Manage API Keys** and paste it into the setup wizard at
+**http://localhost:9284/setup**.
+
+### Option C — Local vision with Ollama
+
+```bash
+docker compose --profile with-ollama up -d --build
+docker exec foodassistant-ollama ollama pull llava:7b
+```
+
+In the setup wizard choose **Ollama** as the provider and set the URL to
+`http://ollama:11434`.
+
+You can combine profiles: `docker compose --profile with-grocy --profile with-ollama up -d`
+
+---
+
+## Configuration
+
+The **web setup wizard** at `/setup` is the recommended way to configure the app.
+Settings are saved to `service/data/settings.json`, which persists across container
+restarts via the volume mount.
+
+Environment variables (`.env`) override the wizard — useful for CI or scripted deploys:
+
+```bash
+cp .env.example .env   # edit only what you want to pin
+```
+
+`SECRET_KEY` is auto-generated on first run if not set.
+
+## Home Assistant
+
+See [homeassistant/README.md](homeassistant/README.md) for sensors, automations,
+and the Lovelace dashboard (includes a read-only inventory panel grid).
 
 ## Development notes
 
-- App code is volume-mounted with uvicorn `--reload`: after `git pull`, changes
-  apply automatically. **Rebuild required** only when `requirements.txt` or the
-  Dockerfile change: `docker compose up -d --build service`
-- Switching to a local LLM later: uncomment the `ollama` service in
-  `docker-compose.yml` and set `VISION_PROVIDER=ollama` in `.env`.
+- App code is volume-mounted with uvicorn `--reload`: after `git pull`, changes apply automatically.
+- **Rebuild required** only when `requirements.txt` or the Dockerfile change: `docker compose up -d --build service`
 
 ## Endpoints
 
 | Endpoint | Purpose |
 |---|---|
-| `/ui/` | Web UI (expiring, add food, defaults) |
+| `/setup` | Web setup wizard |
+| `/ui/` | Inventory dashboard (default) |
+| `/ui/expiring` | Expiring items view |
+| `/ui/add` | Add food (barcode / photo / manual) |
+| `/ui/defaults` | Expiry defaults editor |
 | `POST /analyze/food` | Photo → parsed item(s) |
 | `POST /analyze/receipt` | Receipt → parsed item list |
 | `GET /analyze/barcode/{code}` | Open Food Facts lookup |
 | `POST /inventory/import` | Import items to Grocy |
+| `GET /inventory/dashboard` | Full stock grouped by storage bucket |
 | `GET /expiring/?days=N` | Expiring items (JSON) |
 | `GET /expiring/summary` | Urgency counts for HA sensors |
-| `GET /expiring/display` | Plain text for ESPHome/TFT displays |
 | `GET /health` | Provider + Grocy connectivity |
 
 Interactive API docs at `/docs`.
