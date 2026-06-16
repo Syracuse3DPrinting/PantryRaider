@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 from .config import settings
 from .database import engine, get_db, Base
+from .ingress import ingress_redirect
 from .models import db_models  # noqa: F401 — registers models with Base
 from .services.defaults import seed_defaults
 from .routers import analyze, defaults, inventory, expiring, ui, setup, pending, mealie, admin
@@ -58,7 +59,7 @@ async def redirect_if_unconfigured(request: Request, call_next):
     """Send new installs to /setup until Grocy + vision provider are configured."""
     if (not settings.is_configured() and request.url.path not in _SETUP_BYPASS
             and not _is_static(request.url.path)):
-        return RedirectResponse("/setup", status_code=303)
+        return ingress_redirect(request, "/setup")
     return await call_next(request)
 
 
@@ -81,7 +82,7 @@ async def require_auth(request: Request, call_next):
         return await call_next(request)
 
     if request.url.path.startswith("/ui"):
-        return RedirectResponse("/ui/login", status_code=303)
+        return ingress_redirect(request, "/ui/login")
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 

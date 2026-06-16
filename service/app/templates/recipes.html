@@ -6,7 +6,7 @@
 <div class="alert alert-info mt-3">
   <i class="bi bi-journal-richtext me-2"></i>
   Recipes are stored in <a href="https://mealie.io" target="_blank">Mealie</a>.
-  Add your Mealie URL and API token in <a href="/setup">Settings</a> to enable this page.
+  Add your Mealie URL and API token in <a href="setup">Settings</a> to enable this page.
 </div>
 {% else %}
 
@@ -242,7 +242,7 @@ async function loadRecipes(search = '') {
   }
   try {
     const params = new URLSearchParams({per_page: 100, search, mine, external});
-    const r = await fetch(`/mealie/recipes?${params}`);
+    const r = await fetch(`mealie/recipes?${params}`);
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const items = await r.json();
     if (!items.length) {
@@ -278,7 +278,7 @@ async function openPreview(externalId, source) {
   new bootstrap.Modal(document.getElementById('previewModal')).show();
   try {
     const params = new URLSearchParams({external_id: externalId, source});
-    const r = await fetch(`/mealie/recipes/external-detail?${params}`);
+    const r = await fetch(`mealie/recipes/external-detail?${params}`);
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     document.getElementById('pv-name').textContent = d.name || 'Recipe';
@@ -315,7 +315,7 @@ async function saveFromPreview(btn) {
     if (previewRecipe._llm) {
       // LLM-generated recipe: save via /recipes/create
       const r = previewRecipe.recipe;
-      url = '/mealie/recipes/create';
+      url = 'mealie/recipes/create';
       body = {
         name: r.name, description: r.description || '',
         servings: r.servings || '', total_time: r.total_time || '',
@@ -323,7 +323,7 @@ async function saveFromPreview(btn) {
       };
     } else {
       // External (TheMealDB/Spoonacular): import-external
-      url = '/mealie/recipes/import-external';
+      url = 'mealie/recipes/import-external';
       body = {...previewRecipe, add_missing_to_list: false};
     }
     const r = await fetch(url, {
@@ -349,7 +349,7 @@ async function saveExternal(externalId, source, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    const r = await fetch('/mealie/recipes/import-external', {
+    const r = await fetch('mealie/recipes/import-external', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({external_id: externalId, source, add_missing_to_list: false}),
     });
@@ -375,7 +375,7 @@ async function importUrl() {
   status.classList.remove('d-none', 'text-danger');
   status.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing — this can take ~30s if AI extraction kicks in…';
   try {
-    const r = await fetch('/mealie/recipes/import-url', {
+    const r = await fetch('mealie/recipes/import-url', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({url}),
     });
@@ -409,7 +409,7 @@ async function extractPhoto(input) {
   try {
     const fd = new FormData();
     fd.append('file', file);
-    const r = await fetch('/mealie/recipes/extract-photo', {method: 'POST', body: fd});
+    const r = await fetch('mealie/recipes/extract-photo', {method: 'POST', body: fd});
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     openEditor(d.recipe, 'Extracted from your photo — check it over, then save.');
@@ -453,7 +453,7 @@ async function saveRecipe() {
   if (!body.name) { err.textContent = 'Name is required.'; err.classList.remove('d-none'); return; }
   btn.disabled = true;
   try {
-    const r = await fetch('/mealie/recipes/create', {
+    const r = await fetch('mealie/recipes/create', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(body),
     });
@@ -493,7 +493,7 @@ async function generateFromSearch() {
   btn.disabled = false;
   btn.innerHTML = orig;
   try {
-    const r = await fetch('/mealie/recipes/generate', {
+    const r = await fetch('mealie/recipes/generate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name: query}),
     });

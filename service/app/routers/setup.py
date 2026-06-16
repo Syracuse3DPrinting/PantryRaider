@@ -59,6 +59,7 @@ class SetupPayload(BaseModel):
     nav_hidden: str = ""
     barcode_llm_fallback: bool = False
     cook_ai_context: str = ""
+    auth_required: bool = True
     auth_password: str = ""
     api_key: str = ""
     rclone_remote: str = ""

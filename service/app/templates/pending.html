@@ -64,7 +64,7 @@ function options(list, selected) {
 }
 
 async function loadPending() {
-  const r = await fetch('/pending/');
+  const r = await fetch('pending/');
   const data = await r.json();
   const items = data.items || [];
   document.getElementById('pending-count').textContent = items.length;
@@ -128,7 +128,7 @@ async function loadPending() {
 
 async function patchItem(id, field, value, el) {
   try {
-    const r = await fetch(`/pending/${id}`, {
+    const r = await fetch(`pending/${id}`, {
       method: 'PATCH',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ [field]: value }),
@@ -155,7 +155,7 @@ async function doCommit(ids) {
   document.getElementById('commit-status').innerHTML =
     '<div class="alert alert-info py-1 px-2 small"><span class="spinner-border spinner-border-sm me-1"></span>Committing…</div>';
   try {
-    const r = await fetch('/pending/commit', {
+    const r = await fetch('pending/commit', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ ids }),
@@ -178,7 +178,7 @@ async function doCommit(ids) {
 
 async function discardItem(id) {
   try {
-    await fetch(`/pending/${id}`, { method: 'DELETE' });
+    await fetch(`pending/${id}`, { method: 'DELETE' });
     document.getElementById(`pending-${id}`)?.remove();
     const cnt = document.getElementById('pending-count');
     cnt.textContent = Math.max(0, parseInt(cnt.textContent) - 1);

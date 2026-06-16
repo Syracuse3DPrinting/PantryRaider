@@ -14,8 +14,17 @@ _SAVEABLE = [
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden",
-    "secret_key", "auth_password", "totp_secret", "api_key",
+    "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
+]
+
+# Settings that hold credentials. These are redacted from backups unless the
+# user explicitly opts in, and never rendered back into the setup page.
+SECRET_SETTING_KEYS = [
+    "gemini_api_key", "openai_api_key", "anthropic_api_key",
+    "grocy_api_key", "mealie_api_key",
+    "themealdb_api_key", "spoonacular_api_key",
+    "auth_password", "totp_secret", "api_key", "secret_key",
 ]
 
 _DEFAULT_GROCY_URL = "http://grocy:80"
@@ -92,6 +101,11 @@ class Settings(BaseSettings):
     data_dir: str = "/app/data"
     secret_key: str = ""
 
+    # Secure by default: a standalone install must set a password before it is
+    # usable (enforced via is_configured). Set AUTH_REQUIRED=false when an
+    # outer layer already handles auth — e.g. the HA add-on (Ingress) or a
+    # zero-trust proxy like Pangolin — to avoid a redundant second login.
+    auth_required: bool = True
     auth_password: str = ""
     totp_secret: str = ""   # base32 secret; empty = TOTP disabled
     api_key: str = ""
@@ -113,6 +127,10 @@ class Settings(BaseSettings):
         if not self.grocy_base_url or self.grocy_base_url == _DEFAULT_GROCY_URL:
             return False
         if not self.provider_key(self.vision_provider):
+            return False
+        # Secure by default: refuse to be usable without a password unless the
+        # operator has explicitly delegated auth to an outer layer.
+        if self.auth_required and not self.auth_password:
             return False
         return True
 

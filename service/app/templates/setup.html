@@ -3,6 +3,8 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <!-- Resolve all relative links against the app root (or the HA Ingress prefix) -->
+  <base href="{{ ingress_path }}/">
   <title>Settings — FoodAssistant</title>
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
   <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
@@ -47,7 +49,7 @@
     <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant
       <span class="text-secondary fw-normal fs-6 ms-1">Settings</span></div>
     {% if configured %}
-    <a href="/ui/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to app</a>
+    <a href="ui/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to app</a>
     {% else %}
     <span class="text-secondary small">Welcome! Configure Grocy and an AI provider to get started.</span>
     {% endif %}
@@ -340,12 +342,21 @@
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
-              <span class="badge bg-secondary badge-req">Optional</span></div>
-            <p class="text-secondary small">Leave both empty to disable auth — fine when a reverse proxy
-              (Pangolin, Authelia, Cloudflare Access) already gates access.</p>
+              <span class="badge bg-danger badge-req">Required</span></div>
+            <p class="text-secondary small">A UI password is required by default. Turn off
+              <em>Require authentication</em> only when an outer layer already gates access — a
+              reverse proxy (Pangolin, Authelia, Cloudflare Access) or the Home Assistant add-on,
+              which authenticates through HA itself.</p>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="auth_required"
+                     {% if s.auth_required %}checked{% endif %} onchange="toggleAuthRequired()">
+              <label class="form-check-label" for="auth_required">Require authentication to use the app</label>
+            </div>
             <div class="mb-3">
               <label class="form-label">UI Password</label>
               {{ secret_input('auth_password', 'Protects the web UI login page') }}
+              <div class="form-text" id="auth-pw-hint">Required while authentication is on. The app will not
+                finish setup without it.</div>
             </div>
             <div class="mb-3">
               <label class="form-label">API Key <span class="text-secondary small">(Home Assistant / headless clients)</span></label>
@@ -394,8 +405,18 @@
             <p class="text-secondary small">FoodAssistant's data directory (settings, database, staples list) as a zip.
               Grocy and Mealie data live in separate containers — use
               <code>scripts/backup.sh</code> on the host for a full snapshot.</p>
+            <div class="form-check mb-2">
+              <input class="form-check-input" type="checkbox" id="backup_include_secrets" onchange="syncBackupLink()">
+              <label class="form-check-label small" for="backup_include_secrets">
+                Include API keys &amp; passwords
+                <span class="text-warning"><i class="bi bi-exclamation-triangle-fill"></i></span>
+              </label>
+              <div class="form-text">By default secrets are stripped (and <code>rclone.conf</code> is omitted) so the
+                file is safe to store off-box; after restoring you re-enter keys here. Only include them if the
+                destination is trusted.</div>
+            </div>
             <div class="d-flex flex-wrap gap-2 mb-3">
-              <a href="/admin/backup" class="btn btn-outline-info btn-sm" download>
+              <a href="admin/backup" id="download-backup" class="btn btn-outline-info btn-sm" download>
                 <i class="bi bi-download me-1"></i>Download Backup
               </a>
               <button class="btn btn-outline-secondary btn-sm" onclick="pushToRemote(this)"
@@ -455,6 +476,18 @@ function secretVal(id) {
   return el.value.trim();
 }
 
+function toggleAuthRequired() {
+  const on = document.getElementById('auth_required').checked;
+  const hint = document.getElementById('auth-pw-hint');
+  if (hint) hint.classList.toggle('text-danger', on);
+}
+
+function syncBackupLink() {
+  const inc = document.getElementById('backup_include_secrets')?.checked;
+  const a = document.getElementById('download-backup');
+  if (a) a.href = 'admin/backup' + (inc ? '?include_secrets=true' : '');
+}
+
 function clearSecret(id) {
   const el = document.getElementById(id);
   if (el.dataset.clear === '1') {
@@ -504,14 +537,14 @@ async function postJson(url, body) {
 
 async function testGrocy() {
   setResult('grocy-result', true, 'Testing…');
-  const d = await postJson('/setup/test/grocy',
+  const d = await postJson('setup/test/grocy',
     {grocy_base_url: val('grocy_base_url'), grocy_api_key: secretVal('grocy_api_key')});
   setResult('grocy-result', d.ok, d.ok ? d.message : d.error);
 }
 
 async function testMealie() {
   setResult('mealie-result', true, 'Testing…');
-  const d = await postJson('/setup/test/mealie',
+  const d = await postJson('setup/test/mealie',
     {mealie_base_url: val('mealie_base_url'), mealie_api_key: secretVal('mealie_api_key')});
   setResult('mealie-result', d.ok, d.ok ? d.message : d.error);
 }
@@ -527,7 +560,7 @@ function providerTestPayload(provider, modelOverride = '') {
 
 async function testVision() {
   setResult('vision-result', true, 'Testing…');
-  const d = await postJson('/setup/test/provider',
+  const d = await postJson('setup/test/provider',
     providerTestPayload(document.getElementById('vision_provider').value));
   setResult('vision-result', d.ok, d.ok ? d.message : d.error);
 }
@@ -535,14 +568,14 @@ async function testVision() {
 async function testEnrich() {
   setResult('enrich-result', true, 'Testing…');
   const provider = val('enrich_provider') || document.getElementById('vision_provider').value;
-  const d = await postJson('/setup/test/provider', providerTestPayload(provider, val('enrich_model')));
+  const d = await postJson('setup/test/provider', providerTestPayload(provider, val('enrich_model')));
   setResult('enrich-result', d.ok, d.ok ? d.message : d.error);
 }
 
 async function testRecipes() {
   setResult('recipes-result', true, 'Testing…');
   const src = document.getElementById('recipe_source').value;
-  const d = await postJson('/setup/test/recipes',
+  const d = await postJson('setup/test/recipes',
     {source: src, api_key: secretVal(src === 'spoonacular' ? 'spoonacular_api_key' : 'themealdb_api_key')});
   setResult('recipes-result', d.ok, d.ok ? d.message : d.error);
 }
@@ -615,21 +648,34 @@ async function saveAll() {
     suggest_per_tier: num('suggest_per_tier', 8),
     nav_order:       navState.map(t => t.key).join(','),
     nav_hidden:      navState.filter(t => t.hidden).map(t => t.key).join(','),
+    auth_required:   document.getElementById('auth_required').checked,
     auth_password:   secretVal('auth_password'),
     api_key:         secretVal('api_key'),
     rclone_remote:   val('rclone_remote'),
     rclone_schedule_hours: num('rclone_schedule_hours', 0),
   };
 
+  // Secure by default: block save if auth is required but no password is set or stored.
+  if (payload.auth_required && !{{ 'true' if has.auth_password else 'false' }}
+      && (!payload.auth_password || payload.auth_password === '__CLEAR__')) {
+    document.getElementById('save-result').innerHTML =
+      '<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>Set a UI password, ' +
+      'or turn off &ldquo;Require authentication&rdquo; if an outer layer handles it.</span>';
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save All';
+    document.querySelector('[data-bs-target="#pane-security"]')?.click();
+    return;
+  }
+
   try {
-    const r = await fetch('/setup/save', {
+    const r = await fetch('setup/save', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify(payload),
     });
     const d = await r.json();
     if (d.ok) {
-      window.location.href = '/ui/';
+      window.location.href = 'ui/';
     } else {
       throw new Error(d.detail || 'Unknown error');
     }
@@ -652,7 +698,7 @@ async function setupTOTP() {
   document.getElementById('totp-qr').src = '';
   document.getElementById('totp-secret-display').textContent = 'Generating…';
   try {
-    const d = await postJson('/setup/totp/generate', {});
+    const d = await postJson('setup/totp/generate', {});
     _totpSecret = d.secret;
     document.getElementById('totp-qr').src = d.qr;
     document.getElementById('totp-secret-display').textContent = 'Manual key: ' + d.secret;
@@ -664,7 +710,7 @@ async function setupTOTP() {
 async function verifyTOTP() {
   const code = document.getElementById('totp-code').value.trim();
   if (!_totpSecret || !code) return;
-  const d = await postJson('/setup/totp/verify', {secret: _totpSecret, code});
+  const d = await postJson('setup/totp/verify', {secret: _totpSecret, code});
   const el = document.getElementById('totp-result');
   if (d.ok) {
     el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' + d.message + '</span>';
@@ -676,7 +722,7 @@ async function verifyTOTP() {
 
 async function disableTOTP() {
   if (!confirm('Disable two-factor authentication? Anyone with the UI password can log in without a code.')) return;
-  const d = await postJson('/setup/totp/disable', {});
+  const d = await postJson('setup/totp/disable', {});
   if (d.ok) location.reload();
   else alert(d.error || 'Failed');
 }
@@ -688,9 +734,9 @@ async function testRemote(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
   // Save the remote field first so the server uses the current value
-  await fetch('/setup/save', {method:'POST',headers:{'Content-Type':'application/json'},
+  await fetch('setup/save', {method:'POST',headers:{'Content-Type':'application/json'},
     body: JSON.stringify({rclone_remote: val('rclone_remote'), rclone_schedule_hours: num('rclone_schedule_hours',0)})});
-  const d = await postJson('/admin/backup/test-remote', {});
+  const d = await postJson('admin/backup/test-remote', {});
   setResult('remote-result', d.ok, d.ok ? d.message : d.error);
   btn.disabled = false;
   btn.innerHTML = orig;
@@ -701,7 +747,8 @@ async function pushToRemote(btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pushing…';
   try {
-    const d = await postJson('/admin/backup/remote', {});
+    const inc = document.getElementById('backup_include_secrets')?.checked;
+    const d = await postJson('admin/backup/remote' + (inc ? '?include_secrets=true' : ''), {});
     if (!d.ok) throw new Error(d.detail || 'Unknown error');
     btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Done';
     btn.className = btn.className.replace('btn-outline-secondary','btn-outline-success');

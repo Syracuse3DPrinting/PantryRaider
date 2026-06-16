@@ -114,7 +114,7 @@ Startup is fully self-contained - no internet access is required to start or res
 
 ## Backup
 
-Download a zip of FoodAssistant's data at Settings > Security > Download Backup.
+Download a zip of FoodAssistant's data at Settings > Security > Download Backup. API keys and passwords are stripped from the backup by default so it is safe to store off-box; tick "Include API keys & passwords" for a restore-complete copy you keep somewhere trusted.
 
 For a full backup including Grocy and Mealie data, run on the host:
 

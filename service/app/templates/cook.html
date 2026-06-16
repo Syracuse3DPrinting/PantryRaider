@@ -6,7 +6,7 @@
 <div class="alert alert-info mt-3">
   <i class="bi bi-lightbulb me-2"></i>
   Recipe suggestions are powered by <a href="https://mealie.io" target="_blank">Mealie</a>.
-  Add your Mealie URL and API token in <a href="/setup">Settings</a> to enable this page.
+  Add your Mealie URL and API token in <a href="setup">Settings</a> to enable this page.
 </div>
 {% else %}
 
@@ -221,7 +221,7 @@ async function loadSuggestions() {
     <span class="spinner-border spinner-border-sm me-2"></span>Checking your recipes and the web against current stock…</div>`;
   extSection.classList.add('d-none');
   try {
-    const r = await fetch('/mealie/suggest');
+    const r = await fetch('mealie/suggest');
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const data = await r.json();
     const tiers = data.tiers || {};
@@ -263,7 +263,7 @@ async function cookedRecipe(slug, matchedCount, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    const r = await fetch('/mealie/cooked', {
+    const r = await fetch('mealie/cooked', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({slug}),
     });
@@ -283,7 +283,7 @@ async function addMissing(slug, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    const r = await fetch('/mealie/suggest/add-missing', {
+    const r = await fetch('mealie/suggest/add-missing', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({slug}),
     });
@@ -302,7 +302,7 @@ async function importExternal(externalId, source, addToList, btn) {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
   try {
-    const r = await fetch('/mealie/recipes/import-external', {
+    const r = await fetch('mealie/recipes/import-external', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({external_id: externalId, source, add_missing_to_list: addToList}),
     });
@@ -333,7 +333,7 @@ async function savePlan() {
   const err = document.getElementById('plan-error');
   err.classList.add('d-none');
   try {
-    const r = await fetch('/mealie/mealplan', {
+    const r = await fetch('mealie/mealplan', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         date: document.getElementById('plan-date').value,
@@ -362,7 +362,7 @@ async function loadAiSuggestions() {
   section.classList.remove('d-none');
   cards.innerHTML = '<div class="col-12 text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Asking AI for suggestions…</div>';
   try {
-    const r = await fetch('/mealie/suggest/llm', {method: 'POST'});
+    const r = await fetch('mealie/suggest/llm', {method: 'POST'});
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     const sug = d.suggestions || [];
@@ -408,7 +408,7 @@ async function openAiPreview(name) {
   document.getElementById('aipv-error').classList.add('d-none');
   modal.show();
   try {
-    const r = await fetch('/mealie/recipes/generate', {
+    const r = await fetch('mealie/recipes/generate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({name}),
     });
@@ -441,7 +441,7 @@ async function saveAiRecipe(btn) {
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
   try {
     const d = aiGeneratedRecipe;
-    const r = await fetch('/mealie/recipes/create', {
+    const r = await fetch('mealie/recipes/create', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({
         name: d.name, description: d.description || '',

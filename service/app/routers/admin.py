@@ -1,6 +1,7 @@
 """Admin utilities: backup download, rclone remote push, system status."""
 import asyncio
 import io
+import json
 import logging
 import zipfile
 from datetime import date
@@ -9,22 +10,24 @@ from pathlib import Path
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
-from ..config import settings
+from ..config import settings, SECRET_SETTING_KEYS
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
 @router.get("/backup")
-async def download_backup():
+async def download_backup(include_secrets: bool = False):
     """Stream a zip of all FoodAssistant app data as a browser download.
 
     Includes settings.json, the SQLite database, and any user-edited data
-    files (staples.txt, etc.). Grocy and Mealie data live in separate
-    containers — use scripts/backup.sh on the host to capture everything,
-    or push to a cloud remote via the Backup > Push to Remote button.
+    files. By default API keys, passwords and the TOTP/session secrets are
+    redacted from settings.json and rclone.conf is omitted, so the file is
+    safe to store off-box. Pass include_secrets=true for a restore-complete
+    backup (store it somewhere trusted). Grocy and Mealie data live in separate
+    containers — use scripts/backup.sh on the host to capture everything.
     """
-    zip_bytes, filename = _build_zip()
+    zip_bytes, filename = _build_zip(include_secrets=include_secrets)
     return StreamingResponse(
         io.BytesIO(zip_bytes),
         media_type="application/zip",
@@ -32,25 +35,54 @@ async def download_backup():
     )
 
 
-def _build_zip() -> tuple[bytes, str]:
-    """Create the backup zip in memory, return (bytes, filename)."""
+# rclone.conf holds cloud-storage credentials, so it is treated like a secret.
+_SECRET_FILES = {"rclone.conf"}
+
+
+def _redact_settings(raw: bytes) -> bytes:
+    """Blank out credential fields in a settings.json byte blob."""
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return raw  # not parseable — leave as-is rather than risk corrupting
+    for k in SECRET_SETTING_KEYS:
+        if k in data and data[k]:
+            data[k] = ""
+    return json.dumps(data, indent=2).encode()
+
+
+def _build_zip(include_secrets: bool = False) -> tuple[bytes, str]:
+    """Create the backup zip in memory, return (bytes, filename).
+
+    When include_secrets is False (default), settings.json is redacted and
+    files holding raw credentials (rclone.conf) are skipped.
+    """
     data_dir = Path(settings.data_dir)
     buf = io.BytesIO()
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
         if data_dir.exists():
             for f in sorted(data_dir.rglob("*")):
-                if f.is_file():
-                    arc_name = Path("foodassistant-data") / f.relative_to(data_dir)
+                if not f.is_file():
+                    continue
+                rel = f.relative_to(data_dir)
+                arc_name = Path("foodassistant-data") / rel
+                if not include_secrets and f.name in _SECRET_FILES:
+                    continue
+                if not include_secrets and f.name == "settings.json":
+                    zf.writestr(str(arc_name), _redact_settings(f.read_bytes()))
+                else:
                     zf.write(f, arc_name)
-    return buf.getvalue(), f"foodassistant-backup-{date.today()}.zip"
+    suffix = "" if include_secrets else "-redacted"
+    return buf.getvalue(), f"foodassistant-backup-{date.today()}{suffix}.zip"
 
 
 @router.post("/backup/remote")
-async def push_to_remote():
+async def push_to_remote(include_secrets: bool = False):
     """Write the backup zip to disk and push it to the configured rclone remote.
 
     Requires rclone to be installed in the container and a remote configured
-    at the path set in RCLONE_REMOTE (Settings > Security > Backup).
+    at the path set in RCLONE_REMOTE (Settings > Security > Backup). Secrets
+    are redacted by default since the destination is third-party cloud storage.
     """
     if not settings.rclone_remote:
         raise HTTPException(400, "No rclone remote configured — set one in Settings > Security > Backup.")
@@ -58,7 +90,7 @@ async def push_to_remote():
     if not shutil.which("rclone"):
         raise HTTPException(500, "rclone is not installed in this container. Rebuild the image after adding it to the Dockerfile.")
 
-    zip_bytes, filename = _build_zip()
+    zip_bytes, filename = _build_zip(include_secrets=include_secrets)
     tmp = Path("/tmp") / filename
     tmp.write_bytes(zip_bytes)
     try:

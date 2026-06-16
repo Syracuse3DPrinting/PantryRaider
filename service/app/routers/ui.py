@@ -1,11 +1,12 @@
 import secrets
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 
 from ..config import settings
 from ..database import get_db
+from ..ingress import ingress_redirect
 from ..models.db_models import ExpiryDefault
 from ..services.grocy import GrocyClient
 from ..templating import templates
@@ -16,7 +17,7 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 @router.get("/login", response_class=HTMLResponse)
 def login_page(request: Request):
     if not settings.auth_password or request.session.get("authed"):
-        return RedirectResponse("/ui/", status_code=303)
+        return ingress_redirect(request, "/ui/")
     if request.session.get("totp_pending"):
         return templates.TemplateResponse(request, "login.html",
             {"request": request, "error": None, "step": "totp"})
@@ -33,7 +34,7 @@ def login(request: Request, password: str = Form(None), totp_code: str = Form(No
         if totp_code and totp.verify(totp_code.strip(), valid_window=1):
             request.session.pop("totp_pending", None)
             request.session["authed"] = True
-            return RedirectResponse("/ui/", status_code=303)
+            return ingress_redirect(request, "/ui/")
         return templates.TemplateResponse(request, "login.html",
             {"request": request, "error": "Invalid code — try again.", "step": "totp"},
             status_code=401)
@@ -51,13 +52,13 @@ def login(request: Request, password: str = Form(None), totp_code: str = Form(No
             {"request": request, "error": None, "step": "totp"})
 
     request.session["authed"] = True
-    return RedirectResponse("/ui/", status_code=303)
+    return ingress_redirect(request, "/ui/")
 
 
 @router.get("/logout")
 def logout(request: Request):
     request.session.clear()
-    return RedirectResponse("/ui/login", status_code=303)
+    return ingress_redirect(request, "/ui/login")
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -145,7 +146,7 @@ async def expiring_page(request: Request, days: int = 7):
 
 
 @router.post("/consume/{product_id}")
-async def consume_item(product_id: int, amount: float = Form(1.0)):
+async def consume_item(request: Request, product_id: int, amount: float = Form(1.0)):
     grocy = GrocyClient()
     try:
         await grocy.consume_stock(product_id, amount)
@@ -154,7 +155,7 @@ async def consume_item(product_id: int, amount: float = Form(1.0)):
     except Exception as e:
         msg = f"Error: {e}"
         msg_type = "danger"
-    return RedirectResponse(f"/ui/expiring?msg={msg}&msg_type={msg_type}", status_code=303)
+    return ingress_redirect(request, f"/ui/expiring?msg={msg}&msg_type={msg_type}")
 
 
 @router.get("/defaults", response_class=HTMLResponse)
@@ -178,6 +179,7 @@ def defaults_page(
 
 @router.post("/defaults/create")
 def create_default(
+    request: Request,
     category: str = Form(...),
     name_pattern: str = Form(...),
     storage_type: str = Form(...),
@@ -195,11 +197,12 @@ def create_default(
     )
     db.add(row)
     db.commit()
-    return RedirectResponse("/ui/defaults?msg=Rule+added.", status_code=303)
+    return ingress_redirect(request, "/ui/defaults?msg=Rule+added.")
 
 
 @router.post("/defaults/{default_id}/update")
 def update_default(
+    request: Request,
     default_id: int,
     category: str = Form(...),
     name_pattern: str = Form(...),
@@ -216,13 +219,13 @@ def update_default(
         row.default_days = default_days
         row.notes = notes or None
         db.commit()
-    return RedirectResponse("/ui/defaults?msg=Rule+updated.", status_code=303)
+    return ingress_redirect(request, "/ui/defaults?msg=Rule+updated.")
 
 
 @router.post("/defaults/{default_id}/delete")
-def delete_default(default_id: int, db: Session = Depends(get_db)):
+def delete_default(request: Request, default_id: int, db: Session = Depends(get_db)):
     row = db.query(ExpiryDefault).filter(ExpiryDefault.id == default_id).first()
     if row:
         db.delete(row)
         db.commit()
-    return RedirectResponse("/ui/defaults?msg=Rule+deleted.&msg_type=warning", status_code=303)
+    return ingress_redirect(request, "/ui/defaults?msg=Rule+deleted.&msg_type=warning")

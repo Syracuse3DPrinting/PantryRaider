@@ -6,7 +6,7 @@
 <div class="alert alert-info mt-3">
   <i class="bi bi-journal-richtext me-2"></i>
   Meal planning is powered by <a href="https://mealie.io" target="_blank">Mealie</a>.
-  Add your Mealie URL and API token in <a href="/setup">Settings</a> to enable this page.
+  Add your Mealie URL and API token in <a href="setup">Settings</a> to enable this page.
 </div>
 {% else %}
 
@@ -30,7 +30,7 @@
   </div>
 
   <div class="col-lg-4">
-    <a href="/ui/cook" class="card text-decoration-none">
+    <a href="ui/cook" class="card text-decoration-none">
       <div class="card-body d-flex align-items-center gap-3">
         <i class="bi bi-lightbulb fs-2 text-warning"></i>
         <div>
@@ -111,7 +111,7 @@ function dayLabel(iso) {
 async function loadPlan() {
   const el = document.getElementById('plan');
   try {
-    const r = await fetch('/mealie/mealplan?days=7');
+    const r = await fetch('mealie/mealplan?days=7');
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const data = await r.json();
     el.innerHTML = '';
@@ -144,7 +144,7 @@ async function loadPlan() {
 }
 
 async function removeEntry(id) {
-  await fetch('/mealie/mealplan/' + id, {method: 'DELETE'});
+  await fetch('mealie/mealplan/' + id, {method: 'DELETE'});
   loadPlan();
 }
 
@@ -158,7 +158,7 @@ document.getElementById('recipe-search').addEventListener('input', e => {
   document.getElementById('recipe-picked').textContent = '';
   if (q.length < 2) { document.getElementById('recipe-results').innerHTML = ''; return; }
   searchTimer = setTimeout(async () => {
-    const r = await fetch('/mealie/recipes?search=' + encodeURIComponent(q));
+    const r = await fetch('mealie/recipes?search=' + encodeURIComponent(q));
     const items = r.ok ? await r.json() : [];
     document.getElementById('recipe-results').innerHTML = items.slice(0, 6).map(it =>
       `<button type="button" class="list-group-item list-group-item-action py-1"
@@ -182,7 +182,7 @@ async function saveEntry() {
     title: document.getElementById('entry-title').value.trim(),
   };
   if (!body.date) { err.textContent = 'Pick a date.'; err.classList.remove('d-none'); return; }
-  const r = await fetch('/mealie/mealplan', {
+  const r = await fetch('mealie/mealplan', {
     method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(body),
   });
   if (!r.ok) {

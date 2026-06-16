@@ -257,7 +257,7 @@ async function lookupBarcode() {
   if (!code) return;
   showStatus('barcode-status', '<span class="spinner-border spinner-border-sm me-1"></span>Looking up...', 'info');
   try {
-    const r = await fetch(`/analyze/barcode/${code}`);
+    const r = await fetch(`analyze/barcode/${code}`);
     if (!r.ok) {
       const err = await r.json();
       showStatus('barcode-status', `Not found: ${err.detail}`, 'warning');
@@ -298,7 +298,7 @@ function setPhotoFile(file) {
 async function analyzePhoto() {
   if (!pendingFile) return;
   const type = document.querySelector('input[name=photoType]:checked').value;
-  const endpoint = type === 'receipt' ? '/analyze/receipt' : '/analyze/food';
+  const endpoint = type === 'receipt' ? 'analyze/receipt' : 'analyze/food';
 
   showStatus('photo-status', '<span class="spinner-border spinner-border-sm me-1"></span>Analyzing with Gemini...', 'info');
   document.getElementById('analyzeBtn').disabled = true;
@@ -412,7 +412,7 @@ async function importAll() {
   if (queue.length === 0) return;
   showStatus('import-status', '<span class="spinner-border spinner-border-sm me-1"></span>Importing...', 'info');
   try {
-    const r = await fetch('/inventory/import', {
+    const r = await fetch('inventory/import', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ items: queue }),
