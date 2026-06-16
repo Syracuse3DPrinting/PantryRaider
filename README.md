@@ -134,7 +134,9 @@ For automated cloud backup, configure an [rclone](https://rclone.org) remote in 
 
 ## Home Assistant
 
-See [homeassistant/README.md](homeassistant/README.md) for sensors, automations, and the Lovelace dashboard.
+**Running Home Assistant OS or Supervised?** Install FoodAssistant as an add-on so it lives in the HA sidebar with no separate login - HA authenticates the UI through Ingress. In HA go to Settings > Add-ons > Add-on Store, open the menu, choose Repositories, and add `https://github.com/Syracuse3DPrinting/FoodAssistant`, then install FoodAssistant. Full instructions: [homeassistant/addon/foodassistant/DOCS.md](homeassistant/addon/foodassistant/DOCS.md).
+
+For a **standalone** install, see [homeassistant/README.md](homeassistant/README.md) for REST sensors, automations, and the Lovelace dashboard.
 
 ## Updating
 
