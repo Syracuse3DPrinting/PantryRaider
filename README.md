@@ -35,68 +35,48 @@ When AI is enabled you have four choices:
 
 For a fully local setup with no external dependencies, use Ollama for both vision and text. Photo analysis quality is lower than cloud models but functional for most food items.
 
-## Quick Start
+## Install
 
-**Prerequisites:** [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/install/) on any Linux, macOS, or Windows machine (including Proxmox LXC, TrueNAS SCALE, and Unraid). Running Home Assistant OS instead of a general-purpose server? See [Home Assistant add-on](#home-assistant) below for a one-click install with no separate login.
+Pick the path that matches where you're running it.
 
-### Fastest - prebuilt image, no build step
+### Option 1 - Docker (server, NAS, Proxmox, TrueNAS, Unraid)
+
+Needs [Docker](https://docs.docker.com/get-docker/) with Compose v2. One command pulls the prebuilt image and starts FoodAssistant plus a bundled Grocy:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/scripts/install.sh | bash
 ```
 
-This pulls the published image, writes a `docker-compose.yml`, and starts FoodAssistant plus a bundled Grocy. Then open **http://YOUR-HOST:9284/setup**. Prefer to do it by hand? Download [`docker-compose.prod.yml`](docker-compose.prod.yml), rename it to `docker-compose.yml`, and run `docker compose up -d`.
+Then open **http://YOUR-HOST:9284/setup** and follow the wizard: set a UI password (required by default), add your Grocy and AI provider keys, test, save.
 
-### Option A - FoodAssistant only (you already have Grocy)
+Prefer to do it by hand? Grab [`docker-compose.prod.yml`](docker-compose.prod.yml), save it as `docker-compose.yml`, and run `docker compose up -d`.
 
-```bash
-git clone https://github.com/Syracuse3DPrinting/FoodAssistant.git
-cd FoodAssistant
-docker compose up -d --build
-```
+**Bundled extras** are opt-in via profiles - add any you want to the `up` command:
 
-Open **http://YOUR-HOST:9284/setup**, set a UI password (required by default), enter your Grocy URL and API key plus an AI provider key, test the connections, then save.
-
-### Option B - FoodAssistant with Grocy included
+| Profile | Starts | Notes |
+|---|---|---|
+| `with-grocy` | Grocy at `:9383` | Inventory backend (started by default in the install script) |
+| `with-mealie` | Mealie at `:9285` | Recipes, meal plan, shopping list |
+| `with-ollama` | Ollama at `:11434` | Fully local AI - then `docker exec foodassistant-ollama ollama pull llava:7b` |
 
 ```bash
-docker compose --profile with-grocy up -d --build
+docker compose --profile with-grocy --profile with-mealie --profile with-ollama up -d
 ```
 
-Grocy starts at **http://YOUR-HOST:9383**. Open it, set a password, generate an API key under Profile > Manage API Keys, and paste it into the FoodAssistant setup wizard.
+For each, create an API key/token in that service and paste it into the setup wizard.
 
-### Option C - Fully local with Ollama
+### Option 2 - Home Assistant add-on (HA OS / Supervised)
 
-```bash
-docker compose --profile with-ollama up -d --build
-docker exec foodassistant-ollama ollama pull llava:7b
-```
+Runs inside Home Assistant with the UI in the sidebar and no separate login - HA handles auth through Ingress.
 
-In the setup wizard choose Ollama as the provider and set the URL to `http://ollama:11434`. No external AI calls are made.
+1. **Settings > Add-ons > Add-on Store**, open the three-dot menu, choose **Repositories**, and add `https://github.com/Syracuse3DPrinting/FoodAssistant`.
+2. Install **FoodAssistant** and start it, then click **Open Web UI**.
 
-### Option D - With Mealie for recipes and meal planning
-
-```bash
-docker compose --profile with-mealie up -d --build
-```
-
-Mealie starts at **http://YOUR-HOST:9285**. Default login: `changeme@example.com` / `MyPassword` - change it on first login. Create an API token under User Profile > API Tokens and paste it into the FoodAssistant setup wizard.
-
-You can combine profiles:
-
-```bash
-docker compose --profile with-grocy --profile with-ollama --profile with-mealie up -d
-```
+Install the community **Grocy** add-on first and point FoodAssistant at it in the wizard. Full details, including low-power AI options: [add-on docs](homeassistant/addon/foodassistant/DOCS.md).
 
 ### Timezone
 
-Set your timezone in `.env` (copy from `.env.example`):
-
-```
-TZ=America/Chicago
-```
-
-Common values: `Europe/London`, `Asia/Tokyo`, `Australia/Sydney`. Defaults to `America/New_York` if not set.
+Set `TZ` in `.env` (e.g. `TZ=Europe/London`); defaults to `America/New_York`.
 
 ## Configuration
 
@@ -140,7 +120,18 @@ For a **standalone** install, see [homeassistant/README.md](homeassistant/README
 
 ## Updating
 
-App code is volume-mounted with `--reload` so changes apply after a `git pull` without restarting the container. A rebuild is only needed when `requirements.txt` or the Dockerfile changes:
+**Docker (prebuilt image):** pull the latest image and recreate the container. Your data and settings persist in the `./data` volume.
+
+```bash
+docker compose pull
+docker compose up -d
+```
+
+Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.2.3` in `.env`.
+
+**Home Assistant add-on:** update from the add-on page in Home Assistant when a new version is offered.
+
+**Built from source (development):** the dev `docker-compose.yml` mounts the code and runs with `--reload`, so a `git pull` applies changes live. Rebuild only when `requirements.txt` or the Dockerfile changes:
 
 ```bash
 git pull
