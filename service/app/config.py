@@ -20,7 +20,7 @@ _SAVEABLE = [
     "mealie_base_url", "mealie_api_key", "mealie_public_url",
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
-    "nav_order", "nav_hidden",
+    "nav_order", "nav_hidden", "custom_storage_categories",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
 ]
@@ -104,6 +104,10 @@ class Settings(BaseSettings):
     # (unlisted tabs follow in default order); nav_hidden hides tabs.
     nav_order: str = ""
     nav_hidden: str = ""
+
+    # User-defined storage categories beyond the four built-ins. Each is a
+    # dict {key,label,icon,color,bg,location,match}. See storage_categories.py.
+    custom_storage_categories: list = []
 
     data_dir: str = "/app/data"
     secret_key: str = ""

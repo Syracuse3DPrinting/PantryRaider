@@ -5,6 +5,7 @@ from ..database import get_db
 from ..models.food import ImportRequest, FoodItem, FoodItemOverride
 from ..services.defaults import apply_defaults
 from ..services.grocy import GrocyClient
+from ..storage_categories import category_keys
 
 router = APIRouter(prefix="/inventory", tags=["inventory"])
 
@@ -65,11 +66,9 @@ _SORT_KEYS = {
 }
 _REVERSED_SORTS = {"name_desc", "added_desc"}
 
-_BUCKETS = ["refrigerated", "frozen", "room_temp", "pantry", "other"]
-
 
 class MoveRequest(BaseModel):
-    bucket: str  # refrigerated | frozen | room_temp | pantry
+    bucket: str  # any built-in or custom category key (grocy.move_product validates)
 
 
 class EditRequest(BaseModel):
@@ -107,7 +106,9 @@ async def get_dashboard(sort: str = "expiry_asc"):
     key_fn = _SORT_KEYS.get(sort, _SORT_KEYS["expiry_asc"])
     items.sort(key=key_fn, reverse=sort in _REVERSED_SORTS)
 
+    # Built-in + custom buckets, plus "other" for anything unclassified.
+    buckets = category_keys() + ["other"]
     return {
         bucket: [i for i in items if i["storage_bucket"] == bucket]
-        for bucket in _BUCKETS
+        for bucket in buckets
     }

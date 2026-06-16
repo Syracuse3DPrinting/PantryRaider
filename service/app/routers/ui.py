@@ -9,6 +9,7 @@ from ..database import get_db
 from ..ingress import ingress_redirect
 from ..models.db_models import ExpiryDefault
 from ..services.grocy import GrocyClient
+from ..storage_categories import all_categories, OTHER
 from ..templating import templates
 
 router = APIRouter(prefix="/ui", tags=["ui"])
@@ -64,11 +65,15 @@ def logout(request: Request):
 @router.get("/", response_class=HTMLResponse)
 @router.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request):
+    categories = all_categories()
     return templates.TemplateResponse(request, "inventory.html", {
         "request": request,
         "active": "inventory",
         "message": request.query_params.get("msg"),
         "message_type": request.query_params.get("msg_type", "success"),
+        # Movable categories (built-in + custom) and the always-on "other" panel
+        "categories": categories,
+        "panels": categories + [{**OTHER, "custom": False}],
     })
 
 

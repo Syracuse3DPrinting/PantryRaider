@@ -6,6 +6,7 @@ from pydantic import BaseModel
 from ..config import settings, APP_VERSION
 from ..dependencies import reset_providers
 from ..navigation import all_tabs
+from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
 
 router = APIRouter(prefix="/setup", tags=["setup"])
@@ -98,6 +99,7 @@ async def setup_page(request: Request):
         "has": {f: bool(getattr(settings, f, "")) for f in _SECRET_FIELDS},
         "tabs": all_tabs(),
         "version": APP_VERSION,
+        "custom_categories": custom_categories(),
     })
 
 
@@ -115,6 +117,23 @@ async def save_setup(payload: SetupPayload):
     reset_mealie_cache()
     reset_staple_cache()
     return {"ok": True}
+
+
+class StorageCategoriesPayload(BaseModel):
+    categories: list[dict] = []
+
+
+@router.post("/storage-categories")
+async def save_storage_categories(payload: StorageCategoriesPayload):
+    """Replace the set of user-defined storage categories.
+
+    Entries are normalized/validated (blank, keyless, or built-in-colliding
+    rows are dropped) before saving, so the inventory dashboard never sees a
+    malformed category.
+    """
+    clean = [storable(c) for c in _normalize_custom(payload.categories)]
+    settings.save({"custom_storage_categories": clean})
+    return {"ok": True, "categories": clean}
 
 
 @router.post("/test/grocy")

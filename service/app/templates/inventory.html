@@ -72,14 +72,10 @@
     outline-offset: -2px;
     background: rgba(13,110,253,0.08);
   }
-  .panel-refrigerated .panel-header { background: #0d3b5e; color: #74c0fc; }
-  .panel-frozen       .panel-header { background: #1a1a4d; color: #a5b4fc; }
-  .panel-room_temp    .panel-header { background: #3b2100; color: #ffa94d; }
-  .panel-pantry       .panel-header { background: #1a2e10; color: #69db7c; }
-  .panel-refrigerated { border-color: #0d3b5e !important; }
-  .panel-frozen       { border-color: #1a1a4d !important; }
-  .panel-room_temp    { border-color: #3b2100 !important; }
-  .panel-pantry       { border-color: #1a2e10 !important; }
+  {% for c in panels %}
+  .panel-{{ c.key }} .panel-header { background: {{ c.bg }}; color: {{ c.color }}; }
+  .panel-{{ c.key }} { border-color: {{ c.bg }} !important; }
+  {% endfor %}
   #loading-spinner { display: none; }
 </style>
 
@@ -106,58 +102,20 @@
 </div>
 
 <div class="row g-3" id="panels">
-  <!-- Refrigerated -->
-  <div class="col-md-6" id="col-refrigerated">
-    <div class="border rounded panel-refrigerated" style="border-width:1px !important"
-         data-bucket="refrigerated"
-         ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropItem(event)">
-      <div class="panel-header" onclick="togglePanel('refrigerated')">
-        <i class="bi bi-thermometer-low"></i> Refrigerated
-        <span class="panel-count" id="count-refrigerated">—</span>
-        <i class="bi bi-chevron-down chevron" id="chevron-refrigerated"></i>
+  {% for c in panels %}
+  <div class="col-md-6" id="col-{{ c.key }}">
+    <div class="border rounded panel-{{ c.key }}" style="border-width:1px !important"
+         data-bucket="{{ c.key }}"
+         {% if c.key != 'other' %}ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropItem(event)"{% endif %}>
+      <div class="panel-header" onclick="togglePanel('{{ c.key }}')">
+        <i class="bi {{ c.icon }}"></i> {{ c.label }}
+        <span class="panel-count" id="count-{{ c.key }}">—</span>
+        <i class="bi bi-chevron-down chevron" id="chevron-{{ c.key }}"></i>
       </div>
-      <div class="panel-body" id="panel-refrigerated"><div class="panel-empty">Loading…</div></div>
+      <div class="panel-body" id="panel-{{ c.key }}"><div class="panel-empty">Loading…</div></div>
     </div>
   </div>
-  <!-- Frozen -->
-  <div class="col-md-6" id="col-frozen">
-    <div class="border rounded panel-frozen" style="border-width:1px !important"
-         data-bucket="frozen"
-         ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropItem(event)">
-      <div class="panel-header" onclick="togglePanel('frozen')">
-        <i class="bi bi-snow"></i> Frozen
-        <span class="panel-count" id="count-frozen">—</span>
-        <i class="bi bi-chevron-down chevron" id="chevron-frozen"></i>
-      </div>
-      <div class="panel-body" id="panel-frozen"><div class="panel-empty">Loading…</div></div>
-    </div>
-  </div>
-  <!-- Room Temp -->
-  <div class="col-md-6" id="col-room_temp">
-    <div class="border rounded panel-room_temp" style="border-width:1px !important"
-         data-bucket="room_temp"
-         ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropItem(event)">
-      <div class="panel-header" onclick="togglePanel('room_temp')">
-        <i class="bi bi-sun"></i> Room Temp / Counter
-        <span class="panel-count" id="count-room_temp">—</span>
-        <i class="bi bi-chevron-down chevron" id="chevron-room_temp"></i>
-      </div>
-      <div class="panel-body" id="panel-room_temp"><div class="panel-empty">Loading…</div></div>
-    </div>
-  </div>
-  <!-- Pantry -->
-  <div class="col-md-6" id="col-pantry">
-    <div class="border rounded panel-pantry" style="border-width:1px !important"
-         data-bucket="pantry"
-         ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropItem(event)">
-      <div class="panel-header" onclick="togglePanel('pantry')">
-        <i class="bi bi-box-seam"></i> Pantry / Dry Storage
-        <span class="panel-count" id="count-pantry">—</span>
-        <i class="bi bi-chevron-down chevron" id="chevron-pantry"></i>
-      </div>
-      <div class="panel-body" id="panel-pantry"><div class="panel-empty">Loading…</div></div>
-    </div>
-  </div>
+  {% endfor %}
 </div>
 
 <!-- Move-item modal (tap-friendly alternative to drag & drop) -->
@@ -169,18 +127,12 @@
         <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body d-grid gap-2">
-        <button class="btn btn-outline-info" onclick="moveFromModal('refrigerated')">
-          <i class="bi bi-thermometer-low me-1"></i>Refrigerated
+        {% for c in categories %}
+        <button class="btn" style="border:1px solid {{ c.color }}; color:{{ c.color }}"
+                onclick="moveFromModal('{{ c.key }}')">
+          <i class="bi {{ c.icon }} me-1"></i>{{ c.label }}
         </button>
-        <button class="btn btn-outline-primary" onclick="moveFromModal('frozen')">
-          <i class="bi bi-snow me-1"></i>Frozen
-        </button>
-        <button class="btn btn-outline-warning" onclick="moveFromModal('room_temp')">
-          <i class="bi bi-sun me-1"></i>Room Temp / Counter
-        </button>
-        <button class="btn btn-outline-success" onclick="moveFromModal('pantry')">
-          <i class="bi bi-box-seam me-1"></i>Pantry / Dry Storage
-        </button>
+        {% endfor %}
       </div>
     </div>
   </div>
@@ -235,6 +187,11 @@
 
 {% block scripts %}
 <script>
+// Panels (built-in + custom + "other"), injected from the server-side registry.
+const PANELS = {{ panels | tojson }};
+const PANEL_KEYS = PANELS.map(c => c.key);
+const BUCKET_LABELS = Object.fromEntries(PANELS.map(c => [c.key, c.label]));
+
 const URGENCY_BADGE = {
   expired: ['badge-expired', '⚠ Expired'],
   today:   ['badge-today',   'Expires today'],
@@ -416,11 +373,6 @@ async function moveFromModal(bucket) {
   await moveItem(productId, bucket, name);
 }
 
-const BUCKET_LABELS = {
-  refrigerated: 'Refrigerated', frozen: 'Frozen',
-  room_temp: 'Room Temp', pantry: 'Pantry',
-};
-
 async function moveItem(productId, bucket, name) {
   try {
     const r = await fetch(`/inventory/move/${productId}`, {
@@ -443,17 +395,11 @@ async function loadDashboard() {
     const r = await fetch(`/inventory/dashboard?sort=${sort}`);
     if (!r.ok) throw new Error(await r.text());
     const data = await r.json();
-    const allItems = [
-      ...(data.refrigerated || []), ...(data.frozen || []),
-      ...(data.room_temp || []),    ...(data.pantry  || []),
-    ];
+    const allItems = PANEL_KEYS.flatMap(k => data[k] || []);
     storeItems(allItems);
-    renderPanel('panel-refrigerated', 'count-refrigerated', data.refrigerated || [], 'refrigerated');
-    renderPanel('panel-frozen',       'count-frozen',       data.frozen       || [], 'frozen');
-    renderPanel('panel-room_temp',    'count-room_temp',    data.room_temp    || [], 'room_temp');
-    renderPanel('panel-pantry',       'count-pantry',       data.pantry       || [], 'pantry');
+    PANEL_KEYS.forEach(k => renderPanel(`panel-${k}`, `count-${k}`, data[k] || [], k));
   } catch(e) {
-    ['refrigerated','frozen','room_temp','pantry'].forEach(b => {
+    PANEL_KEYS.forEach(b => {
       document.getElementById(`panel-${b}`).innerHTML =
         `<div class="panel-empty text-danger">Failed to load: ${e.message}</div>`;
     });
@@ -473,7 +419,7 @@ async function consume(productId, amount, name) {
     if (row) row.remove();
     showToast(`✓ Consumed: ${name}`);
     // Update panel count
-    ['refrigerated','frozen','room_temp','pantry'].forEach(b => {
+    PANEL_KEYS.forEach(b => {
       const panel = document.getElementById(`panel-${b}`);
       const rows = panel.querySelectorAll('.item-row').length;
       if (rows === 0) renderPanel(`panel-${b}`, `count-${b}`, []);
@@ -492,8 +438,6 @@ function showToast(msg, isError = false) {
 }
 
 // ── Collapsible panels ────────────────────────────────────────────────────────
-
-const BUCKETS_ALL = ['refrigerated', 'frozen', 'room_temp', 'pantry'];
 
 function togglePanel(bucket) {
   const panel = document.querySelector(`[data-bucket="${bucket}"]`);

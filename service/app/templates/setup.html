@@ -335,6 +335,50 @@
               </div>
             </div>
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-grid-3x3-gap text-success"></i> Custom Storage Categories</div>
+            <p class="text-secondary small">Add storage buckets beyond the four built-ins (Refrigerated, Frozen,
+              Room Temp, Pantry) — e.g. Wine Cellar, Garage Fridge, Liquor Cabinet. Each maps to a Grocy location;
+              assign items to it from the <strong>Move</strong> button on the Inventory page. Saved separately from
+              the main settings — use <em>Save categories</em> below.</p>
+            <div class="vstack gap-2" id="storage-cat-editor">
+              {% for c in custom_categories %}
+              <div class="cat-row border rounded p-2">
+                <div class="row g-2 align-items-end">
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small mb-1">Name</label>
+                    <input class="form-control form-control-sm cat-label" value="{{ c.label }}" placeholder="Wine Cellar">
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small mb-1">Icon <a href="https://icons.getbootstrap.com/" target="_blank" class="text-secondary" title="Browse icons"><i class="bi bi-box-arrow-up-right"></i></a></label>
+                    <input class="form-control form-control-sm cat-icon" value="{{ c.icon }}" placeholder="bi-database">
+                  </div>
+                  <div class="col-4 col-md-1">
+                    <label class="form-label small mb-1">Color</label>
+                    <input type="color" class="form-control form-control-sm form-control-color cat-color" value="{{ c.color }}">
+                  </div>
+                  <div class="col-8 col-md-3">
+                    <label class="form-label small mb-1">Grocy location</label>
+                    <input class="form-control form-control-sm cat-location" value="{{ c.location }}" placeholder="Wine Cellar">
+                  </div>
+                  <div class="col-9 col-md-2">
+                    <label class="form-label small mb-1">Match <span class="text-secondary">keywords</span></label>
+                    <input class="form-control form-control-sm cat-match" value="{{ c.match | join(', ') }}" placeholder="wine, cellar">
+                  </div>
+                  <div class="col-3 col-md-1 d-grid">
+                    <button class="btn btn-outline-danger btn-sm" onclick="this.closest('.cat-row').remove()" title="Remove"><i class="bi bi-trash"></i></button>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+              <button class="btn btn-outline-secondary btn-sm" onclick="addCatRow()"><i class="bi bi-plus-lg me-1"></i>Add category</button>
+              <button class="btn btn-primary btn-sm" onclick="saveStorageCategories()" id="catSaveBtn"><i class="bi bi-check2 me-1"></i>Save categories</button>
+              <span id="catSaveResult" class="small"></span>
+            </div>
+          </div>
         </div>
 
         <!-- ════ Security ════ -->
@@ -497,8 +541,73 @@ function secretVal(id) {
   return el.value.trim();
 }
 
+function addCatRow() {
+  const tpl = `<div class="cat-row border rounded p-2">
+    <div class="row g-2 align-items-end">
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-1">Name</label>
+        <input class="form-control form-control-sm cat-label" placeholder="Wine Cellar">
+      </div>
+      <div class="col-6 col-md-2">
+        <label class="form-label small mb-1">Icon <a href="https://icons.getbootstrap.com/" target="_blank" class="text-secondary" title="Browse icons"><i class="bi bi-box-arrow-up-right"></i></a></label>
+        <input class="form-control form-control-sm cat-icon" placeholder="bi-database" value="bi-box">
+      </div>
+      <div class="col-4 col-md-1">
+        <label class="form-label small mb-1">Color</label>
+        <input type="color" class="form-control form-control-sm form-control-color cat-color" value="#adb5bd">
+      </div>
+      <div class="col-8 col-md-3">
+        <label class="form-label small mb-1">Grocy location</label>
+        <input class="form-control form-control-sm cat-location" placeholder="Wine Cellar">
+      </div>
+      <div class="col-9 col-md-2">
+        <label class="form-label small mb-1">Match <span class="text-secondary">keywords</span></label>
+        <input class="form-control form-control-sm cat-match" placeholder="wine, cellar">
+      </div>
+      <div class="col-3 col-md-1 d-grid">
+        <button class="btn btn-outline-danger btn-sm" onclick="this.closest('.cat-row').remove()" title="Remove"><i class="bi bi-trash"></i></button>
+      </div>
+    </div>
+  </div>`;
+  document.getElementById('storage-cat-editor').insertAdjacentHTML('beforeend', tpl);
+}
+
+async function saveStorageCategories() {
+  const btn = document.getElementById('catSaveBtn');
+  const result = document.getElementById('catSaveResult');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+  result.textContent = '';
+  const rows = [...document.querySelectorAll('#storage-cat-editor .cat-row')];
+  const categories = rows.map(row => ({
+    label:    row.querySelector('.cat-label').value.trim(),
+    icon:     row.querySelector('.cat-icon').value.trim() || 'bi-box',
+    color:    row.querySelector('.cat-color').value.trim(),
+    bg:       '#2a2a33',
+    location: row.querySelector('.cat-location').value.trim(),
+    match:    row.querySelector('.cat-match').value.split(',').map(s => s.trim()).filter(Boolean),
+  })).filter(c => c.label);
+  try {
+    const r = await fetch('setup/storage-categories', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({categories}),
+    });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    result.className = 'small text-success';
+    result.textContent = '✓ Saved';
+    setTimeout(() => { result.textContent = ''; }, 3000);
+  } catch(e) {
+    result.className = 'small text-danger';
+    result.textContent = '✗ ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-check2 me-1"></i>Save categories';
+  }
+}
+
 function toggleAuthRequired() {
-  const on = document.getElementById('auth_required').checked;
   const hint = document.getElementById('auth-pw-hint');
   if (hint) hint.classList.toggle('text-danger', on);
 }

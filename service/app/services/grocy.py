@@ -2,6 +2,7 @@ import httpx
 from datetime import date
 from ..config import settings
 from ..models.food import FoodItem
+from ..storage_categories import classify_location, location_for
 
 
 class GrocyError(Exception):
@@ -160,18 +161,7 @@ class GrocyClient:
             # Prefer the per-entry location_id; fall back to the product's default
             loc_id = str(entry.get("location_id") or product.get("location_id") or "")
             loc_name = locations.get(loc_id, "")
-
-            loc_lower = loc_name.lower()
-            if "freezer" in loc_lower or "frozen" in loc_lower:
-                bucket = "frozen"
-            elif "refriger" in loc_lower or "fridge" in loc_lower:
-                bucket = "refrigerated"
-            elif "pantry" in loc_lower or "dry" in loc_lower:
-                bucket = "pantry"
-            elif "counter" in loc_lower or "room" in loc_lower:
-                bucket = "room_temp"
-            else:
-                bucket = "other"
+            bucket = classify_location(loc_name)
 
             bbd = entry.get("best_before_date")
             if bbd:
@@ -231,9 +221,10 @@ class GrocyClient:
     async def move_product(self, product_id: int, bucket: str) -> dict:
         """Transfer all stock of a product to the location for `bucket` and
         make that the product's default location."""
-        if bucket not in BUCKET_LOCATION:
+        to_name = location_for(bucket)
+        if not to_name:
             raise GrocyError(f"Unknown storage bucket: {bucket}")
-        to_id = await self.ensure_location(BUCKET_LOCATION[bucket])
+        to_id = await self.ensure_location(to_name)
 
         entries = await self._get(f"/stock/products/{product_id}/entries")
         moved = 0.0
@@ -272,17 +263,12 @@ class GrocyClient:
             return False
 
 
+# StorageType enum value → Grocy location name, used by import_item. The enum
+# has "dry" where the dashboard uses the "pantry" bucket; both name the same
+# Grocy location. Custom categories are move-only and not reachable here.
 _STORAGE_LABEL = {
     "refrigerated": "Refrigerator",
     "frozen": "Freezer",
     "room_temp": "Counter / Room Temp",
     "dry": "Pantry / Dry Storage",
-}
-
-# Dashboard bucket → Grocy location name (pantry bucket maps to dry storage)
-BUCKET_LOCATION = {
-    "refrigerated": _STORAGE_LABEL["refrigerated"],
-    "frozen": _STORAGE_LABEL["frozen"],
-    "room_temp": _STORAGE_LABEL["room_temp"],
-    "pantry": _STORAGE_LABEL["dry"],
 }
