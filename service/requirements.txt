@@ -11,3 +11,5 @@ anthropic>=0.45.0
 Pillow==10.4.0
 python-dateutil==2.9.0
 itsdangerous==2.2.0
+pyotp==2.10.0
+qrcode[pil]==8.2

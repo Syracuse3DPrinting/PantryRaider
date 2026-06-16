@@ -337,22 +337,12 @@
 
         <!-- ════ Security ════ -->
         <div class="tab-pane fade" id="pane-security">
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-archive text-success"></i> Backup &amp; Restore</div>
-            <p class="text-secondary small">Downloads a zip of FoodAssistant's data directory
-              (settings, database, staples list). Grocy and Mealie data live in separate
-              containers — use <code>scripts/backup.sh</code> on the host to capture everything,
-              or integrate with <a href="https://rclone.org" target="_blank">Rclone</a> for cloud storage.</p>
-            <a href="/admin/backup" class="btn btn-outline-info btn-sm" download>
-              <i class="bi bi-download me-1"></i>Download Backup
-            </a>
-          </div>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
               <span class="badge bg-secondary badge-req">Optional</span></div>
             <p class="text-secondary small">Leave both empty to disable auth — fine when a reverse proxy
-              (Pangolin, Authelia…) already gates access.</p>
+              (Pangolin, Authelia, Cloudflare Access) already gates access.</p>
             <div class="mb-3">
               <label class="form-label">UI Password</label>
               {{ secret_input('auth_password', 'Protects the web UI login page') }}
@@ -363,14 +353,83 @@
               <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
             </div>
           </div>
+
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are handled</div>
+            <div class="section-title"><i class="bi bi-shield-check text-success"></i> Two-Factor Authentication (TOTP)
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">When a UI password is set, enable TOTP to require a
+              6-digit code from an authenticator app (Google Authenticator, Authy, Bitwarden, 1Password, etc.)
+              on each login. Works offline — no email or SMS required.</p>
+            {% if s.totp_secret %}
+            <div class="alert alert-success py-2 small">
+              <i class="bi bi-check-circle-fill me-1"></i>Two-factor authentication is <strong>enabled</strong>.
+            </div>
+            <button class="btn btn-outline-danger btn-sm" onclick="disableTOTP()">
+              <i class="bi bi-shield-x me-1"></i>Disable 2FA
+            </button>
+            {% else %}
+            <button class="btn btn-outline-info btn-sm" onclick="setupTOTP()">
+              <i class="bi bi-shield-plus me-1"></i>Set Up 2FA
+            </button>
+            {% endif %}
+            <div id="totp-setup" class="mt-3 d-none">
+              <div class="text-center mb-2">
+                <img id="totp-qr" src="" alt="QR code" style="max-width:200px">
+              </div>
+              <p class="small text-secondary">Scan with your authenticator app, then enter the code to confirm.</p>
+              <div class="input-group mb-2">
+                <input type="text" class="form-control font-monospace" id="totp-code"
+                       placeholder="000000" maxlength="6" inputmode="numeric">
+                <button class="btn btn-success" onclick="verifyTOTP()">
+                  <i class="bi bi-check2 me-1"></i>Enable
+                </button>
+              </div>
+              <div class="form-text small" id="totp-secret-display"></div>
+              <div id="totp-result" class="mt-2"></div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-archive text-success"></i> Backup</div>
+            <p class="text-secondary small">FoodAssistant's data directory (settings, database, staples list) as a zip.
+              Grocy and Mealie data live in separate containers — use
+              <code>scripts/backup.sh</code> on the host for a full snapshot.</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+              <a href="/admin/backup" class="btn btn-outline-info btn-sm" download>
+                <i class="bi bi-download me-1"></i>Download Backup
+              </a>
+              <button class="btn btn-outline-secondary btn-sm" onclick="pushToRemote(this)"
+                      {% if not s.rclone_remote %}disabled title="Configure a remote below first"{% endif %}>
+                <i class="bi bi-cloud-upload me-1"></i>Push to Remote
+              </button>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Rclone Remote Path <span class="text-secondary small">(optional)</span></label>
+              <input type="text" class="form-control font-monospace" id="rclone_remote"
+                     placeholder="s3:mybucket/foodassistant  or  gdrive:backups/food"
+                     value="{{ s.rclone_remote }}">
+              <div class="form-text">Any <a href="https://rclone.org/docs/" target="_blank">rclone remote</a>
+                you've configured via <code>docker exec foodassistant-service rclone config</code>.
+                Config is stored at <code>/app/data/rclone.conf</code>.</div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Auto-backup interval <span class="text-secondary small">(hours, 0 = off)</span></label>
+              <input type="number" class="form-control" id="rclone_schedule_hours" min="0" max="720"
+                     value="{{ s.rclone_schedule_hours }}" style="width:120px">
+            </div>
+            <button class="btn btn-outline-secondary btn-sm" onclick="testRemote(this)">
+              <i class="bi bi-plug me-1"></i>Test Remote
+            </button>
+            <div class="test-result" id="remote-result"></div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are stored</div>
             <ul class="small text-secondary mb-0">
               <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
               <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
               <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
               <li>Connection-test errors have key material redacted before display.</li>
-              <li>To rotate a key: paste the new value and save — the old one is overwritten immediately.</li>
             </ul>
           </div>
         </div>
@@ -558,6 +617,8 @@ async function saveAll() {
     nav_hidden:      navState.filter(t => t.hidden).map(t => t.key).join(','),
     auth_password:   secretVal('auth_password'),
     api_key:         secretVal('api_key'),
+    rclone_remote:   val('rclone_remote'),
+    rclone_schedule_hours: num('rclone_schedule_hours', 0),
   };
 
   try {
@@ -577,6 +638,78 @@ async function saveAll() {
       `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</span>`;
     btn.disabled = false;
     btn.innerHTML = '<i class="bi bi-check-lg me-1"></i>Save All';
+  }
+}
+
+// ── TOTP 2FA ─────────────────────────────────────────────────────────────────
+
+let _totpSecret = '';
+
+async function setupTOTP() {
+  const section = document.getElementById('totp-setup');
+  section.classList.remove('d-none');
+  document.getElementById('totp-result').innerHTML = '';
+  document.getElementById('totp-qr').src = '';
+  document.getElementById('totp-secret-display').textContent = 'Generating…';
+  try {
+    const d = await postJson('/setup/totp/generate', {});
+    _totpSecret = d.secret;
+    document.getElementById('totp-qr').src = d.qr;
+    document.getElementById('totp-secret-display').textContent = 'Manual key: ' + d.secret;
+  } catch(e) {
+    document.getElementById('totp-secret-display').textContent = 'Error: ' + e.message;
+  }
+}
+
+async function verifyTOTP() {
+  const code = document.getElementById('totp-code').value.trim();
+  if (!_totpSecret || !code) return;
+  const d = await postJson('/setup/totp/verify', {secret: _totpSecret, code});
+  const el = document.getElementById('totp-result');
+  if (d.ok) {
+    el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' + d.message + '</span>';
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>' + d.error + '</span>';
+  }
+}
+
+async function disableTOTP() {
+  if (!confirm('Disable two-factor authentication? Anyone with the UI password can log in without a code.')) return;
+  const d = await postJson('/setup/totp/disable', {});
+  if (d.ok) location.reload();
+  else alert(d.error || 'Failed');
+}
+
+// ── Rclone remote ─────────────────────────────────────────────────────────────
+
+async function testRemote(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
+  // Save the remote field first so the server uses the current value
+  await fetch('/setup/save', {method:'POST',headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({rclone_remote: val('rclone_remote'), rclone_schedule_hours: num('rclone_schedule_hours',0)})});
+  const d = await postJson('/admin/backup/test-remote', {});
+  setResult('remote-result', d.ok, d.ok ? d.message : d.error);
+  btn.disabled = false;
+  btn.innerHTML = orig;
+}
+
+async function pushToRemote(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pushing…';
+  try {
+    const d = await postJson('/admin/backup/remote', {});
+    if (!d.ok) throw new Error(d.detail || 'Unknown error');
+    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Done';
+    btn.className = btn.className.replace('btn-outline-secondary','btn-outline-success');
+    setTimeout(() => { btn.innerHTML = orig; btn.className = btn.className.replace('btn-outline-success','btn-outline-secondary'); btn.disabled = false; }, 3000);
+  } catch(e) {
+    alert('Push failed: ' + e.message);
+    btn.innerHTML = orig;
+    btn.disabled = false;
   }
 }
 

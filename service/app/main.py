@@ -42,6 +42,7 @@ app.add_middleware(
 _SETUP_BYPASS = {
     "/setup", "/setup/save", "/setup/test/grocy", "/setup/test/vision",
     "/setup/test/provider", "/setup/test/mealie", "/setup/test/recipes",
+    "/setup/totp/generate", "/setup/totp/verify", "/setup/totp/disable",
     "/health", "/docs", "/openapi.json", "/redoc",
 }
 # "/" only redirects to /ui/, so it can safely skip auth (the target enforces it)
@@ -72,7 +73,8 @@ async def require_auth(request: Request, call_next):
     if request.url.path in _PUBLIC_PATHS or _is_static(request.url.path):
         return await call_next(request)
 
-    session_ok = request.session.get("authed", False)
+    # totp_pending means password was accepted but TOTP not yet verified — not authed
+    session_ok = request.session.get("authed", False) and not request.session.get("totp_pending")
     key_ok = bool(settings.api_key) and secrets.compare_digest(
         request.headers.get("X-API-Key", ""), settings.api_key)
     if session_ok or key_ok:

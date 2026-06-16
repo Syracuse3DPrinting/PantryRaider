@@ -14,7 +14,8 @@ _SAVEABLE = [
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden",
-    "secret_key", "auth_password", "api_key",
+    "secret_key", "auth_password", "totp_secret", "api_key",
+    "rclone_remote", "rclone_schedule_hours",
 ]
 
 _DEFAULT_GROCY_URL = "http://grocy:80"
@@ -92,7 +93,10 @@ class Settings(BaseSettings):
     secret_key: str = ""
 
     auth_password: str = ""
+    totp_secret: str = ""   # base32 secret; empty = TOTP disabled
     api_key: str = ""
+    rclone_remote: str = ""          # e.g. "s3:mybucket/foodassistant"
+    rclone_schedule_hours: int = 0   # 0 = disabled; 24 = daily
 
     def provider_key(self, provider: str) -> str:
         """API key for a cloud provider name; '' for local/unknown providers."""

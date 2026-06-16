@@ -57,8 +57,12 @@ class SetupPayload(BaseModel):
     suggest_per_tier: int = 8
     nav_order: str = ""
     nav_hidden: str = ""
+    barcode_llm_fallback: bool = False
+    cook_ai_context: str = ""
     auth_password: str = ""
     api_key: str = ""
+    rclone_remote: str = ""
+    rclone_schedule_hours: int = 0
 
 
 class TestGrocyPayload(BaseModel):
@@ -244,6 +248,49 @@ async def test_recipes(payload: TestRecipesPayload):
     if payload.source == "off":
         return {"ok": True, "message": "External suggestions disabled."}
     return {"ok": False, "error": "Unknown source."}
+
+
+# TOTP 2FA setup endpoints
+
+class TOTPVerifyPayload(BaseModel):
+    secret: str
+    code: str
+
+
+@router.post("/totp/generate")
+async def totp_generate():
+    """Generate a new TOTP secret and return the provisioning URI for QR display."""
+    import pyotp, qrcode, base64, io
+    secret = pyotp.random_base32()
+    totp = pyotp.TOTP(secret)
+    uri = totp.provisioning_uri(name="FoodAssistant", issuer_name="FoodAssistant")
+    img = qrcode.make(uri)
+    buf = io.BytesIO()
+    img.save(buf, format="PNG")
+    b64 = base64.b64encode(buf.getvalue()).decode()
+    return {"secret": secret, "qr": f"data:image/png;base64,{b64}", "uri": uri}
+
+
+@router.post("/totp/verify")
+async def totp_verify(payload: TOTPVerifyPayload):
+    """Confirm the user's authenticator app is in sync before enabling TOTP."""
+    import pyotp
+    try:
+        totp = pyotp.TOTP(payload.secret)
+        ok = totp.verify(payload.code.strip(), valid_window=1)
+    except Exception:
+        ok = False
+    if ok:
+        settings.save({"totp_secret": payload.secret})
+        return {"ok": True, "message": "Two-factor authentication enabled."}
+    return {"ok": False, "error": "Code did not match. Check your authenticator app clock."}
+
+
+@router.post("/totp/disable")
+async def totp_disable():
+    """Remove the stored TOTP secret, disabling 2FA."""
+    settings.save({"totp_secret": ""})
+    return {"ok": True, "message": "Two-factor authentication disabled."}
 
 
 # Backwards-compatible alias for the old endpoint name

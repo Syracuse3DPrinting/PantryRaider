@@ -17,18 +17,41 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 def login_page(request: Request):
     if not settings.auth_password or request.session.get("authed"):
         return RedirectResponse("/ui/", status_code=303)
-    return templates.TemplateResponse(request, "login.html", {"request": request, "error": None})
+    if request.session.get("totp_pending"):
+        return templates.TemplateResponse(request, "login.html",
+            {"request": request, "error": None, "step": "totp"})
+    return templates.TemplateResponse(request, "login.html",
+        {"request": request, "error": None, "step": "password"})
 
 
 @router.post("/login")
-def login(request: Request, password: str = Form(...)):
-    if settings.auth_password and secrets.compare_digest(password, settings.auth_password):
-        request.session["authed"] = True
-        return RedirectResponse("/ui/", status_code=303)
-    return templates.TemplateResponse(request, "login.html",
-        {"request": request, "error": "Incorrect password"},
-        status_code=401,
-    )
+def login(request: Request, password: str = Form(None), totp_code: str = Form(None)):
+    # Step 2: TOTP verification (password already accepted in this session)
+    if request.session.get("totp_pending"):
+        import pyotp
+        totp = pyotp.TOTP(settings.totp_secret)
+        if totp_code and totp.verify(totp_code.strip(), valid_window=1):
+            request.session.pop("totp_pending", None)
+            request.session["authed"] = True
+            return RedirectResponse("/ui/", status_code=303)
+        return templates.TemplateResponse(request, "login.html",
+            {"request": request, "error": "Invalid code — try again.", "step": "totp"},
+            status_code=401)
+
+    # Step 1: password check
+    if not (settings.auth_password and password and
+            secrets.compare_digest(password, settings.auth_password)):
+        return templates.TemplateResponse(request, "login.html",
+            {"request": request, "error": "Incorrect password.", "step": "password"},
+            status_code=401)
+
+    if settings.totp_secret:
+        request.session["totp_pending"] = True
+        return templates.TemplateResponse(request, "login.html",
+            {"request": request, "error": None, "step": "totp"})
+
+    request.session["authed"] = True
+    return RedirectResponse("/ui/", status_code=303)
 
 
 @router.get("/logout")
