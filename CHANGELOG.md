@@ -8,6 +8,14 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 > than the auto-generated commit list, so notes stay focused on user-facing
 > changes.
 
+## [1.3.1]
+
+### Added
+- **Synthwave theme** — a new neon-on-dark theme (hot pink, electric cyan, purple) with glow accents, in **Settings → Interface**.
+
+### Fixed
+- Corrected badge text contrast in the Cyborg and Darkly themes, where status labels (Today, Refrigerated, etc.) could be hard to read.
+
 ## [1.3.0]
 
 ### Added
