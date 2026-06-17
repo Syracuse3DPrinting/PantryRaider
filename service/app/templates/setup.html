@@ -13,6 +13,7 @@
     .setup-wrap { max-width: 980px; margin: 1.5rem auto; padding: 0 1rem 4rem; }
     .section-card { background: #161b22; border: 1px solid #30363d; border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.25rem; }
     .section-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
+    .pane-intro { font-size: 0.85rem; color: #8b949e; margin: -0.25rem 0 1rem; }
     .test-result { font-size: 0.82rem; margin-top: 0.4rem; min-height: 1.2rem; }
     .badge-req { font-size: 0.65rem; vertical-align: middle; }
     .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
@@ -66,7 +67,7 @@
             <span class="badge bg-danger badge-req ms-1">Required</span>
           </button>
           <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-ai" type="button">
-            <i class="bi bi-magic me-2"></i>AI Providers
+            <i class="bi bi-magic me-2"></i>AI
             <span class="badge bg-danger badge-req ms-1">Required</span>
           </button>
           <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-recipes" type="button">
@@ -77,6 +78,9 @@
           </button>
           <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
             <i class="bi bi-shield-lock me-2"></i>Security
+          </button>
+          <button class="nav-link" data-bs-toggle="pill" data-bs-target="#pane-data" type="button">
+            <i class="bi bi-cloud-arrow-down me-2"></i>Backup &amp; Updates
           </button>
         </div>
         <button class="btn btn-primary w-100 mt-3" onclick="saveAll()" id="saveBtn">
@@ -90,8 +94,10 @@
     <div class="col-md-9">
       <div class="tab-content">
 
-        <!-- ════ Inventory (Grocy) ════ -->
+        <!-- ════ Inventory (Grocy + storage) ════ -->
         <div class="tab-pane fade show active" id="pane-inventory">
+          <p class="pane-intro">Where your stock lives: the Grocy backend and the storage buckets it's grouped into.</p>
+
           <div class="section-card">
             <div class="section-title"><i class="bi bi-fridge text-info"></i> Grocy — Inventory Backend</div>
             <p class="text-secondary small">Grocy stores your stock, locations, and consumption history.
@@ -119,10 +125,56 @@
             </button>
             <div class="test-result" id="grocy-result"></div>
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-grid-3x3-gap text-info"></i> Custom Storage Categories</div>
+            <p class="text-secondary small">Add storage buckets beyond the four built-ins (Refrigerated, Frozen,
+              Room Temp, Pantry) — e.g. Wine Cellar, Garage Fridge, Liquor Cabinet. Each maps to a Grocy location;
+              assign items to it from the <strong>Move</strong> button on the Inventory page. Saved separately from
+              the main settings — use <em>Save categories</em> below.</p>
+            <div class="vstack gap-2" id="storage-cat-editor">
+              {% for c in custom_categories %}
+              <div class="cat-row border rounded p-2">
+                <div class="row g-2 align-items-end">
+                  <div class="col-6 col-md-3">
+                    <label class="form-label small mb-1">Name</label>
+                    <input class="form-control form-control-sm cat-label" value="{{ c.label }}" placeholder="Wine Cellar">
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <label class="form-label small mb-1">Icon <a href="https://icons.getbootstrap.com/" target="_blank" class="text-secondary" title="Browse icons"><i class="bi bi-box-arrow-up-right"></i></a></label>
+                    <input class="form-control form-control-sm cat-icon" value="{{ c.icon }}" placeholder="bi-database">
+                  </div>
+                  <div class="col-4 col-md-1">
+                    <label class="form-label small mb-1">Color</label>
+                    <input type="color" class="form-control form-control-sm form-control-color cat-color" value="{{ c.color }}">
+                  </div>
+                  <div class="col-8 col-md-3">
+                    <label class="form-label small mb-1">Grocy location</label>
+                    <input class="form-control form-control-sm cat-location" value="{{ c.location }}" placeholder="Wine Cellar">
+                  </div>
+                  <div class="col-9 col-md-2">
+                    <label class="form-label small mb-1">Match <span class="text-secondary">keywords</span></label>
+                    <input class="form-control form-control-sm cat-match" value="{{ c.match | join(', ') }}" placeholder="wine, cellar">
+                  </div>
+                  <div class="col-3 col-md-1 d-grid">
+                    <button class="btn btn-outline-danger btn-sm" onclick="this.closest('.cat-row').remove()" title="Remove"><i class="bi bi-trash"></i></button>
+                  </div>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
+              <button class="btn btn-outline-secondary btn-sm" onclick="addCatRow()"><i class="bi bi-plus-lg me-1"></i>Add category</button>
+              <button class="btn btn-primary btn-sm" onclick="saveStorageCategories()" id="catSaveBtn"><i class="bi bi-check2 me-1"></i>Save categories</button>
+              <span id="catSaveResult" class="small"></span>
+            </div>
+          </div>
         </div>
 
         <!-- ════ AI Providers ════ -->
         <div class="tab-pane fade" id="pane-ai">
+          <p class="pane-intro">Models that read your food photos, receipts, and barcodes.</p>
+
           <div class="section-card">
             <div class="section-title"><i class="bi bi-magic text-warning"></i> Vision Provider</div>
             <p class="text-secondary small">Analyzes food photos, receipts, and photographed recipes.
@@ -236,6 +288,8 @@
 
         <!-- ════ Recipes ════ -->
         <div class="tab-pane fade" id="pane-recipes">
+          <p class="pane-intro">Recipe sources and how "What can I cook?" ranks them against your stock.</p>
+
           <div class="section-card">
             <div class="section-title"><i class="bi bi-journal-richtext text-primary"></i> Mealie — Recipe Manager
               <span class="badge bg-secondary badge-req">Optional</span></div>
@@ -302,19 +356,9 @@
             </button>
             <div class="test-result" id="recipes-result"></div>
           </div>
-        </div>
-
-        <!-- ════ Interface ════ -->
-        <div class="tab-pane fade" id="pane-interface">
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-layout-sidebar text-success"></i> Navigation Tabs</div>
-            <p class="text-secondary small">Re-order tabs and hide the ones you don't use. Tabs for services that
-              aren't configured (e.g. Mealie pages) hide automatically. Pages stay reachable by direct URL.</p>
-            <div class="vstack gap-1" id="nav-editor"></div>
-          </div>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-sliders text-success"></i> Suggestion Tuning</div>
+            <div class="section-title"><i class="bi bi-sliders text-primary"></i> Suggestion Tuning</div>
             <div class="mb-3">
               <label class="form-label">Pantry Staples <span class="text-secondary small">(comma-separated)</span></label>
               <textarea class="form-control" id="staple_items" rows="3"
@@ -348,54 +392,23 @@
               </div>
             </div>
           </div>
+        </div>
+
+        <!-- ════ Interface ════ -->
+        <div class="tab-pane fade" id="pane-interface">
+          <p class="pane-intro">How the app's navigation looks and which pages appear.</p>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-grid-3x3-gap text-success"></i> Custom Storage Categories</div>
-            <p class="text-secondary small">Add storage buckets beyond the four built-ins (Refrigerated, Frozen,
-              Room Temp, Pantry) — e.g. Wine Cellar, Garage Fridge, Liquor Cabinet. Each maps to a Grocy location;
-              assign items to it from the <strong>Move</strong> button on the Inventory page. Saved separately from
-              the main settings — use <em>Save categories</em> below.</p>
-            <div class="vstack gap-2" id="storage-cat-editor">
-              {% for c in custom_categories %}
-              <div class="cat-row border rounded p-2">
-                <div class="row g-2 align-items-end">
-                  <div class="col-6 col-md-3">
-                    <label class="form-label small mb-1">Name</label>
-                    <input class="form-control form-control-sm cat-label" value="{{ c.label }}" placeholder="Wine Cellar">
-                  </div>
-                  <div class="col-6 col-md-2">
-                    <label class="form-label small mb-1">Icon <a href="https://icons.getbootstrap.com/" target="_blank" class="text-secondary" title="Browse icons"><i class="bi bi-box-arrow-up-right"></i></a></label>
-                    <input class="form-control form-control-sm cat-icon" value="{{ c.icon }}" placeholder="bi-database">
-                  </div>
-                  <div class="col-4 col-md-1">
-                    <label class="form-label small mb-1">Color</label>
-                    <input type="color" class="form-control form-control-sm form-control-color cat-color" value="{{ c.color }}">
-                  </div>
-                  <div class="col-8 col-md-3">
-                    <label class="form-label small mb-1">Grocy location</label>
-                    <input class="form-control form-control-sm cat-location" value="{{ c.location }}" placeholder="Wine Cellar">
-                  </div>
-                  <div class="col-9 col-md-2">
-                    <label class="form-label small mb-1">Match <span class="text-secondary">keywords</span></label>
-                    <input class="form-control form-control-sm cat-match" value="{{ c.match | join(', ') }}" placeholder="wine, cellar">
-                  </div>
-                  <div class="col-3 col-md-1 d-grid">
-                    <button class="btn btn-outline-danger btn-sm" onclick="this.closest('.cat-row').remove()" title="Remove"><i class="bi bi-trash"></i></button>
-                  </div>
-                </div>
-              </div>
-              {% endfor %}
-            </div>
-            <div class="d-flex flex-wrap gap-2 mt-2 align-items-center">
-              <button class="btn btn-outline-secondary btn-sm" onclick="addCatRow()"><i class="bi bi-plus-lg me-1"></i>Add category</button>
-              <button class="btn btn-primary btn-sm" onclick="saveStorageCategories()" id="catSaveBtn"><i class="bi bi-check2 me-1"></i>Save categories</button>
-              <span id="catSaveResult" class="small"></span>
-            </div>
+            <div class="section-title"><i class="bi bi-layout-sidebar text-success"></i> Navigation Tabs</div>
+            <p class="text-secondary small">Re-order tabs and hide the ones you don't use. Tabs for services that
+              aren't configured (e.g. Mealie pages) hide automatically. Pages stay reachable by direct URL.</p>
+            <div class="vstack gap-1" id="nav-editor"></div>
           </div>
         </div>
 
         <!-- ════ Security ════ -->
         <div class="tab-pane fade" id="pane-security">
+          <p class="pane-intro">Who can reach the app and how login is protected.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
@@ -456,6 +469,21 @@
               <div id="totp-result" class="mt-2"></div>
             </div>
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are stored</div>
+            <ul class="small text-secondary mb-0">
+              <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
+              <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
+              <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
+              <li>Connection-test errors have key material redacted before display.</li>
+            </ul>
+          </div>
+        </div>
+
+        <!-- ════ Backup & Updates ════ -->
+        <div class="tab-pane fade" id="pane-data">
+          <p class="pane-intro">Save your data off-box and keep the app up to date.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-archive text-success"></i> Backup</div>
@@ -520,16 +548,6 @@ docker compose up -d</code></pre>
               <div class="small text-secondary"><strong>Built from source:</strong>
                 <code>git pull &amp;&amp; docker compose up -d --build service</code></div>
             </div>
-          </div>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are stored</div>
-            <ul class="small text-secondary mb-0">
-              <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
-              <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
-              <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
-              <li>Connection-test errors have key material redacted before display.</li>
-            </ul>
           </div>
         </div>
 
@@ -621,6 +639,7 @@ async function saveStorageCategories() {
 }
 
 function toggleAuthRequired() {
+  const on = document.getElementById('auth_required').checked;
   const hint = document.getElementById('auth-pw-hint');
   if (hint) hint.classList.toggle('text-danger', on);
 }
