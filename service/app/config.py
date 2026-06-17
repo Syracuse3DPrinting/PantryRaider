@@ -15,14 +15,16 @@ GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
 # "stylesheet" is None the default Bootstrap CSS is used (native light/dark).
 # Bootswatch files are vendored locally (no CDN) under static/vendor/themes/.
 THEMES = {
-    "dark":   {"label": "Dark (default)", "mode": "dark",  "stylesheet": None},
-    "light":  {"label": "Light",          "mode": "light", "stylesheet": None},
-    "darkly": {"label": "Darkly (fun, dark)",  "mode": "dark",
-               "stylesheet": "static/vendor/themes/darkly.min.css"},
-    "cyborg": {"label": "Cyborg (fun, dark)",  "mode": "dark",
-               "stylesheet": "static/vendor/themes/cyborg.min.css"},
-    "flatly": {"label": "Flatly (fun, light)", "mode": "light",
-               "stylesheet": "static/vendor/themes/flatly.min.css"},
+    "dark":       {"label": "Dark (default)",      "mode": "dark",  "stylesheet": None, "overlay": None},
+    "light":      {"label": "Light",               "mode": "light", "stylesheet": None, "overlay": None},
+    "darkly":     {"label": "Darkly (fun, dark)",  "mode": "dark",
+                   "stylesheet": "static/vendor/themes/darkly.min.css", "overlay": None},
+    "cyborg":     {"label": "Cyborg (fun, dark)",  "mode": "dark",
+                   "stylesheet": "static/vendor/themes/cyborg.min.css", "overlay": None},
+    "flatly":     {"label": "Flatly (fun, light)", "mode": "light",
+                   "stylesheet": "static/vendor/themes/flatly.min.css", "overlay": None},
+    "synthwave":  {"label": "Synthwave (neon dark)", "mode": "dark", "stylesheet": None,
+                   "overlay": "static/vendor/themes/synthwave.css"},
 }
 _DEFAULT_THEME = "dark"
 

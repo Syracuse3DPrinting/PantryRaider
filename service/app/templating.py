@@ -15,12 +15,15 @@ def theme_context(request: Request) -> dict:
     ``theme_css``     — a vendored Bootswatch stylesheet href, or None to use
                         the default Bootstrap CSS. Resolved per request so a
                         settings change applies on the next page load.
+    ``theme_overlay`` — a second CSS href loaded after the main stylesheet
+                        (used by overlay themes like Synthwave), or None.
     """
     info = theme_info(settings.ui_theme)
     return {
         "ui_theme": settings.ui_theme,
         "theme_mode": info["mode"],
         "theme_css": info["stylesheet"],
+        "theme_overlay": info.get("overlay"),
     }
 
 

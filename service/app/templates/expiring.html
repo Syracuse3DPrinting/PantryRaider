@@ -76,13 +76,13 @@
         <td>{{ item.best_before_date or '—' }}</td>
         <td>
           {% if d < 0 %}
-            <span class="badge bg-danger">EXPIRED ({{ d | abs }}d ago)</span>
+            <span class="badge text-bg-danger">EXPIRED ({{ d | abs }}d ago)</span>
           {% elif d == 0 %}
-            <span class="badge bg-warning text-dark">Today</span>
+            <span class="badge text-bg-warning">Today</span>
           {% elif d <= 3 %}
-            <span class="badge bg-warning text-dark">{{ d }}d left</span>
+            <span class="badge text-bg-warning">{{ d }}d left</span>
           {% else %}
-            <span class="badge bg-success">{{ d }}d left</span>
+            <span class="badge text-bg-success">{{ d }}d left</span>
           {% endif %}
         </td>
         <td>

@@ -51,10 +51,10 @@
         <td><span class="badge bg-secondary">{{ row.category }}</span></td>
         <td>{{ row.name_pattern }}</td>
         <td>
-          {% if row.storage_type == 'refrigerated' %}<span class="badge bg-info text-dark">Refrigerated</span>
-          {% elif row.storage_type == 'frozen' %}<span class="badge bg-primary">Frozen</span>
-          {% elif row.storage_type == 'room_temp' %}<span class="badge bg-warning text-dark">Room Temp</span>
-          {% else %}<span class="badge bg-dark">Dry</span>{% endif %}
+          {% if row.storage_type == 'refrigerated' %}<span class="badge text-bg-info">Refrigerated</span>
+          {% elif row.storage_type == 'frozen' %}<span class="badge text-bg-primary">Frozen</span>
+          {% elif row.storage_type == 'room_temp' %}<span class="badge text-bg-warning">Room Temp</span>
+          {% else %}<span class="badge text-bg-secondary">Dry</span>{% endif %}
         </td>
         <td><strong>{{ row.default_days }}</strong> days</td>
         <td class="text-muted small">{{ row.notes or '—' }}</td>
