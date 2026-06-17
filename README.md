@@ -1,5 +1,7 @@
 # FoodAssistant
 
+[![CI](https://github.com/Syracuse3DPrinting/FoodAssistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Syracuse3DPrinting/FoodAssistant/actions/workflows/ci.yml)
+
 A self-hosted food tracker that helps you manage what's in your fridge, reduce waste, and plan meals. Built to run entirely on your own hardware with no cloud dependency required.
 
 Uses [Grocy](https://grocy.info/) as the inventory backend. All AI features are optional and can run fully locally using [Ollama](https://ollama.com/).
