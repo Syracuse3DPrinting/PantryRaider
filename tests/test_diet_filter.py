@@ -4,11 +4,19 @@ Spoonacular filters natively (diet/intolerances params); TheMealDB has no diet
 metadata, so vegan/vegetarian are approximated by scanning ingredient text for
 animal products. These cover the pure logic — no network calls.
 """
-from app.services.recipes_external import _filter_by_diet, _spoon_diet_params
+from app.services.recipes_external import (
+    _filter_by_cuisine,
+    _filter_by_diet,
+    _spoon_diet_params,
+)
 
 
 def _recipe(name, ingredients):
     return {"name": name, "recipeIngredient": [{"note": i} for i in ingredients]}
+
+
+def _area_recipe(name, area):
+    return {"name": name, "cuisine": area}
 
 
 def test_vegetarian_drops_meat_keeps_veg():
@@ -62,3 +70,45 @@ def test_spoon_diet_params_keto_and_pescatarian():
 def test_spoon_diet_params_unknown_label_ignored():
     assert _spoon_diet_params("Low Carb") == {}
     assert _spoon_diet_params("") == {}
+
+
+# ── Cuisine filtering (TheMealDB post-filter) ──────────────────────────────────
+
+def test_cuisine_specific_keeps_matching_area():
+    recipes = [
+        _area_recipe("Carbonara", "Italian"),
+        _area_recipe("Pad Thai", "Thai"),
+        _area_recipe("Tacos", "Mexican"),
+    ]
+    out = _filter_by_cuisine(recipes, "Italian")
+    assert [r["name"] for r in out] == ["Carbonara"]
+
+
+def test_cuisine_broad_region_expands_to_member_areas():
+    recipes = [
+        _area_recipe("Pad Thai", "Thai"),
+        _area_recipe("Sushi", "Japanese"),
+        _area_recipe("Carbonara", "Italian"),
+    ]
+    out = {r["name"] for r in _filter_by_cuisine(recipes, "Asian")}
+    assert out == {"Pad Thai", "Sushi"}
+
+
+def test_cuisine_multiple_selections_are_or_combined():
+    recipes = [
+        _area_recipe("Carbonara", "Italian"),
+        _area_recipe("Pad Thai", "Thai"),
+        _area_recipe("Tacos", "Mexican"),
+    ]
+    out = {r["name"] for r in _filter_by_cuisine(recipes, "Italian, Mexican")}
+    assert out == {"Carbonara", "Tacos"}
+
+
+def test_cuisine_keeps_recipes_with_no_area():
+    recipes = [_area_recipe("Mystery Stew", "")]
+    assert _filter_by_cuisine(recipes, "Italian") == recipes
+
+
+def test_cuisine_empty_is_passthrough():
+    recipes = [_area_recipe("Tacos", "Mexican")]
+    assert _filter_by_cuisine(recipes, "") == recipes

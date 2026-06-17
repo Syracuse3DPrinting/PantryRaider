@@ -160,6 +160,7 @@ def _mealdb_normalize(meal: dict) -> dict:
         source_url=meal.get("strSource") or f"https://www.themealdb.com/meal/{meal.get('idMeal')}",
         ingredients=ingredients,
         instructions=instructions,
+        cuisine=(meal.get("strArea") or "").strip(),
     )
 
 
@@ -237,13 +238,15 @@ def _spoon_diet_params(dietary: str) -> dict:
 
 async def _spoon_find(
     ingredients: list[str], limit: int, dietary: str = "", max_time: int = 0,
+    cuisine: str = "",
 ) -> list[dict]:
     """Find recipes by stock ingredients, then fetch details.
 
-    With no diet/time filter this uses findByIngredients (ranked to minimize
-    missing items). When a filter is active it switches to complexSearch, which
-    is the only endpoint that honours diet/intolerances/maxReadyTime alongside
-    includeIngredients. Each call costs API points, so phases are cached.
+    With no diet/time/cuisine filter this uses findByIngredients (ranked to
+    minimize missing items). When a filter is active it switches to
+    complexSearch, the only endpoint that honours diet/intolerances/
+    maxReadyTime/cuisine alongside includeIngredients. Each call costs API
+    points, so phases are cached.
     """
     # Normalize stock names to core terms (Spoonacular tolerates noise but
     # matches more recipes against clean ingredient words); dedupe + cap at 6.
@@ -261,8 +264,10 @@ async def _spoon_find(
         return []
 
     diet_params = _spoon_diet_params(dietary)
-    use_complex = bool(diet_params) or max_time > 0
-    ck = ("spoonacular", query, dietary, max_time)
+    # Spoonacular's `cuisine` param is OR-combined; pass the selected labels as-is.
+    cuisines = ",".join(c.strip() for c in cuisine.split(",") if c.strip())
+    use_complex = bool(diet_params) or max_time > 0 or bool(cuisines)
+    ck = ("spoonacular", query, dietary, max_time, cuisines)
     if ck in _search_cache:
         ids = _search_cache[ck]
     elif use_complex:
@@ -276,6 +281,8 @@ async def _spoon_find(
         }
         if max_time > 0:
             params["maxReadyTime"] = max_time
+        if cuisines:
+            params["cuisine"] = cuisines
         try:
             r = await _client.get(f"{_SPOON_BASE}/recipes/complexSearch", params=params)
             r.raise_for_status()
@@ -372,7 +379,7 @@ async def _spoon_lookup(recipe_id: str) -> dict | None:
 # ── Common interface ──────────────────────────────────────────────────────────
 
 def _normalized(name, external_id, source, description, image, source_url,
-                ingredients, instructions, servings="", total_time="") -> dict:
+                ingredients, instructions, servings="", total_time="", cuisine="") -> dict:
     return {
         "name": name,
         "slug": None,                       # not in Mealie (yet)
@@ -383,6 +390,7 @@ def _normalized(name, external_id, source, description, image, source_url,
         "total_time": total_time,
         "image": image,
         "source_url": source_url,
+        "cuisine": cuisine,                 # source's region/area, for post-filtering
         "ingredients": ingredients,
         "instructions": instructions,
         # tier classifier reads Mealie's field name
@@ -425,24 +433,68 @@ def _filter_by_diet(recipes: list[dict], dietary: str) -> list[dict]:
     return [r for r in recipes if not _violates_diet(r, banned)]
 
 
+# Cuisine labels offered on the Cook page. Broad regions expand to the set of
+# TheMealDB "areas" they cover (TheMealDB tags recipes by country, not region),
+# so picking "Asian" still post-filters mealdb results sensibly. Spoonacular
+# accepts these labels directly in its `cuisine` param.
+_CUISINE_AREAS = {
+    "asian": {"chinese", "japanese", "thai", "vietnamese", "malaysian",
+              "filipino", "indian", "korean"},
+    "mediterranean": {"greek", "italian", "spanish", "turkish", "moroccan",
+                      "egyptian", "tunisian"},
+    "european": {"french", "italian", "spanish", "greek", "british", "irish",
+                 "polish", "portuguese", "dutch", "croatian", "russian"},
+    "latin american": {"mexican", "jamaican", "uruguayan"},
+    "middle eastern": {"turkish", "egyptian", "moroccan", "tunisian"},
+    # Specific cuisines map to the matching area one-to-one.
+    "italian": {"italian"}, "french": {"french"}, "greek": {"greek"},
+    "spanish": {"spanish"}, "chinese": {"chinese"}, "japanese": {"japanese"},
+    "thai": {"thai"}, "vietnamese": {"vietnamese"}, "indian": {"indian"},
+    "mexican": {"mexican"}, "british": {"british"}, "moroccan": {"moroccan"},
+    "turkish": {"turkish"}, "american": {"american"},
+}
+
+
+def _filter_by_cuisine(recipes: list[dict], cuisine: str) -> list[dict]:
+    """Keep recipes whose source area matches any selected cuisine/region.
+
+    Used for TheMealDB (Spoonacular filters server-side). Recipes with no area
+    tag are kept, since absence isn't evidence of a mismatch."""
+    labels = [c.strip().lower() for c in cuisine.split(",") if c.strip()]
+    if not labels:
+        return recipes
+    wanted: set[str] = set()
+    for lab in labels:
+        wanted |= _CUISINE_AREAS.get(lab, {lab})
+    out = []
+    for r in recipes:
+        area = (r.get("cuisine") or "").strip().lower()
+        if not area or area in wanted:
+            out.append(r)
+    return out
+
+
 async def find_recipes_for_ingredients(
-    ingredients: list[str], limit: int = 12, dietary: str = "", max_time: int = 0,
+    ingredients: list[str], limit: int = 12, dietary: str = "",
+    max_time: int = 0, cuisine: str = "",
 ) -> list[dict]:
     """External recipes using the given stock ingredients, per settings source.
 
-    ``dietary`` is a comma-separated list of Cook-page diet labels (Vegan,
-    Gluten Free, …). Spoonacular filters natively where it can; TheMealDB has
-    no diet/time API, so vegan/vegetarian are approximated by post-filtering
-    out recipes that contain obvious animal products."""
+    ``dietary`` and ``cuisine`` are comma-separated Cook-page labels. Spoonacular
+    filters natively where it can; TheMealDB has no diet/cuisine API, so
+    vegan/vegetarian and cuisine are approximated by post-filtering (ingredient
+    scan for diet, ``strArea`` match for cuisine)."""
     _expire_cache()
     _touch_cache()
     source = settings.recipe_source
     if source == "off":
         return []
     if source == "spoonacular" and settings.spoonacular_api_key:
-        return await _spoon_find(ingredients, limit, dietary=dietary, max_time=max_time)
+        return await _spoon_find(ingredients, limit, dietary=dietary,
+                                 max_time=max_time, cuisine=cuisine)
     recipes = await _mealdb_find(ingredients, limit)
-    return _filter_by_diet(recipes, dietary)
+    recipes = _filter_by_diet(recipes, dietary)
+    return _filter_by_cuisine(recipes, cuisine)
 
 
 async def search_recipes_by_name(query: str, limit: int = 12) -> list[dict]:

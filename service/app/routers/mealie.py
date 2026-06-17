@@ -238,6 +238,7 @@ async def suggest(
     max_time: int = Query(0, ge=0),
     portions: int = Query(3, ge=1, le=5),
     dietary: str = Query(""),
+    cuisine: str = Query(""),
 ):
     """Recipes sorted into three cookability tiers against current inventory:
     ready (stock only), staples (stock + pantry basics), shopping (uses
@@ -265,7 +266,8 @@ async def suggest(
                                                s.get("days_remaining") or 999))
         try:
             ext_recipes = await recipes_external.find_recipes_for_ingredients(
-                [s["name"] for s in ordered], dietary=dietary, max_time=max_time)
+                [s["name"] for s in ordered], dietary=dietary,
+                max_time=max_time, cuisine=cuisine)
         except Exception:
             ext_recipes = []
         mealie_names = {(r.get("name") or "").lower() for r in recipes}

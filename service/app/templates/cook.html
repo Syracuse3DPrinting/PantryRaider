@@ -38,7 +38,7 @@
       <input type="range" class="pref-slider" id="pref-complexity" min="1" max="5" value="3">
       <span class="end-label right">Michelin Star ⭐</span>
     </div>
-    <div class="pref-mid-label" id="lbl-complexity">Getting Fancy</div>
+    <div class="pref-mid-label"><span id="lbl-complexity">Getting Fancy</span> <span class="ai-only">✨ AI only</span></div>
 
     <!-- Spice -->
     <div class="pref-row">
@@ -46,7 +46,7 @@
       <input type="range" class="pref-slider" id="pref-spice" min="1" max="5" value="3">
       <span class="end-label right">Asian Fury 🌶️</span>
     </div>
-    <div class="pref-mid-label" id="lbl-spice">Flavor Town</div>
+    <div class="pref-mid-label"><span id="lbl-spice">Flavor Town</span> <span class="ai-only">✨ AI only</span></div>
 
     <!-- Time -->
     <div class="pref-row">
@@ -62,9 +62,10 @@
       <input type="range" class="pref-slider" id="pref-portions" min="1" max="5" value="3">
       <span class="end-label right">Feed the Horde 🏟️</span>
     </div>
-    <div class="pref-mid-label" id="lbl-portions">4–6 servings</div>
+    <div class="pref-mid-label"><span id="lbl-portions">4–6 servings</span> <span class="ai-only">✨ AI only</span></div>
 
     <!-- Dietary toggles -->
+    <div class="pref-section-label">Dietary</div>
     <div class="diet-pills" id="diet-pills">
       <span class="diet-pill" data-diet="Vegan" onclick="toggleDiet(this)">🌱 Vegan</span>
       <span class="diet-pill" data-diet="Vegetarian" onclick="toggleDiet(this)">🥦 Vegetarian</span>
@@ -74,6 +75,29 @@
       <span class="diet-pill" data-diet="Low Carb" onclick="toggleDiet(this)">🍞 Low Carb</span>
       <span class="diet-pill" data-diet="Nut Free" onclick="toggleDiet(this)">🥜 Nut Free</span>
       <span class="diet-pill" data-diet="Pescatarian" onclick="toggleDiet(this)">🐟 Pescatarian</span>
+    </div>
+
+    <!-- Cuisine (optional) -->
+    <div class="pref-section-label">Cuisine <span class="text-secondary fw-normal">(optional)</span></div>
+    <div class="cuisine-pills" id="cuisine-pills">
+      <span class="cuisine-group-label">Regions</span>
+      <span class="cuisine-pill" data-cuisine="Asian" onclick="toggleCuisine(this)">🥢 Asian</span>
+      <span class="cuisine-pill" data-cuisine="Mediterranean" onclick="toggleCuisine(this)">🫒 Mediterranean</span>
+      <span class="cuisine-pill" data-cuisine="European" onclick="toggleCuisine(this)">🏰 European</span>
+      <span class="cuisine-pill" data-cuisine="Latin American" onclick="toggleCuisine(this)">🌮 Latin American</span>
+      <span class="cuisine-pill" data-cuisine="Middle Eastern" onclick="toggleCuisine(this)">🧆 Middle Eastern</span>
+      <span class="cuisine-pill" data-cuisine="American" onclick="toggleCuisine(this)">🍔 American</span>
+      <span class="cuisine-group-label">Cuisines</span>
+      <span class="cuisine-pill" data-cuisine="Italian" onclick="toggleCuisine(this)">🍝 Italian</span>
+      <span class="cuisine-pill" data-cuisine="French" onclick="toggleCuisine(this)">🥐 French</span>
+      <span class="cuisine-pill" data-cuisine="Greek" onclick="toggleCuisine(this)">🇬🇷 Greek</span>
+      <span class="cuisine-pill" data-cuisine="Spanish" onclick="toggleCuisine(this)">🥘 Spanish</span>
+      <span class="cuisine-pill" data-cuisine="Chinese" onclick="toggleCuisine(this)">🥟 Chinese</span>
+      <span class="cuisine-pill" data-cuisine="Japanese" onclick="toggleCuisine(this)">🍣 Japanese</span>
+      <span class="cuisine-pill" data-cuisine="Thai" onclick="toggleCuisine(this)">🌶️ Thai</span>
+      <span class="cuisine-pill" data-cuisine="Vietnamese" onclick="toggleCuisine(this)">🍜 Vietnamese</span>
+      <span class="cuisine-pill" data-cuisine="Indian" onclick="toggleCuisine(this)">🍛 Indian</span>
+      <span class="cuisine-pill" data-cuisine="Mexican" onclick="toggleCuisine(this)">🌯 Mexican</span>
     </div>
 
     <div class="pref-reset-row">
@@ -248,6 +272,54 @@ input[type=range].pref-slider {
   border-color: var(--bs-primary);
   color: #fff;
 }
+.ai-only {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  color: var(--bs-info);
+  border: 1px solid var(--bs-info);
+  vertical-align: middle;
+  opacity: 0.85;
+}
+.pref-section-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bs-secondary-color);
+  margin: 0.85rem 0 0.4rem;
+}
+.cuisine-pills {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+}
+.cuisine-group-label {
+  font-size: 0.68rem;
+  color: var(--bs-tertiary-color, var(--bs-secondary-color));
+  margin-right: 0.1rem;
+  flex-basis: 100%;
+}
+.cuisine-group-label:not(:first-child) { margin-top: 0.35rem; }
+.cuisine-pill {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-secondary-bg);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.cuisine-pill.active {
+  background: var(--bs-info);
+  border-color: var(--bs-info);
+  color: #fff;
+}
 .pref-reset-row {
   text-align: right;
   margin-top: 0.75rem;
@@ -264,6 +336,7 @@ const MEALIE_URL = {{ mealie_url | tojson }};
 
 let cVal = 3, sVal = 3, tVal = 3, pVal = 3;
 let activeDiets = new Set();
+let activeCuisines = new Set();
 let prefsOpen = false;
 let prefsDebounce = null;
 
@@ -284,7 +357,8 @@ function updatePrefLabels() {
   document.getElementById('lbl-spice').textContent      = SPICE_LABELS[sVal];
   document.getElementById('lbl-time').textContent       = TIME_LABELS[tVal];
   document.getElementById('lbl-portions').textContent   = PORTIONS_LABELS[pVal];
-  const nonDefault = cVal !== 3 || sVal !== 3 || tVal !== 3 || pVal !== 3 || activeDiets.size > 0;
+  const nonDefault = cVal !== 3 || sVal !== 3 || tVal !== 3 || pVal !== 3
+    || activeDiets.size > 0 || activeCuisines.size > 0;
   document.getElementById('prefs-active-badge').classList.toggle('d-none', !nonDefault);
 }
 
@@ -302,10 +376,24 @@ function toggleDiet(el) {
   scheduleRefresh();
 }
 
+function toggleCuisine(el) {
+  const c = el.dataset.cuisine;
+  if (activeCuisines.has(c)) {
+    activeCuisines.delete(c);
+    el.classList.remove('active');
+  } else {
+    activeCuisines.add(c);
+    el.classList.add('active');
+  }
+  savePrefs();
+  updatePrefLabels();
+  scheduleRefresh();
+}
+
 function savePrefs() {
   localStorage.setItem('cookPrefs', JSON.stringify({
     complexity: cVal, spice: sVal, time: tVal, portions: pVal,
-    diets: [...activeDiets],
+    diets: [...activeDiets], cuisines: [...activeCuisines],
   }));
 }
 
@@ -319,6 +407,7 @@ function loadPrefs() {
     tVal = p.time      || 3;
     pVal = p.portions  || 3;
     activeDiets = new Set(p.diets || []);
+    activeCuisines = new Set(p.cuisines || []);
   } catch (_) {}
   document.getElementById('pref-complexity').value = cVal;
   document.getElementById('pref-spice').value      = sVal;
@@ -327,17 +416,22 @@ function loadPrefs() {
   document.querySelectorAll('.diet-pill').forEach(el => {
     el.classList.toggle('active', activeDiets.has(el.dataset.diet));
   });
+  document.querySelectorAll('.cuisine-pill').forEach(el => {
+    el.classList.toggle('active', activeCuisines.has(el.dataset.cuisine));
+  });
   updatePrefLabels();
 }
 
 function resetPrefs() {
   cVal = 3; sVal = 3; tVal = 3; pVal = 3;
   activeDiets = new Set();
+  activeCuisines = new Set();
   document.getElementById('pref-complexity').value = 3;
   document.getElementById('pref-spice').value      = 3;
   document.getElementById('pref-time').value       = 3;
   document.getElementById('pref-portions').value   = 3;
   document.querySelectorAll('.diet-pill').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.cuisine-pill').forEach(el => el.classList.remove('active'));
   savePrefs();
   updatePrefLabels();
   scheduleRefresh();
@@ -355,12 +449,14 @@ function buildPrefsString() {
   const time       = timeMap[tVal];
   const portions   = {1: '1-2 servings', 2: '2-3 servings', 4: '8-10 servings', 5: '12 or more servings'}[pVal];
   const diets      = [...activeDiets].join(', ');
+  const cuisines   = [...activeCuisines].join(', ');
   const parts = [];
   if (complexity) parts.push(`Recipes should be ${complexity}`);
   if (spice)      parts.push(`spice level: ${spice}`);
   if (time)       parts.push(time);
   if (portions)   parts.push(`serving size: ${portions}`);
   if (diets)      parts.push(`dietary requirements: ${diets}`);
+  if (cuisines)   parts.push(`preferred cuisine: ${cuisines}`);
   return parts.join('. ');
 }
 
@@ -371,6 +467,7 @@ function buildPrefsParams() {
   p.set('max_time', {1:15, 2:30, 3:0, 4:120, 5:0}[tVal] || 0);
   p.set('portions', pVal);
   if (activeDiets.size) p.set('dietary', [...activeDiets].join(','));
+  if (activeCuisines.size) p.set('cuisine', [...activeCuisines].join(','));
   return p;
 }
 
