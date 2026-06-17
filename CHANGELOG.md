@@ -8,7 +8,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 > than the auto-generated commit list, so notes stay focused on user-facing
 > changes.
 
-## [Unreleased]
+## [1.3.0]
 
 ### Added
 - Theme switcher in **Settings → Interface** — choose between Dark and Light (and extra built-in themes), applied across the whole app.

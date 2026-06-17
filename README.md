@@ -149,7 +149,7 @@ docker compose pull
 docker compose up -d
 ```
 
-Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.2.0` in `.env`.
+Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.3.0` in `.env`.
 
 **Home Assistant add-on:** update from the add-on page in Home Assistant when a new version is offered.
 
