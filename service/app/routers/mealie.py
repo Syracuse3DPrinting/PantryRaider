@@ -229,11 +229,22 @@ async def create_recipe(payload: CreateRecipePayload):
 
 
 @router.get("/suggest")
-async def suggest(top: int = Query(0, ge=0, le=20), mealie: bool = True, external: bool = True):
+async def suggest(
+    top: int = Query(0, ge=0, le=20),
+    mealie: bool = True,
+    external: bool = True,
+    complexity: int = Query(3, ge=1, le=5),
+    spice: int = Query(3, ge=1, le=5),
+    max_time: int = Query(0, ge=0),
+    portions: int = Query(3, ge=1, le=5),
+    dietary: str = Query(""),
+):
     """Recipes sorted into three cookability tiers against current inventory:
     ready (stock only), staples (stock + pantry basics), shopping (uses
     perishable stock but needs extra ingredients). Candidates come from
-    Mealie (when mealie=true) plus the configured external source (when external=true)."""
+    Mealie (when mealie=true) plus the configured external source (when external=true).
+    The complexity/spice/time/portions/dietary knobs come from the Cook page
+    tuning panel and filter the external source where the API supports it."""
     m = _client()
     top = top or settings.suggest_per_tier
     recipes: list[dict] = []
@@ -254,7 +265,7 @@ async def suggest(top: int = Query(0, ge=0, le=20), mealie: bool = True, externa
                                                s.get("days_remaining") or 999))
         try:
             ext_recipes = await recipes_external.find_recipes_for_ingredients(
-                [s["name"] for s in ordered])
+                [s["name"] for s in ordered], dietary=dietary, max_time=max_time)
         except Exception:
             ext_recipes = []
         mealie_names = {(r.get("name") or "").lower() for r in recipes}
@@ -304,11 +315,17 @@ async def generate_recipe(name: str = Body(..., embed=True)):
     return recipe
 
 
+class SuggestLLMPayload(BaseModel):
+    preferences: str = ""
+
+
 @router.post("/suggest/llm")
-async def suggest_llm():
+async def suggest_llm(payload: SuggestLLMPayload = Body(default_factory=SuggestLLMPayload)):
     """Ask the LLM to suggest recipes based on current Grocy inventory.
     Returns a list of {name, description, uses} — lightweight cards the
-    user can expand into a full generated recipe."""
+    user can expand into a full generated recipe. The Cook page tuning panel
+    sends a free-text ``preferences`` string that is combined with the
+    operator's saved cook_ai_context and steered into the prompt."""
     try:
         stock = await GrocyClient().get_full_stock()
     except Exception:
@@ -318,11 +335,12 @@ async def suggest_llm():
     ordered = sorted(stock, key=lambda s: (s.get("days_remaining") is None,
                                            s.get("days_remaining") or 999))
     item_names = [s["name"] for s in ordered]
+    combined_prefs = ". ".join(p for p in (settings.cook_ai_context, payload.preferences) if p)
     provider = get_enrich_provider()
     try:
         suggestions = await provider.suggest_from_inventory(
             item_names, limit=settings.suggest_per_tier,
-            preferences=settings.cook_ai_context)
+            preferences=combined_prefs)
     except Exception as e:
         raise HTTPException(502, f"LLM error: {e}")
     return {"suggestions": suggestions or [], "inventory_items": len(stock)}

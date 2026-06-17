@@ -205,10 +205,45 @@ async def _mealdb_find(ingredients: list[str], limit: int) -> list[dict]:
 _SPOON_BASE = "https://api.spoonacular.com"
 
 
-async def _spoon_find(ingredients: list[str], limit: int) -> list[dict]:
-    """findByIngredients ranked to minimize missing items, then fetch details.
+# Cook-page diet labels → Spoonacular query params. `diet` accepts one value;
+# `intolerances` is additive. Labels with no Spoonacular equivalent (Low Carb)
+# are dropped silently.
+_SPOON_DIETS = {
+    "vegan": "vegan",
+    "vegetarian": "vegetarian",
+    "keto": "ketogenic",
+    "pescatarian": "pescetarian",
+    "gluten free": "gluten free",
+}
+_SPOON_INTOLERANCES = {
+    "dairy free": "dairy",
+    "gluten free": "gluten",
+    "nut free": "tree nut,peanut",
+}
 
-    Each call costs API points, so both phases are cached for the TTL.
+
+def _spoon_diet_params(dietary: str) -> dict:
+    """Translate Cook-page diet labels into Spoonacular diet/intolerances params."""
+    labels = [d.strip().lower() for d in dietary.split(",") if d.strip()]
+    diets = [_SPOON_DIETS[d] for d in labels if d in _SPOON_DIETS]
+    intol = [_SPOON_INTOLERANCES[d] for d in labels if d in _SPOON_INTOLERANCES]
+    params: dict = {}
+    if diets:
+        params["diet"] = diets[0]
+    if intol:
+        params["intolerances"] = ",".join(intol)
+    return params
+
+
+async def _spoon_find(
+    ingredients: list[str], limit: int, dietary: str = "", max_time: int = 0,
+) -> list[dict]:
+    """Find recipes by stock ingredients, then fetch details.
+
+    With no diet/time filter this uses findByIngredients (ranked to minimize
+    missing items). When a filter is active it switches to complexSearch, which
+    is the only endpoint that honours diet/intolerances/maxReadyTime alongside
+    includeIngredients. Each call costs API points, so phases are cached.
     """
     # Normalize stock names to core terms (Spoonacular tolerates noise but
     # matches more recipes against clean ingredient words); dedupe + cap at 6.
@@ -224,9 +259,30 @@ async def _spoon_find(ingredients: list[str], limit: int) -> list[dict]:
     query = ",".join(terms)
     if not query:
         return []
-    ck = ("spoonacular", query)
+
+    diet_params = _spoon_diet_params(dietary)
+    use_complex = bool(diet_params) or max_time > 0
+    ck = ("spoonacular", query, dietary, max_time)
     if ck in _search_cache:
         ids = _search_cache[ck]
+    elif use_complex:
+        params = {
+            "includeIngredients": query,
+            "number": limit,
+            "sort": "min-missing-ingredients",
+            "ignorePantry": "true",
+            "apiKey": settings.spoonacular_api_key,
+            **diet_params,
+        }
+        if max_time > 0:
+            params["maxReadyTime"] = max_time
+        try:
+            r = await _client.get(f"{_SPOON_BASE}/recipes/complexSearch", params=params)
+            r.raise_for_status()
+            ids = [str(m["id"]) for m in (r.json() or {}).get("results", [])]
+        except Exception:
+            ids = []
+        _search_cache[ck] = ids
     else:
         try:
             r = await _client.get(f"{_SPOON_BASE}/recipes/findByIngredients", params={
@@ -334,16 +390,59 @@ def _normalized(name, external_id, source, description, image, source_url,
     }
 
 
-async def find_recipes_for_ingredients(ingredients: list[str], limit: int = 12) -> list[dict]:
-    """External recipes using the given stock ingredients, per settings source."""
+# Animal products used to approximate vegan/vegetarian filtering for sources
+# (TheMealDB) that expose no diet metadata. Matched as substrings of ingredient
+# text, so "chicken breast", "ground beef", "parmesan cheese" all trigger.
+_NON_VEGETARIAN = (
+    "chicken", "beef", "pork", "bacon", "ham", "sausage", "turkey", "lamb",
+    "veal", "duck", "fish", "salmon", "tuna", "shrimp", "prawn", "crab",
+    "lobster", "anchovy", "anchovies", "gelatin", "meat",
+)
+_NON_VEGAN = _NON_VEGETARIAN + (
+    "egg", "milk", "butter", "cheese", "cream", "yogurt", "yoghurt", "honey",
+    "mayonnaise", "ghee",
+)
+
+
+def _violates_diet(recipe: dict, banned: tuple) -> bool:
+    text = " ".join(
+        (i.get("note") or i.get("name") or "") if isinstance(i, dict) else str(i)
+        for i in (recipe.get("recipeIngredient") or recipe.get("ingredients") or [])
+    ).lower()
+    return any(b in text for b in banned)
+
+
+def _filter_by_diet(recipes: list[dict], dietary: str) -> list[dict]:
+    """Approximate vegan/vegetarian filtering for sources without diet metadata."""
+    labels = {d.strip().lower() for d in dietary.split(",") if d.strip()}
+    banned: tuple = ()
+    if "vegan" in labels:
+        banned = _NON_VEGAN
+    elif "vegetarian" in labels:
+        banned = _NON_VEGETARIAN
+    if not banned:
+        return recipes
+    return [r for r in recipes if not _violates_diet(r, banned)]
+
+
+async def find_recipes_for_ingredients(
+    ingredients: list[str], limit: int = 12, dietary: str = "", max_time: int = 0,
+) -> list[dict]:
+    """External recipes using the given stock ingredients, per settings source.
+
+    ``dietary`` is a comma-separated list of Cook-page diet labels (Vegan,
+    Gluten Free, …). Spoonacular filters natively where it can; TheMealDB has
+    no diet/time API, so vegan/vegetarian are approximated by post-filtering
+    out recipes that contain obvious animal products."""
     _expire_cache()
     _touch_cache()
     source = settings.recipe_source
     if source == "off":
         return []
     if source == "spoonacular" and settings.spoonacular_api_key:
-        return await _spoon_find(ingredients, limit)
-    return await _mealdb_find(ingredients, limit)
+        return await _spoon_find(ingredients, limit, dietary=dietary, max_time=max_time)
+    recipes = await _mealdb_find(ingredients, limit)
+    return _filter_by_diet(recipes, dietary)
 
 
 async def search_recipes_by_name(query: str, limit: int = 12) -> list[dict]:

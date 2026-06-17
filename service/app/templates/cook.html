@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}What Can I Cook — FoodAssistant{% endblock %}
+
 {% block content %}
 
 {% if not mealie_configured %}
@@ -22,6 +23,64 @@
   </div>
 </div>
 <p class="text-secondary small mb-3" id="cook-meta">Matching recipes against your inventory…</p>
+
+<!-- Preference tuning panel -->
+<div class="cook-prefs-bar mb-3" id="cook-prefs-bar">
+  <button class="cook-prefs-toggle" onclick="togglePrefs()">
+    🎛️ Tune My Suggestions <span id="prefs-active-badge" class="badge text-bg-primary ms-1 d-none">●</span>
+    <i class="bi bi-chevron-down ms-1" id="prefs-chevron"></i>
+  </button>
+  <div class="cook-prefs-panel" id="cook-prefs-panel">
+
+    <!-- Complexity -->
+    <div class="pref-row">
+      <span class="end-label">Trash Panda 🦝</span>
+      <input type="range" class="pref-slider" id="pref-complexity" min="1" max="5" value="3">
+      <span class="end-label right">Michelin Star ⭐</span>
+    </div>
+    <div class="pref-mid-label" id="lbl-complexity">Getting Fancy</div>
+
+    <!-- Spice -->
+    <div class="pref-row">
+      <span class="end-label">Midwest Mayo 🫙</span>
+      <input type="range" class="pref-slider" id="pref-spice" min="1" max="5" value="3">
+      <span class="end-label right">Asian Fury 🌶️</span>
+    </div>
+    <div class="pref-mid-label" id="lbl-spice">Flavor Town</div>
+
+    <!-- Time -->
+    <div class="pref-row">
+      <span class="end-label">Microwave Minutes ⚡</span>
+      <input type="range" class="pref-slider" id="pref-time" min="1" max="5" value="3">
+      <span class="end-label right">All Day Affair ☕</span>
+    </div>
+    <div class="pref-mid-label" id="lbl-time">~1 hour</div>
+
+    <!-- Portions -->
+    <div class="pref-row">
+      <span class="end-label">Solo Snack 🙋</span>
+      <input type="range" class="pref-slider" id="pref-portions" min="1" max="5" value="3">
+      <span class="end-label right">Feed the Horde 🏟️</span>
+    </div>
+    <div class="pref-mid-label" id="lbl-portions">4–6 servings</div>
+
+    <!-- Dietary toggles -->
+    <div class="diet-pills" id="diet-pills">
+      <span class="diet-pill" data-diet="Vegan" onclick="toggleDiet(this)">🌱 Vegan</span>
+      <span class="diet-pill" data-diet="Vegetarian" onclick="toggleDiet(this)">🥦 Vegetarian</span>
+      <span class="diet-pill" data-diet="Dairy Free" onclick="toggleDiet(this)">🥛 Dairy Free</span>
+      <span class="diet-pill" data-diet="Gluten Free" onclick="toggleDiet(this)">🌾 Gluten Free</span>
+      <span class="diet-pill" data-diet="Keto" onclick="toggleDiet(this)">🥑 Keto</span>
+      <span class="diet-pill" data-diet="Low Carb" onclick="toggleDiet(this)">🍞 Low Carb</span>
+      <span class="diet-pill" data-diet="Nut Free" onclick="toggleDiet(this)">🥜 Nut Free</span>
+      <span class="diet-pill" data-diet="Pescatarian" onclick="toggleDiet(this)">🐟 Pescatarian</span>
+    </div>
+
+    <div class="pref-reset-row">
+      <a href="#" onclick="resetPrefs(); return false;">Reset to defaults</a>
+    </div>
+  </div>
+</div>
 
 <div class="row g-3" id="tiers">
   <div class="col-12 text-secondary">
@@ -112,8 +171,221 @@
 
 {% block scripts %}
 {% if mealie_configured %}
+<style>
+.cook-prefs-bar {
+  border: 1px solid var(--bs-border-color);
+  border-radius: 0.5rem;
+  background: var(--bs-tertiary-bg);
+  overflow: hidden;
+}
+.cook-prefs-toggle {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  padding: 0.6rem 1rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--bs-body-color);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.cook-prefs-toggle:hover {
+  background: var(--bs-secondary-bg);
+}
+.cook-prefs-panel {
+  display: none;
+  padding: 1rem;
+  border-top: 1px solid var(--bs-border-color);
+}
+.cook-prefs-panel.open {
+  display: block;
+}
+.pref-row {
+  display: grid;
+  grid-template-columns: 7rem 1fr 7rem;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.25rem;
+}
+.pref-row .end-label {
+  font-size: 0.75rem;
+  color: var(--bs-secondary-color);
+  white-space: nowrap;
+}
+.pref-row .end-label.right { text-align: right; }
+.pref-mid-label {
+  text-align: center;
+  font-size: 0.72rem;
+  color: var(--bs-secondary-color);
+  margin-bottom: 0.75rem;
+  margin-top: 0.1rem;
+}
+input[type=range].pref-slider {
+  width: 100%;
+  accent-color: var(--bs-primary);
+}
+.diet-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-top: 0.75rem;
+}
+.diet-pill {
+  padding: 0.2rem 0.65rem;
+  border-radius: 999px;
+  border: 1px solid var(--bs-border-color);
+  background: var(--bs-secondary-bg);
+  font-size: 0.78rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.diet-pill.active {
+  background: var(--bs-primary);
+  border-color: var(--bs-primary);
+  color: #fff;
+}
+.pref-reset-row {
+  text-align: right;
+  margin-top: 0.75rem;
+}
+.pref-reset-row a {
+  font-size: 0.78rem;
+  color: var(--bs-secondary-color);
+}
+</style>
 <script>
 const MEALIE_URL = {{ mealie_url | tojson }};
+
+// ── Preference state ──────────────────────────────────────────────────────────
+
+let cVal = 3, sVal = 3, tVal = 3, pVal = 3;
+let activeDiets = new Set();
+let prefsOpen = false;
+let prefsDebounce = null;
+
+const COMPLEXITY_LABELS = {1:'Instant Ramen', 2:'Home Cook', 3:'Getting Fancy', 4:'Chef Mode', 5:'Michelin Star'};
+const SPICE_LABELS      = {1:'Zero Heat', 2:'A Little Kick', 3:'Flavor Town', 4:'Send Help 🥵', 5:'Inferno'};
+const TIME_LABELS       = {1:'≤15 min', 2:'≤30 min', 3:'~1 hour', 4:'~2 hours', 5:'No limit'};
+const PORTIONS_LABELS   = {1:'1–2 servings', 2:'2–3 servings', 3:'4–6 servings', 4:'8–10 servings', 5:'12+ servings'};
+
+function togglePrefs() {
+  prefsOpen = !prefsOpen;
+  document.getElementById('cook-prefs-panel').classList.toggle('open', prefsOpen);
+  const chevron = document.getElementById('prefs-chevron');
+  chevron.className = prefsOpen ? 'bi bi-chevron-up ms-1' : 'bi bi-chevron-down ms-1';
+}
+
+function updatePrefLabels() {
+  document.getElementById('lbl-complexity').textContent = COMPLEXITY_LABELS[cVal];
+  document.getElementById('lbl-spice').textContent      = SPICE_LABELS[sVal];
+  document.getElementById('lbl-time').textContent       = TIME_LABELS[tVal];
+  document.getElementById('lbl-portions').textContent   = PORTIONS_LABELS[pVal];
+  const nonDefault = cVal !== 3 || sVal !== 3 || tVal !== 3 || pVal !== 3 || activeDiets.size > 0;
+  document.getElementById('prefs-active-badge').classList.toggle('d-none', !nonDefault);
+}
+
+function toggleDiet(el) {
+  const diet = el.dataset.diet;
+  if (activeDiets.has(diet)) {
+    activeDiets.delete(diet);
+    el.classList.remove('active');
+  } else {
+    activeDiets.add(diet);
+    el.classList.add('active');
+  }
+  savePrefs();
+  updatePrefLabels();
+  scheduleRefresh();
+}
+
+function savePrefs() {
+  localStorage.setItem('cookPrefs', JSON.stringify({
+    complexity: cVal, spice: sVal, time: tVal, portions: pVal,
+    diets: [...activeDiets],
+  }));
+}
+
+function loadPrefs() {
+  try {
+    const raw = localStorage.getItem('cookPrefs');
+    if (!raw) return;
+    const p = JSON.parse(raw);
+    cVal = p.complexity || 3;
+    sVal = p.spice     || 3;
+    tVal = p.time      || 3;
+    pVal = p.portions  || 3;
+    activeDiets = new Set(p.diets || []);
+  } catch (_) {}
+  document.getElementById('pref-complexity').value = cVal;
+  document.getElementById('pref-spice').value      = sVal;
+  document.getElementById('pref-time').value       = tVal;
+  document.getElementById('pref-portions').value   = pVal;
+  document.querySelectorAll('.diet-pill').forEach(el => {
+    el.classList.toggle('active', activeDiets.has(el.dataset.diet));
+  });
+  updatePrefLabels();
+}
+
+function resetPrefs() {
+  cVal = 3; sVal = 3; tVal = 3; pVal = 3;
+  activeDiets = new Set();
+  document.getElementById('pref-complexity').value = 3;
+  document.getElementById('pref-spice').value      = 3;
+  document.getElementById('pref-time').value       = 3;
+  document.getElementById('pref-portions').value   = 3;
+  document.querySelectorAll('.diet-pill').forEach(el => el.classList.remove('active'));
+  savePrefs();
+  updatePrefLabels();
+  scheduleRefresh();
+}
+
+function scheduleRefresh() {
+  clearTimeout(prefsDebounce);
+  prefsDebounce = setTimeout(loadSuggestions, 300);
+}
+
+function buildPrefsString() {
+  const complexity = ['very simple and quick', 'simple', null, 'complex', 'very sophisticated and complex'][cVal - 1];
+  const spice      = ['absolutely no spice or heat', 'mild heat', null, 'hot and spicy', 'extremely spicy, lots of chili'][sVal - 1];
+  const timeMap    = {1: 'ready in 15 minutes or less', 2: 'ready in 30 minutes or less', 4: 'up to 2 hours cooking time', 5: null};
+  const time       = timeMap[tVal];
+  const portions   = {1: '1-2 servings', 2: '2-3 servings', 4: '8-10 servings', 5: '12 or more servings'}[pVal];
+  const diets      = [...activeDiets].join(', ');
+  const parts = [];
+  if (complexity) parts.push(`Recipes should be ${complexity}`);
+  if (spice)      parts.push(`spice level: ${spice}`);
+  if (time)       parts.push(time);
+  if (portions)   parts.push(`serving size: ${portions}`);
+  if (diets)      parts.push(`dietary requirements: ${diets}`);
+  return parts.join('. ');
+}
+
+function buildPrefsParams() {
+  const p = new URLSearchParams();
+  p.set('complexity', cVal);
+  p.set('spice', sVal);
+  p.set('max_time', {1:15, 2:30, 3:0, 4:120, 5:0}[tVal] || 0);
+  p.set('portions', pVal);
+  if (activeDiets.size) p.set('dietary', [...activeDiets].join(','));
+  return p;
+}
+
+// Wire up slider events
+['pref-complexity','pref-spice','pref-time','pref-portions'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function() {
+    if (id === 'pref-complexity') cVal = +this.value;
+    if (id === 'pref-spice')      sVal = +this.value;
+    if (id === 'pref-time')       tVal = +this.value;
+    if (id === 'pref-portions')   pVal = +this.value;
+    updatePrefLabels();
+    savePrefs();
+    scheduleRefresh();
+  });
+});
 
 const TIER_META = {
   ready:    {label: 'Ready to Cook',       icon: 'bi-check-circle',  color: 'success',
@@ -221,7 +493,8 @@ async function loadSuggestions() {
     <span class="spinner-border spinner-border-sm me-2"></span>Checking your recipes and the web against current stock…</div>`;
   extSection.classList.add('d-none');
   try {
-    const r = await fetch('mealie/suggest');
+    const params = buildPrefsParams();
+    const r = await fetch('mealie/suggest?' + params.toString());
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const data = await r.json();
     const tiers = data.tiers || {};
@@ -362,7 +635,11 @@ async function loadAiSuggestions() {
   section.classList.remove('d-none');
   cards.innerHTML = '<div class="col-12 text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Asking AI for suggestions…</div>';
   try {
-    const r = await fetch('mealie/suggest/llm', {method: 'POST'});
+    const r = await fetch('mealie/suggest/llm', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({preferences: buildPrefsString()}),
+    });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     const sug = d.suggestions || [];
@@ -462,6 +739,7 @@ async function saveAiRecipe(btn) {
   }
 }
 
+loadPrefs();
 loadSuggestions();
 </script>
 {% endif %}
