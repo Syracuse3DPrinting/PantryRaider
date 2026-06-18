@@ -266,3 +266,76 @@ def test_blank_key():
     img = render.blank_key(80, 80)
     assert img.size == (80, 80)
     assert img.mode == "RGB"
+
+
+def test_long_label_shrinks_to_fit():
+    # A wide label must not pick a font wider than the fit fraction of the key.
+    from PIL import ImageDraw
+
+    # Start from an oversized font; fit must step it down under the limit while
+    # staying above the floor so the result is the shrink path, not the wrap one.
+    img = render.render_key(96, 96, label="Inventory", color="#1d4ed8")
+    draw = ImageDraw.Draw(img)
+    limit = int(96 * 0.90)
+    big = render._fit_font(draw, "Inventory", 40, limit, floor=12)
+    assert render._text_width(draw, "Inventory", big) <= limit
+
+
+def test_very_long_word_wraps_at_floor():
+    from PIL import ImageDraw
+
+    img = render.render_key(48, 48, label="Refrigeration", color="#1d4ed8")
+    draw = ImageDraw.Draw(img)
+    floor_font = render._font(render._MIN_FONT_PX)
+    lines = render._wrap_single_word(draw, "Refrigeration", floor_font, int(48 * 0.90))
+    assert len(lines) >= 2
+    assert "".join(lines) == "Refrigeration"
+
+
+def test_density_factor_clamped_and_inverse():
+    # Smaller keys scale up, larger keys scale down, both within the band.
+    small = render._density_factor(48, 96)
+    large = render._density_factor(120, 96)
+    assert 0.80 <= large < 1.0 < small <= 1.25
+    assert render._density_factor(96, 96) == 1.0
+
+
+# -- rotation config -------------------------------------------------------
+
+
+def test_rotation_defaults_to_zero():
+    assert config.Config().validated().rotation == 0
+
+
+def test_rotation_accepts_allowed_values(tmp_path):
+    for deg in (0, 90, 180, 270):
+        f = tmp_path / "c.toml"
+        f.write_text(f"rotation = {deg}\n")
+        assert config.load(f).rotation == deg
+
+
+def test_rotation_rejects_bad_value(tmp_path):
+    f = tmp_path / "c.toml"
+    f.write_text("rotation = 45\n")
+    assert config.load(f).rotation == 0
+
+
+# -- rotation index remap --------------------------------------------------
+
+
+def test_rotated_index_180_reverses_grid():
+    # 15-key deck (5x3): top-left (0) maps to bottom-right (14) and back.
+    assert layout.rotated_index(0, 15, 180) == 14
+    assert layout.rotated_index(14, 15, 180) == 0
+    # 180 is its own inverse for every key.
+    for i in range(15):
+        assert layout.rotated_index(layout.rotated_index(i, 15, 180), 15, 180) == i
+
+
+def test_rotated_index_zero_is_identity():
+    for i in range(32):
+        assert layout.rotated_index(i, 32, 0) == i
+
+
+def test_rotated_index_unknown_size_passthrough():
+    assert layout.rotated_index(3, 7, 180) == 3

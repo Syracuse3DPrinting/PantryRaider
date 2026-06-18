@@ -16,8 +16,36 @@ _FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
 )
 
+# Per-model pixel density (FoodAssistant-pjk).
+#
+# Decks differ in how many pixels a key occupies (Mini/Original roughly 72-80px,
+# XL roughly 96px, Plus roughly 120px) but the physical key face is about the
+# same size on every model. If we size fonts as a flat fraction of the pixel
+# height, a glyph that reads well on a 72px Mini key looks oversized on a 120px
+# Plus key and vice versa, so apparent legibility drifts model to model.
+#
+# To keep text at a consistent *physical* size we scale toward a reference key
+# resolution. _REFERENCE_PX is a typical key edge in pixels; the fractions below
+# are tuned against it. The density factor nudges very small keys up a touch and
+# very large keys down a touch so the printed glyph height stays comparable in
+# millimetres across models. We clamp the factor so an unusual model never warps
+# the layout wildly.
+_REFERENCE_PX = 96
 
-@lru_cache(maxsize=16)
+# Fraction of key height for each glyph kind, measured at _REFERENCE_PX. These
+# are deliberately larger than the old values so labels read across a room
+# (FoodAssistant-aax): a status count dominates the key and labels are bold.
+_LABEL_FRACTION = 0.30        # label-only keys
+_STATUS_LABEL_FRACTION = 0.24  # the small label under a status count
+_STATUS_COUNT_FRACTION = 0.55  # the large count number on a status key
+
+# Labels are shrunk to fit if they overflow; never go below this many pixels.
+_MIN_FONT_PX = 12
+# Target maximum text width as a fraction of the key width.
+_FIT_FRACTION = 0.90
+
+
+@lru_cache(maxsize=32)
 def _font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
     for path in _FONT_CANDIDATES:
         try:
@@ -39,6 +67,66 @@ def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
     return box[2] - box[0]
 
 
+def _density_factor(key_px: int, reference_px: int) -> float:
+    """Scale toward a reference key resolution, clamped to a safe band.
+
+    A key smaller than the reference gets a slightly larger fraction and a
+    larger key a slightly smaller one, so the rendered glyph stays a roughly
+    constant physical size across models. We take the square root of the ratio
+    so the correction is gentle, then clamp it.
+    """
+    if key_px <= 0:
+        return 1.0
+    factor = (reference_px / key_px) ** 0.5
+    return max(0.80, min(1.25, factor))
+
+
+def _font_px(height: int, fraction: float, *, density: float, floor: int) -> int:
+    return max(floor, int(height * fraction * density))
+
+
+def _fit_font(
+    draw: ImageDraw.ImageDraw,
+    text: str,
+    start_px: int,
+    max_width: int,
+    floor: int,
+):
+    """Return the largest font (down to ``floor``) whose text fits ``max_width``.
+
+    Steps the size down a couple of pixels at a time. The caller wraps when this
+    hits the floor and the text still overflows.
+    """
+    size = start_px
+    font = _font(size)
+    while size > floor and _text_width(draw, text, font) > max_width:
+        size -= 2
+        font = _font(size)
+    return font
+
+
+def _wrap_single_word(
+    draw: ImageDraw.ImageDraw, word: str, font, max_width: int
+) -> list[str]:
+    """Break one long word across lines so each line fits ``max_width``.
+
+    Used only as a last resort once shrinking has bottomed out at the floor;
+    multi-word labels are not produced here, the caller handles those.
+    """
+    lines: list[str] = []
+    current = ""
+    for ch in word:
+        candidate = current + ch
+        if current and _text_width(draw, candidate, font) > max_width:
+            lines.append(current)
+            current = ch
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    return lines or [word]
+
+
 def render_key(
     width: int,
     height: int,
@@ -46,12 +134,20 @@ def render_key(
     color: str,
     count: int | None = None,
     alert: bool = False,
+    *,
+    reference_px: int = _REFERENCE_PX,
 ) -> Image.Image:
     """Render one key.
 
     ``count`` shows a large number for status keys; when it is greater than
     zero and ``alert`` is set the background is brightened so a full fridge or
     a backlog of scans is visible across the room.
+
+    ``reference_px`` is the key resolution the font fractions are tuned for; the
+    actual key pixel size is compared against it so text keeps a consistent
+    physical size across deck models (see the module comment). It is a keyword
+    argument with a default, so the controller's existing positional call keeps
+    working unchanged.
     """
     bg = _hex_to_rgb(color)
     if count and alert:
@@ -60,30 +156,72 @@ def render_key(
     img = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
 
+    density = _density_factor(min(width, height), reference_px)
+    max_label_width = int(width * _FIT_FRACTION)
+
     if count is not None:
         num = str(count)
-        num_font = _font(max(18, int(height * 0.42)))
+        num_px = _font_px(
+            height, _STATUS_COUNT_FRACTION, density=density, floor=20
+        )
+        num_font = _fit_font(draw, num, num_px, max_label_width, floor=18)
         nw = _text_width(draw, num, num_font)
         draw.text(
-            ((width - nw) / 2, height * 0.08),
+            ((width - nw) / 2, height * 0.04),
             num,
             font=num_font,
             fill=(255, 255, 255),
         )
-        label_y = height * 0.62
-        label_font = _font(max(11, int(height * 0.18)))
+        label_y = height * 0.60
+        label_px = _font_px(
+            height, _STATUS_LABEL_FRACTION, density=density, floor=_MIN_FONT_PX
+        )
     else:
-        label_y = (height - max(13, int(height * 0.2))) / 2
-        label_font = _font(max(13, int(height * 0.2)))
+        label_px = _font_px(
+            height, _LABEL_FRACTION, density=density, floor=_MIN_FONT_PX
+        )
+        label_y = (height - label_px) / 2
 
-    lw = _text_width(draw, label, label_font)
-    draw.text(
-        ((width - lw) / 2, label_y),
-        label,
-        font=label_font,
-        fill=(235, 235, 235),
-    )
+    _draw_label(draw, label, label_px, width, height, label_y, max_label_width)
     return img
+
+
+def _draw_label(
+    draw: ImageDraw.ImageDraw,
+    label: str,
+    start_px: int,
+    width: int,
+    height: int,
+    label_y: float,
+    max_width: int,
+) -> None:
+    """Draw a label, shrinking to fit and wrapping a single word as a fallback.
+
+    First shrink the font until the label fits ~90% of the key width. If a
+    single long word still overflows at the floor size, wrap it across lines and
+    centre the block vertically around ``label_y``.
+    """
+    font = _fit_font(draw, label, start_px, max_width, floor=_MIN_FONT_PX)
+    if _text_width(draw, label, font) <= max_width or " " in label:
+        lw = _text_width(draw, label, font)
+        draw.text(
+            ((width - lw) / 2, label_y),
+            label,
+            font=font,
+            fill=(235, 235, 235),
+        )
+        return
+
+    # A single word at the floor size still overflows: wrap it.
+    lines = _wrap_single_word(draw, label, font, max_width)
+    box = draw.textbbox((0, 0), "Ag", font=font)
+    line_h = box[3] - box[1]
+    block_h = line_h * len(lines)
+    y = label_y - (block_h - line_h) / 2
+    for line in lines:
+        lw = _text_width(draw, line, font)
+        draw.text(((width - lw) / 2, y), line, font=font, fill=(235, 235, 235))
+        y += line_h
 
 
 def blank_key(width: int, height: int) -> Image.Image:

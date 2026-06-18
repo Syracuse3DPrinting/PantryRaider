@@ -21,6 +21,9 @@ ENV_BASE_URL = "FOODASSISTANT_BASE_URL"
 # Brightness steps cycled by the "brightness" key, low to high.
 BRIGHTNESS_STEPS: tuple[int, ...] = (20, 40, 60, 80, 100)
 
+# The only rotations we support, in degrees clockwise.
+ALLOWED_ROTATIONS: tuple[int, ...] = (0, 90, 180, 270)
+
 
 @dataclass
 class Config:
@@ -32,6 +35,9 @@ class Config:
     # Optional Chrome DevTools endpoint of a local kiosk browser, e.g.
     # "http://localhost:9222". When set, nav keys steer that browser.
     kiosk_cdp_url: str = ""
+    # Clockwise rotation of the rendered key faces, in degrees. Only the four
+    # values in ALLOWED_ROTATIONS are accepted; anything else falls back to 0.
+    rotation: int = 0
     keys: list[str] = field(default_factory=lambda: list(DEFAULT_ORDER))
 
     def validated(self) -> "Config":
@@ -41,6 +47,8 @@ class Config:
         self.poll_seconds = max(5, int(self.poll_seconds))
         self.soon_days = _clamp(self.soon_days, 0, 365)
         self.base_url = self.base_url.rstrip("/")
+        if self.rotation not in ALLOWED_ROTATIONS:
+            self.rotation = 0
         return self
 
 
@@ -84,7 +92,7 @@ def _apply(cfg: Config, data: dict) -> None:
     for name in ("base_url", "api_key", "kiosk_cdp_url"):
         if isinstance(data.get(name), str):
             setattr(cfg, name, data[name])
-    for name in ("brightness", "poll_seconds", "soon_days"):
+    for name in ("brightness", "poll_seconds", "soon_days", "rotation"):
         if isinstance(data.get(name), int):
             setattr(cfg, name, data[name])
 

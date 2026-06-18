@@ -80,6 +80,7 @@ class Controller:
     def _draw_page(self) -> None:
         from StreamDeck.ImageHelpers import PILHelper
 
+        rotation = self.config.rotation
         for index, spec in enumerate(self._current()):
             if spec is None:
                 image = render.blank_key(*self._key_size())
@@ -96,21 +97,51 @@ class Controller:
                     count=count,
                     alert=bool(count),
                 )
-            self.deck.set_key_image(index, PILHelper.to_native_format(self.deck, image))
+            if rotation:
+                # PIL rotates counter-clockwise, so negate to turn the face
+                # clockwise (matching how a user physically turns the deck).
+                # The HDMI/kiosk display rotation is handled separately at the
+                # OS level (xrandr / KMS) and is out of scope here.
+                image = image.rotate(-rotation, expand=True)
+            # The page slot `index` is a visual position; send it to the
+            # physical key it now occupies after the deck is turned.
+            phys = layout.rotated_index(index, self.key_count, rotation)
+            self.deck.set_key_image(phys, PILHelper.to_native_format(self.deck, image))
 
     def _key_size(self) -> tuple[int, int]:
         w, h = self.deck.key_image_format()["size"]
         return w, h
+
+    def _visual_slot(self, phys: int) -> int:
+        """Invert the draw-time index mapping for a pressed physical key.
+
+        ``rotated_index`` maps visual slot -> physical key. We invert it by
+        searching the visual slots for the one that lands on ``phys``. For 180
+        this is exact; for 90/270 it inherits the same best-effort transpose
+        limitation noted in ``layout.rotated_index`` (a wide deck cannot map
+        perfectly onto its transpose), so an unmapped press falls back to the
+        physical index unchanged.
+        """
+        rotation = self.config.rotation
+        if not rotation:
+            return phys
+        for slot in range(self.key_count):
+            if layout.rotated_index(slot, self.key_count, rotation) == phys:
+                return slot
+        return phys
 
     # -- input -------------------------------------------------------------
 
     def _on_key(self, deck, key: int, pressed: bool) -> None:
         if not pressed or self.loop is None:
             return
+        # `key` is the physical index pressed. Invert the draw-time mapping to
+        # recover the visual slot, so the action matches what the user sees.
+        slot = self._visual_slot(key)
         page = self._current()
-        if key >= len(page) or page[key] is None:
+        if slot >= len(page) or page[slot] is None:
             return
-        spec = page[key]
+        spec = page[slot]
         asyncio.run_coroutine_threadsafe(self._handle(spec), self.loop)
 
     async def _handle(self, spec: ActionSpec) -> None:

@@ -26,6 +26,12 @@ soon_days = 7
 # that browser. Leave empty to fall back to the desktop opener.
 kiosk_cdp_url = ""
 
+# Clockwise rotation of the rendered key faces, in degrees. Only 0, 90, 180,
+# and 270 are accepted (anything else falls back to 0). Use 180 if the deck is
+# mounted upside down; key presses are remapped to match. The HDMI/kiosk
+# display rotation is a separate OS-level setting (xrandr / KMS).
+rotation = 0
+
 # Keys, in order, left to right and top to bottom. Trimmed to fit a smaller
 # deck; on a 6-key Mini any overflow moves to extra pages reached by a "More"
 # key. Remove keys you do not want, or reorder freely.
