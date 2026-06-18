@@ -1,0 +1,123 @@
+/*
+ * kiosk.css — Touch-target sizing for 7" 1024×600 capacitive touchscreen.
+ * Loaded dynamically when localStorage.kioskMode === 'true'.
+ * All rules follow WCAG 2.5.5 minimum 44×44 px target guidance.
+ */
+
+/* ── Buttons ───────────────────────────────────────────────────────────────── */
+.btn,
+a.btn {
+  min-height: 48px;
+  min-width: 48px;
+  padding: 10px 16px;
+}
+
+/* Small icon-only buttons used in inventory item rows */
+.btn-icon {
+  min-height: 44px;
+  min-width: 44px;
+  padding: 8px 10px;
+  font-size: 1rem;
+}
+
+/* ── Navigation ─────────────────────────────────────────────────────────────── */
+.nav-link {
+  padding: 12px 16px;
+}
+
+/* Nav-tab links (add.html input tabs, etc.) */
+.nav-tabs .nav-link,
+.nav-pills .nav-link {
+  padding: 12px 16px;
+  min-height: 48px;
+}
+
+/* ── List groups ────────────────────────────────────────────────────────────── */
+.list-group-item {
+  padding: 14px 16px;
+}
+
+/* ── Form controls ──────────────────────────────────────────────────────────── */
+input,
+select,
+textarea {
+  min-height: 44px;
+  font-size: 1rem !important;
+}
+
+/* Ensure Bootstrap's .form-select / .form-control also hit minimum */
+.form-control,
+.form-select {
+  min-height: 44px;
+  font-size: 1rem !important;
+}
+
+/* form-control-sm and form-select-sm in the import queue need a bump too */
+.form-control-sm,
+.form-select-sm {
+  min-height: 40px;
+  font-size: 0.95rem !important;
+}
+
+/* ── Badges ─────────────────────────────────────────────────────────────────── */
+.badge {
+  font-size: 0.85rem;
+  padding: 6px 10px;
+}
+
+/* Inventory page custom expiry badges (rendered in JS) */
+.expiry-badge {
+  font-size: 0.82rem;
+  padding: 4px 8px;
+}
+
+/* ── Tables ─────────────────────────────────────────────────────────────────── */
+.table td,
+.table th {
+  padding: 10px 12px;
+}
+
+/* ── Inventory grid — drag handles / item-row action zone ───────────────────── */
+/*
+ * Each .item-row renders three .btn-icon buttons (edit, move, consume).
+ * The entire row acts as the touch hit area; ensure it is tall enough.
+ */
+.item-row {
+  min-height: 48px;
+  padding: 8px 12px;
+}
+
+/* Diet/cuisine pills on the Cook page */
+.diet-pill,
+.cuisine-pill {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 14px;
+  font-size: 0.9rem;
+}
+
+/* Cook-page preference toggle button */
+.cook-prefs-toggle {
+  min-height: 48px;
+  padding: 10px 16px;
+  font-size: 1rem;
+}
+
+/* Panel headers (collapsible category panels on inventory page) */
+.panel-header {
+  min-height: 48px;
+}
+
+/* ── Modal footers ──────────────────────────────────────────────────────────── */
+.modal-footer .btn,
+.modal-footer a.btn {
+  min-height: 48px;
+  padding: 10px 20px;
+}
+
+/* ── Close buttons ──────────────────────────────────────────────────────────── */
+.btn-close {
+  min-width: 44px;
+  min-height: 44px;
+}

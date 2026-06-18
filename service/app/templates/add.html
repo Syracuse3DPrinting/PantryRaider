@@ -37,13 +37,13 @@
               <div id="reader" style="width:100%"></div>
             </div>
             <div class="mt-2 d-flex gap-2 flex-wrap">
-              <button class="btn btn-primary btn-sm" id="startScanBtn" onclick="startScanner()">
+              <button class="btn btn-primary" id="startScanBtn" onclick="startScanner()">
                 <i class="bi bi-camera-video me-1"></i>Start Camera
               </button>
-              <button class="btn btn-secondary btn-sm d-none" id="stopScanBtn" onclick="stopScanner()">
+              <button class="btn btn-secondary d-none" id="stopScanBtn" onclick="stopScanner()">
                 <i class="bi bi-stop-circle me-1"></i>Stop
               </button>
-              <button class="btn btn-outline-primary btn-sm" onclick="document.getElementById('barcodePhotoInput').click()">
+              <button class="btn btn-outline-primary" onclick="document.getElementById('barcodePhotoInput').click()">
                 <i class="bi bi-camera me-1"></i>Snap Barcode Photo
               </button>
               <input type="file" id="barcodePhotoInput" accept="image/*" capture="environment"
@@ -102,7 +102,7 @@
             <input class="form-check-input" type="radio" name="photoType" id="typeReceipt" value="receipt">
             <label class="form-check-label" for="typeReceipt">Receipt</label>
           </div>
-          <button class="btn btn-primary btn-sm ms-auto" id="analyzeBtn" onclick="analyzePhoto()" disabled>
+          <button class="btn btn-primary ms-auto" id="analyzeBtn" onclick="analyzePhoto()" disabled>
             <i class="bi bi-magic me-1"></i>Analyze
           </button>
         </div>
@@ -178,7 +178,7 @@
       <span class="badge bg-primary ms-1" id="queue-count">0</span>
     </h5>
     <div class="d-flex gap-2">
-      <button class="btn btn-outline-secondary btn-sm" onclick="clearQueue()">
+      <button class="btn btn-outline-secondary" onclick="clearQueue()">
         <i class="bi bi-x-circle me-1"></i>Clear All
       </button>
       <button class="btn btn-success" onclick="importAll()">
