@@ -27,16 +27,18 @@ def qr_code(request: Request) -> Response:
     qr.save(buf)
     svg_bytes = buf.getvalue()
 
-    # Inject the target URL as a <title> element so it appears in the SVG body.
-    # This lets clients (tests, accessibility tools) confirm the encoded URL.
     svg_text = svg_bytes.decode("utf-8")
     svg_text = svg_text.replace(
         "<svg ",
         f'<svg aria-label="{url}" ',
         1,
     )
-    # Insert <title> after the opening <svg ...> tag
     insert_at = svg_text.index(">", svg_text.index("<svg ")) + 1
-    svg_text = svg_text[:insert_at] + f"<title>{url}</title>" + svg_text[insert_at:]
+    # White background ensures the code is scannable on dark themes.
+    svg_text = (
+        svg_text[:insert_at]
+        + f"<title>{url}</title><rect width='100%' height='100%' fill='white'/>"
+        + svg_text[insert_at:]
+    )
 
     return Response(content=svg_text.encode("utf-8"), media_type="image/svg+xml")

@@ -136,6 +136,16 @@
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script>
+    // CSS zoom on <html> can confuse Bootstrap's backdrop cleanup. Force-remove
+    // any orphaned backdrops and body classes when any modal closes.
+    document.addEventListener('hidden.bs.modal', function () {
+      document.querySelectorAll('.modal-backdrop').forEach(function (el) { el.remove(); });
+      document.body.classList.remove('modal-open');
+      document.body.style.removeProperty('overflow');
+      document.body.style.removeProperty('padding-right');
+    });
+  </script>
+  <script>
     // Kiosk mode toggle
     (function() {
       var active = localStorage.getItem('kioskMode') === 'true';

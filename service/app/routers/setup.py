@@ -96,8 +96,31 @@ class TestRecipesPayload(BaseModel):
     api_key: str = ""
 
 
+_LOCAL_GROCY_CANDIDATES = [
+    "http://localhost:9383",
+    "http://127.0.0.1:9383",
+    "http://grocy:80",
+]
+
+
+async def _detect_local_grocy() -> str:
+    """Return the first candidate Grocy URL that responds with a 200/401, or ''."""
+    async with httpx.AsyncClient(timeout=1.5) as client:
+        for url in _LOCAL_GROCY_CANDIDATES:
+            try:
+                r = await client.get(f"{url}/api/system/info")
+                if r.status_code in (200, 401):
+                    return url
+            except Exception:
+                pass
+    return ""
+
+
 @router.get("", response_class=HTMLResponse)
 async def setup_page(request: Request):
+    suggested_grocy_url = ""
+    if not settings.grocy_base_url or settings.grocy_base_url == "http://grocy:80":
+        suggested_grocy_url = await _detect_local_grocy()
     return templates.TemplateResponse(request, "setup.html", {
         "request": request,
         "s": settings,
@@ -109,6 +132,7 @@ async def setup_page(request: Request):
         "custom_categories": custom_categories(),
         "themes": THEMES,
         "ui_scales": UI_SCALES,
+        "suggested_grocy_url": suggested_grocy_url,
     })
 
 
