@@ -1,0 +1,65 @@
+# FoodAssistant appliance compose
+# ================================
+# Adapted from docker-compose.prod.yml for the SD-card image. It is dropped
+# into INSTALL_DIR by the first-boot provisioner (firstboot.sh), which also
+# writes a .env beside it from image/config.env. Optional backends are gated
+# behind compose profiles, toggled by ENABLE_MEALIE / ENABLE_OLLAMA.
+#
+# Differences from docker-compose.prod.yml:
+#   - Grocy runs by default (no profile) — the appliance is useless without it.
+#   - Mealie/Ollama still profile-gated (with-mealie / with-ollama).
+services:
+  service:
+    image: ghcr.io/syracuse3dprinting/foodassistant:${FOODASSISTANT_TAG:-latest}
+    container_name: foodassistant-service
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      - TZ=${TZ:-America/New_York}
+    volumes:
+      - ./data:/app/data
+    ports:
+      - "9284:8000"
+    restart: unless-stopped
+    depends_on:
+      grocy:
+        condition: service_started
+        required: false
+
+  grocy:
+    image: lscr.io/linuxserver/grocy:4.6.0   # pinned; matches docker-compose.prod.yml
+    container_name: foodassistant-grocy
+    environment:
+      - PUID=1000
+      - PGID=1000
+      - TZ=${TZ:-America/New_York}
+    volumes:
+      - ./grocy:/config
+    ports:
+      - "9383:80"
+    restart: unless-stopped
+
+  mealie:
+    image: ghcr.io/mealie-recipes/mealie:v3.19.2   # pinned; matches docker-compose.prod.yml
+    container_name: foodassistant-mealie
+    profiles: ["with-mealie"]
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - ALLOW_SIGNUP=false
+      - BASE_URL=http://localhost:9285
+    volumes:
+      - ./mealie:/app/data
+    ports:
+      - "9285:9000"
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.30.8   # pinned; matches docker-compose.prod.yml
+    container_name: foodassistant-ollama
+    profiles: ["with-ollama"]
+    volumes:
+      - ./ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    restart: unless-stopped

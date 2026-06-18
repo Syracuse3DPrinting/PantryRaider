@@ -5,7 +5,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "1.3.1"
+APP_VERSION = "1.4.0"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -46,6 +46,7 @@ _SAVEABLE = [
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
+    "tunnel_mode", "tunnel_token", "tunnel_url",
 ]
 
 # Settings that hold credentials. These are redacted from backups unless the
@@ -157,6 +158,11 @@ class Settings(BaseSettings):
     api_key: str = ""
     rclone_remote: str = ""          # e.g. "s3:mybucket/foodassistant"
     rclone_schedule_hours: int = 0   # 0 = disabled; 24 = daily
+
+    # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "subscription"
+    tunnel_mode: str = ""
+    tunnel_token: str = ""
+    tunnel_url: str = ""
 
     def provider_key(self, provider: str) -> str:
         """API key for a cloud provider name; '' for local/unknown providers."""

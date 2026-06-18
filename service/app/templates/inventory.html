@@ -84,7 +84,7 @@
   <h4 class="mb-0"><i class="bi bi-grid me-2"></i>Inventory</h4>
   <div class="d-flex align-items-center gap-2">
     <label class="form-label mb-0 me-1 text-nowrap" for="sortSelect">Sort by:</label>
-    <select class="form-select form-select-sm" id="sortSelect" style="width:auto" onchange="loadDashboard()">
+    <select class="form-select" id="sortSelect" style="width:auto" onchange="loadDashboard()">
       <option value="expiry_asc">Expiring soonest</option>
       <option value="expiry_desc">Expiring latest</option>
       <option value="added_desc">Recently added (newest)</option>
@@ -94,7 +94,7 @@
       <option value="qty_desc">Quantity (most first)</option>
       <option value="qty_asc">Quantity (least first)</option>
     </select>
-    <button class="btn btn-outline-secondary btn-sm" onclick="loadDashboard()" title="Refresh">
+    <button class="btn btn-outline-secondary" onclick="loadDashboard()" title="Refresh">
       <i class="bi bi-arrow-clockwise"></i>
     </button>
     <span id="loading-spinner" class="spinner-border spinner-border-sm text-secondary"></span>
@@ -164,8 +164,8 @@
         </div>
       </div>
       <div class="modal-footer py-2">
-        <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-        <button type="button" class="btn btn-primary btn-sm" id="editSaveBtn" onclick="saveEdit()">
+        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary" id="editSaveBtn" onclick="saveEdit()">
           <i class="bi bi-check2 me-1"></i>Save
         </button>
       </div>
