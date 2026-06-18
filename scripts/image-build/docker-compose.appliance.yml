@@ -12,6 +12,13 @@ services:
   service:
     image: ghcr.io/syracuse3dprinting/foodassistant:${FOODASSISTANT_TAG:-latest}
     container_name: foodassistant-service
+    # Host networking lets the kiosk browser and local daemons (stream deck)
+    # reach the API as 127.0.0.1 inside the container, enabling the auth
+    # bypass for on-device clients without needing a password or API key.
+    # Side effect: Grocy must be reached via localhost:9383, not by container
+    # name. Set GROCY_BASE_URL=http://localhost:9383 (or use /setup).
+    network_mode: "host"
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "9284"]
     env_file:
       - path: .env
         required: false
@@ -19,8 +26,6 @@ services:
       - TZ=${TZ:-America/New_York}
     volumes:
       - ./data:/app/data
-    ports:
-      - "9284:8000"
     restart: unless-stopped
     depends_on:
       grocy:
