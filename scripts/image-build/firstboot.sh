@@ -149,6 +149,25 @@ compose_profiles() {
   printf '%s' "${profiles# }"
 }
 
+# Ensure a local clone of the repo exists at $REPO_DIR, cloning it if needed.
+# A flashed/baked image carries the assets next to this script, but a device
+# provisioned by piping this script through bash (curl ... | sudo bash) has
+# only the script itself. In that case we clone the public repo so the compose
+# file, service build context, and Stream Deck package are all available.
+ensure_repo() {
+  [ -d "$REPO_DIR/.git" ] && return 0
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would clone $REPO_URL to $REPO_DIR"
+    return 0
+  fi
+  command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
+  command -v git >/dev/null 2>&1 \
+    || die "git unavailable; cannot fetch repo assets. Install git and re-run."
+  log "Cloning $REPO_URL to $REPO_DIR"
+  run git clone --depth 1 "$REPO_URL" "$REPO_DIR" \
+    || die "Could not clone $REPO_URL. Check internet access and try again."
+}
+
 # ── Step: hostname ─────────────────────────────────────────────────────────
 configure_hostname() {
   local current
@@ -263,7 +282,16 @@ EOF
 deploy_stack() {
   log "Deploying stack into $INSTALL_DIR"
   run mkdir -p "$INSTALL_DIR"
-  [ -f "$COMPOSE_SRC" ] || die "Appliance compose file not found at $COMPOSE_SRC"
+  # The compose file normally sits next to this script (baked image / git
+  # checkout). When the script is run standalone (curl ... | bash) it is not
+  # present, so fall back to a cloned copy of the repo.
+  if [ ! -f "$COMPOSE_SRC" ]; then
+    log "Compose file not found at $COMPOSE_SRC; fetching repo assets"
+    ensure_repo
+    COMPOSE_SRC="$REPO_DIR/scripts/image-build/docker-compose.appliance.yml"
+    [ -f "$COMPOSE_SRC" ] || [ "$DRY_RUN" = "1" ] \
+      || die "Appliance compose file still not found at $COMPOSE_SRC after clone"
+  fi
   run cp "$COMPOSE_SRC" "$INSTALL_DIR/docker-compose.yml"
   write_env_file "$INSTALL_DIR/.env"
 
@@ -285,14 +313,7 @@ deploy_stack() {
     log "Image pull failed; building from local source at $REPO_DIR/service (this takes a few minutes)"
     # Self-heal: a flashed device only carries the boot payload, not the full
     # repo. Clone it (the repo is public) so the build context exists.
-    if [ ! -d "$REPO_DIR/service" ]; then
-      command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
-      command -v git >/dev/null 2>&1 \
-        || die "git unavailable and image pull failed. Make the GHCR package public or pre-clone the repo to $REPO_DIR."
-      log "Source not present; cloning $REPO_URL to $REPO_DIR"
-      run git clone --depth 1 "$REPO_URL" "$REPO_DIR" \
-        || die "Could not clone $REPO_URL. Check internet, or make the GHCR package public."
-    fi
+    [ -d "$REPO_DIR/service" ] || ensure_repo
     # shellcheck disable=SC2086
     ( cd "$INSTALL_DIR" && docker compose $profiles build service ) \
       || die "Local build also failed. Check $REPO_DIR/service and Docker logs."
@@ -412,12 +433,8 @@ configure_streamdeck() {
     sd_src="$REPO_DIR/streamdeck/foodassistant_streamdeck"
   fi
   # Not present anywhere yet: clone the public repo so the package exists.
-  if [ -z "$sd_src" ] && [ ! -d "$REPO_DIR/streamdeck/foodassistant_streamdeck" ]; then
-    command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
-    if command -v git >/dev/null 2>&1; then
-      log "Stream Deck package not present; cloning $REPO_URL to $REPO_DIR"
-      run git clone --depth 1 "$REPO_URL" "$REPO_DIR" || warn "clone for streamdeck failed"
-    fi
+  if [ -z "$sd_src" ]; then
+    ensure_repo
     [ -d "$REPO_DIR/streamdeck/foodassistant_streamdeck" ] && sd_src="$REPO_DIR/streamdeck/foodassistant_streamdeck"
   fi
 
