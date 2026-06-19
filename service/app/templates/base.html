@@ -85,6 +85,15 @@
               <i class="bi bi-tablet" id="kioskIcon"></i>
             </a>
           </li>
+          {% for g in auto_hidden_groups() %}
+          <li class="nav-item">
+            <a class="nav-link text-warning" href="{{ g.setup_href }}"
+               title="{{ g.tab_labels | join(', ') }} — configure {{ g.service | capitalize }} to unlock">
+              <i class="bi bi-lock-fill" style="font-size:0.85rem"></i>
+              <span class="d-none d-md-inline small ms-1">{{ g.service | capitalize }}</span>
+            </a>
+          </li>
+          {% endfor %}
           <li class="nav-item">
             <a class="nav-link {% if active == 'setup' %}active{% endif %}" href="setup" title="Settings">
               <i class="bi bi-gear"></i>

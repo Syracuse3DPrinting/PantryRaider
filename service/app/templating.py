@@ -4,7 +4,7 @@ from fastapi.templating import Jinja2Templates
 
 from .config import settings, theme_info, ui_scale_factor
 from .ingress import template_globals
-from .navigation import visible_tabs
+from .navigation import visible_tabs, auto_hidden_groups
 
 
 def theme_context(request: Request) -> dict:
@@ -37,3 +37,4 @@ templates = Jinja2Templates(
 )
 # Called per render, so nav reflects settings changes without a restart
 templates.env.globals["nav_tabs"] = visible_tabs
+templates.env.globals["auto_hidden_groups"] = auto_hidden_groups

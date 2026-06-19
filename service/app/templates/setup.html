@@ -2002,6 +2002,21 @@ async function wizSaveAll() {
   {% if configured %}
   toggleAuthRequired();
   {% endif %}
+
+  // If the page was opened with a #pane-* hash (e.g. from the navbar unlock
+  // hint), activate the matching settings pill tab.
+  var hash = window.location.hash;
+  if (hash && hash.startsWith('#pane-')) {
+    var btn = document.querySelector('[data-bs-target="' + hash + '"]');
+    if (btn) {
+      var tab = bootstrap.Tab.getOrCreateInstance(btn);
+      tab.show();
+      setTimeout(function() {
+        var el = document.getElementById(hash.slice(1));
+        if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
+      }, 120);
+    }
+  }
 })();
 </script>
 </body>

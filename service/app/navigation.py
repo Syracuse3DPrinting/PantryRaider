@@ -40,6 +40,26 @@ def visible_tabs() -> list[dict]:
     return [tabs[k] for k in keys if k not in hidden and _requirement_met(tabs[k])]
 
 
+def auto_hidden_groups() -> list[dict]:
+    """Return services whose tabs are auto-hidden (requirement not met, not user-hidden).
+
+    Each entry has: service, label, tab_labels (list), setup_href.
+    Used to render "unlock" hints in the navbar when features are unavailable.
+    """
+    user_hidden = {k for k in settings.nav_hidden.split(",") if k}
+    groups: dict[str, dict] = {}
+    for t in NAV_TABS:
+        req = t.get("requires")
+        if not req or t["key"] in user_hidden:
+            continue
+        if not _requirement_met(t):
+            if req not in groups:
+                _pane = {"mealie": "pane-recipes"}.get(req, req)
+                groups[req] = {"service": req, "tab_labels": [], "setup_href": f"setup#{_pane}"}
+            groups[req]["tab_labels"].append(t["label"])
+    return list(groups.values())
+
+
 def all_tabs() -> list[dict]:
     """Registry with current visibility state, for the Settings editor."""
     visible_keys = {t["key"] for t in visible_tabs()}
