@@ -40,13 +40,13 @@ and boots fast. (Maintainer/build details: `scripts/image-build/README.md`.)
 
 ## What you need
 
-- A supported board — **Raspberry Pi 4 or Pi 5 (ARM64)** recommended; generic
+- A supported board: **Raspberry Pi 4 or Pi 5 (ARM64)** recommended; generic
   ARM64/x86-64 Debian/Ubuntu also works (see "Hardware coverage" below).
 - A 16 GB+ SD card (32 GB+ recommended).
 - Ethernet or Wi-Fi with internet for the first boot.
 - A flashing tool: **Raspberry Pi Imager** (recommended) or **balenaEtcher**.
 
-## Step 1 — Flash Raspberry Pi OS Lite (64-bit)
+## Step 1: Flash Raspberry Pi OS Lite (64-bit)
 
 ### Using Raspberry Pi Imager (recommended)
 
@@ -54,7 +54,7 @@ and boots fast. (Maintainer/build details: `scripts/image-build/README.md`.)
 2. **Choose Device:** your Pi model. **Choose OS:** *Raspberry Pi OS (other) →
    Raspberry Pi OS Lite (64-bit)*. **Choose Storage:** your card.
 3. Click the gear / **Edit Settings** and set:
-   - **Hostname:** `foodassistant` (optional — our config sets this too).
+   - **Hostname:** `foodassistant` (optional: our config sets this too).
    - **Wi-Fi** credentials (skip if using Ethernet).
    - **Locale / timezone.**
    - Enable **SSH** if you want remote access (optional).
@@ -68,7 +68,7 @@ flash it with [balenaEtcher](https://etcher.balena.io/), then continue to
 Step 2 to add the FoodAssistant payload (Etcher has no customization, so the
 prepare step is required).
 
-## Step 2 — Add the FoodAssistant first-boot payload
+## Step 2: Add the FoodAssistant first-boot payload
 
 After flashing, the card's **boot partition** (`bootfs`) reappears as a small
 FAT volume on your PC. You need to copy the provisioner files onto it and edit
@@ -165,7 +165,7 @@ hook runs alongside Imager's, not in place of it.
 
 Eject the card safely.
 
-## Step 3 — First boot
+## Step 3: First boot
 
 1. Insert the card, connect network, power on.
 2. The first boot runs the provisioner. Expect **a few minutes** while it
@@ -176,7 +176,7 @@ Eject the card safely.
    tail -f /var/log/foodassistant-firstboot.log
    ```
 
-## Step 4 — Open the app
+## Step 4: Open the app
 
 Browse to:
 
@@ -223,7 +223,7 @@ docker compose --profile with-ollama up -d      # add Ollama
 Set `ENABLE_KIOSK=true`. On first boot, if a display is detected (DRM/KMS, or
 an X/Wayland session), the provisioner installs `cage` + Chromium and starts
 `foodassistant-kiosk.service`, which opens `KIOSK_URL` full-screen on `tty1`.
-On a headless box the flag is harmless — it logs and skips. Manage it with:
+On a headless box the flag is harmless: it logs and skips. Manage it with:
 
 ```bash
 systemctl status foodassistant-kiosk
@@ -259,7 +259,7 @@ IP, or install Bonjour (Windows) / ensure `avahi-daemon` is running on the
 device (`systemctl status avahi-daemon`). Find the IP from your router or
 `ssh` with the IP.
 
-**First boot seems stuck.** It's pulling Docker images — give it 5–10 minutes
+**First boot seems stuck.** It's pulling Docker images: give it 5–10 minutes
 on a slow connection. Check `tail -f /var/log/foodassistant-firstboot.log`.
 The provisioner is idempotent and retries on transient failures
 (`foodassistant-firstboot.service` is `Restart=on-failure`).

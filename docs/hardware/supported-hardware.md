@@ -19,7 +19,7 @@ good experience.
 
 **RAM guidance:** FoodAssistant + Grocy run comfortably in 2 GB. Adding **Mealie**
 (recipes/meal plan/shopping) pushes the practical floor to 4 GB, especially during meal
-planning. Local AI via **Ollama** is **not** recommended on low-RAM SBCs — use a cloud
+planning. Local AI via **Ollama** is **not** recommended on low-RAM SBCs: use a cloud
 AI provider, or a machine with 16 GB+ if you want fully local inference.
 
 ## Tested boards
@@ -43,7 +43,7 @@ FoodAssistant on hardware not listed here, please open an issue with your result
 
 ### Barcode scanners
 
-Any **USB HID ("keyboard wedge") barcode scanner** works with no configuration — it
+Any **USB HID ("keyboard wedge") barcode scanner** works with no configuration: it
 types the scanned code into the focused field. This covers most wired and wireless USB
 scanners, including compact OEM scan-engine modules. 1D (UPC/EAN) and 2D (QR/DataMatrix)
 are both supported as long as the scanner reads them.
@@ -53,7 +53,7 @@ phone), no dedicated hardware required.
 
 ### Displays
 
-A display is optional — FoodAssistant is a web app you can reach from any browser on your
+A display is optional: FoodAssistant is a web app you can reach from any browser on your
 network. For a dedicated touchscreen setup, DSI and HDMI capacitive touch panels both
 work; see the [SD-card image guide](sd-image.md) for kiosk-mode setup.
 

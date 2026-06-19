@@ -34,9 +34,9 @@ Interactive docs (Swagger UI) are available at `/docs` when the app is running.
 
 ## Query Parameters
 
-`GET /ui/expiring?days=N` — show items expiring within N days (default 7).
+`GET /ui/expiring?days=N`: show items expiring within N days (default 7).
 
-`GET /admin/backup?include_secrets=true` — include API keys and passwords in the backup zip (omit for a safe-to-store redacted copy).
+`GET /admin/backup?include_secrets=true`: include API keys and passwords in the backup zip (omit for a safe-to-store redacted copy).
 
 `GET /inventory/dashboard` returns JSON matching the Grocy stock structure, grouped by storage category. This is the endpoint the Home Assistant Lovelace dashboard polls.
 
