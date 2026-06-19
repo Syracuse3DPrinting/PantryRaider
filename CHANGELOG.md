@@ -10,8 +10,23 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 
 ## [Unreleased]
 
+## [1.6.0]
+
 ### Added
 - **Deployment modes in setup.** The first setup step now asks how the device is used. On a Raspberry Pi you choose **Pi Hosted** (everything runs on the Pi, with or without a screen) or **Pi Remote** (a thin control surface that drives a Stream Deck and/or kiosk pointed at a FoodAssistant server already running elsewhere); on other hardware it stays **Server hosted**. Pi Remote installs no local Grocy or Docker, so it runs on a Pi 3, and the wizard skips the Grocy and AI steps for it. The choice is detected and offered automatically based on the board.
+- **Shopping list without Mealie.** The Shopping tab is now always visible. When Mealie is not configured it is backed by Grocy's built-in shopping list: add, check off, and delete items. Multi-list selector appears when more than one list exists. A "Clear checked" button removes done items. When Mealie is configured the existing Mealie-backed view is unchanged.
+- **Stock journal.** A new Stock Journal page (link in the Inventory header) shows the last 50/100/200 stock transactions from Grocy: date, product name, transaction type (Added, Consumed, Moved, Corrected), quantity, and note. A live text filter narrows by product name.
+- **KMS display rotation.** Set `DISPLAY_ROTATION=90` (or 180, 270) in `image/config.env` before flashing to rotate the framebuffer at the OS level. Rotates the boot console and kiosk browser, unlike the CSS-only setting in the app. A `foodassistant-set-rotation` helper script is installed for runtime changes without reflashing.
+- **Barcode scanner type** selector in the setup wizard (USB HID or Camera). USB HID includes a test input to confirm the scanner sends Enter after each code.
+- **Settings status indicators.** The Settings sidebar shows colored icons for each section so misconfigured areas are visible at a glance. A warning banner appears at the top of Settings when Grocy is unreachable or no password is set.
+- **Nav unlock hints.** When Mealie or another optional service is not configured, a small lock icon appears in the navbar with a tooltip listing the locked tabs and a link to the relevant Settings pane.
+- **Stream Deck timers.** Three independent countdown timer keys (`timer_1`, `timer_2`, `timer_3`). Press to cycle through 5, 10, 15, 30, and 60 minute presets; press again to cancel. The key shows MM:SS while counting down, turns amber under 1 minute, and flashes red with "Done!" when the timer expires. Press once more to dismiss.
+- **Targeted provisioner re-runs.** `STEPS=rotation,kiosk bash firstboot.sh` re-runs only the named steps, bypassing the done-marker check. Valid step names: `hostname`, `timezone`, `mdns`, `docker`, `stack`, `rotation`, `kiosk`, `streamdeck`.
+
+### Fixed
+- QR modal now closes reliably on dark themes (modal was nested inside the collapsible navbar, causing backdrop conflicts).
+- Grocy URL in the setup wizard now uses the browser's host instead of `localhost` when viewed from a different machine on the network.
+- Navigation unlock hints show all tab names for a locked service, not just the last one.
 
 ## [1.5.0]
 
