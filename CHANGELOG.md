@@ -10,11 +10,24 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 
 ## [Unreleased]
 
+## [1.5.0]
+
 ### Added
-- **Stream Deck controller** (`streamdeck/`). Drive an Elgato Stream Deck or embedded Stream Deck Module (6, 15, or 32 keys) as a physical control surface. Keys show live counts (items expiring soon, scans waiting to commit) and trigger actions like committing pending scans or opening a page on the attached display. Works alongside a touchscreen or as the only interface on a headless appliance. Includes a systemd unit, udev rule, and example config. See `streamdeck/README.md`.
+- **Ready-to-flash appliance image.** A prebuilt Raspberry Pi OS Lite image with the FoodAssistant provisioner baked in is published to the Releases page. Flash it with Raspberry Pi Imager, set wifi in the Imager GUI, and boot: no config files, no terminal. The device auto-detects an attached display (launches the kiosk) and a plugged-in Stream Deck, and takes its timezone from the OS.
+- **Stream Deck controller** (`streamdeck/`). Drive an Elgato Stream Deck or embedded Stream Deck Module (6, 15, or 32 keys) as a physical control surface. Keys show live counts (items expiring soon, scans waiting to commit) and trigger actions like committing pending scans or steering the attached kiosk browser. Key text is large and legible, scales to each deck's pixel density, and the deck can be rotated 0/90/180/270 degrees. Includes a systemd unit, udev rule, and example config. See `streamdeck/README.md`.
+- **Optional AI.** FoodAssistant now works without an AI provider. Inventory, expiry tracking, manual entry, and barcode lookup via Open Food Facts all keep working; photo import, receipt scanning, and recipe suggestions are simply off until you add a provider. Choose "None" in the setup wizard or **Settings → AI**.
+- **Guided setup wizard.** First-time setup is now a step-by-step flow (welcome, security, Grocy, AI, optional integrations, done) with clear required fields, instead of one dense form.
+- **Attached-display settings.** A scale (Small to Extra large) and orientation (0/90/180/270) control for a hardware screen wired to the appliance. These apply only to the kiosk display, never to a phone or laptop browsing the app.
+- **About & Credits page** listing the open-source projects FoodAssistant builds on (Grocy, Mealie, Open Food Facts, TheMealDB, and more), with links and a note to support them.
+
+### Changed
+- Default Gemini model is now `gemini-2.5-flash` (the old `gemini-1.5-flash` default is no longer available).
+- README rewritten with a "Why FoodAssistant?" section; the full API reference moved to `docs/api.md`.
 
 ### Fixed
-- **Theme now saves immediately.** Picking a theme in **Settings, Interface** applies and persists right away instead of waiting for **Save All**, so the choice sticks across pages and devices.
+- **Theme and display scale save immediately.** Picking a theme or scale in **Settings → Interface** applies and persists right away instead of waiting for **Save All**.
+- QR code is now scannable on dark themes (white background), and the QR modal closes reliably.
+- The appliance first boot no longer clobbers Raspberry Pi Imager's wifi/SSH/user setup (our provisioner script was renamed to avoid the collision).
 
 ## [1.4.0]
 
