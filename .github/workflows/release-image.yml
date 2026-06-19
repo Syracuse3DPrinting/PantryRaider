@@ -7,12 +7,13 @@ name: Build appliance SD image
 # and Stream Deck and takes its timezone from the OS.
 #
 # Triggers:
-#   - Publishing a GitHub Release: the image is attached to that release.
+#   - Pushing a version tag (v*): builds the image, creates the GitHub Release
+#     for that tag if needed, and attaches the image to it.
 #   - Manual run (workflow_dispatch): the image is uploaded as a build artifact.
 
 on:
-  release:
-    types: [published]
+  push:
+    tags: ["v*"]
   workflow_dispatch:
     inputs:
       pios_url:
@@ -63,7 +64,7 @@ jobs:
         id: pack
         run: |
           set -euo pipefail
-          VER="${{ github.event.release.tag_name }}"
+          VER="${{ github.ref_type == 'tag' && github.ref_name || '' }}"
           [ -n "$VER" ] || VER="$(date -u +%Y%m%d)"
           OUT="foodassistant-appliance-${VER}-arm64.img"
           mv base.img "$OUT"
@@ -73,16 +74,19 @@ jobs:
           echo "checksum=${OUT}.xz.sha256" >> "$GITHUB_OUTPUT"
           ls -lh "${OUT}.xz"
 
-      - name: Attach to the release
-        if: github.event_name == 'release'
+      - name: Create the release and attach the image (tag push)
+        if: github.ref_type == 'tag'
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          generate_release_notes: true
           files: |
             ${{ steps.pack.outputs.artifact }}
             ${{ steps.pack.outputs.checksum }}
 
       - name: Upload as a build artifact (manual runs)
-        if: github.event_name != 'release'
+        if: github.ref_type != 'tag'
         uses: actions/upload-artifact@v4
         with:
           name: appliance-image
