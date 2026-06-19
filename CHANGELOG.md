@@ -10,6 +10,9 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 
 ## [Unreleased]
 
+### Added
+- **Deployment modes in setup.** The first setup step now asks how the device is used. On a Raspberry Pi you choose **Pi Hosted** (everything runs on the Pi, with or without a screen) or **Pi Remote** (a thin control surface that drives a Stream Deck and/or kiosk pointed at a FoodAssistant server already running elsewhere); on other hardware it stays **Server hosted**. Pi Remote installs no local Grocy or Docker, so it runs on a Pi 3, and the wizard skips the Grocy and AI steps for it. The choice is detected and offered automatically based on the board.
+
 ## [1.5.0]
 
 ### Added

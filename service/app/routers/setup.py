@@ -7,8 +7,10 @@ from ..config import (
     settings, APP_VERSION, THEMES, _DEFAULT_THEME,
     UI_SCALES, _DEFAULT_UI_SCALE,
     DISPLAY_ROTATIONS, _DEFAULT_DISPLAY_ROTATION,
+    DEPLOYMENT_MODES, _DEFAULT_DEPLOYMENT_MODE,
 )
 from ..dependencies import reset_providers
+from ..hardware import is_raspberry_pi, board_model
 from ..navigation import all_tabs
 from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
@@ -66,6 +68,8 @@ class SetupPayload(BaseModel):
     ui_theme: str = _DEFAULT_THEME
     ui_scale: str = _DEFAULT_UI_SCALE
     display_rotation: int = _DEFAULT_DISPLAY_ROTATION
+    deployment_mode: str = ""
+    remote_server_url: str = ""
     barcode_llm_fallback: bool = False
     barcode_autocheck_shopping: bool = False
     cook_ai_context: str = ""
@@ -84,6 +88,26 @@ class TestGrocyPayload(BaseModel):
 class TestMealiePayload(BaseModel):
     mealie_base_url: str = ""
     mealie_api_key: str = ""
+
+
+class TestRemotePayload(BaseModel):
+    remote_server_url: str = ""
+
+
+@router.post("/test/remote")
+async def test_remote(payload: TestRemotePayload):
+    """Check that a Pi Remote can reach the FoodAssistant server it controls."""
+    url = (payload.remote_server_url or settings.remote_server_url).rstrip("/")
+    if not url:
+        return {"ok": False, "error": "Server URL is required."}
+    try:
+        async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
+            r = await client.get(f"{url}/health")
+        if r.status_code == 200:
+            return {"ok": True, "message": f"Connected — FoodAssistant reachable at {url}"}
+        return {"ok": False, "error": f"HTTP {r.status_code} from {url}/health"}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 
 class TestProviderPayload(BaseModel):
@@ -118,11 +142,27 @@ async def _detect_local_grocy() -> str:
     return ""
 
 
+def available_modes() -> dict:
+    """Deployment modes offered on this host.
+
+    On a Raspberry Pi we offer the two Pi modes and hide "Server hosted"
+    (which targets a general server). Elsewhere only "Server hosted" applies.
+    """
+    pi = is_raspberry_pi()
+    return {k: v for k, v in DEPLOYMENT_MODES.items() if v["pi"] == pi}
+
+
 @router.get("", response_class=HTMLResponse)
 async def setup_page(request: Request):
     suggested_grocy_url = ""
     if not settings.grocy_base_url or settings.grocy_base_url == "http://grocy:80":
         suggested_grocy_url = await _detect_local_grocy()
+    modes = available_modes()
+    # Default the picker: keep the saved choice if still valid, else the only
+    # mode that fits this host (or the generic default).
+    current_mode = settings.deployment_mode
+    if current_mode not in modes:
+        current_mode = next(iter(modes), _DEFAULT_DEPLOYMENT_MODE)
     return templates.TemplateResponse(request, "setup.html", {
         "request": request,
         "s": settings,
@@ -136,7 +176,33 @@ async def setup_page(request: Request):
         "ui_scales": UI_SCALES,
         "display_rotations": DISPLAY_ROTATIONS,
         "suggested_grocy_url": suggested_grocy_url,
+        "deployment_modes": modes,
+        "current_mode": current_mode,
+        "is_pi": is_raspberry_pi(),
+        "board_model": board_model(),
     })
+
+
+class ModePayload(BaseModel):
+    deployment_mode: str = _DEFAULT_DEPLOYMENT_MODE
+    remote_server_url: str = ""
+
+
+@router.post("/mode")
+async def save_mode(payload: ModePayload):
+    """Persist the deployment mode chosen on wizard step 1.
+
+    Saved on its own (before the rest of setup) so the wizard can branch and,
+    on a Pi, the provisioner can read the choice to decide what to install.
+    """
+    mode = payload.deployment_mode
+    if mode not in DEPLOYMENT_MODES:
+        return JSONResponse({"ok": False, "error": "Unknown deployment mode."})
+    data = {"deployment_mode": mode}
+    if mode == "pi_remote":
+        data["remote_server_url"] = payload.remote_server_url.rstrip("/")
+    settings.save(data)
+    return {"ok": True, "mode": mode}
 
 
 class ThemePayload(BaseModel):
@@ -172,6 +238,12 @@ async def save_setup(payload: SetupPayload):
             data[f] = ""             # explicit clear
     if data.get("display_rotation") not in DISPLAY_ROTATIONS:
         data["display_rotation"] = _DEFAULT_DISPLAY_ROTATION
+    # Drop an unknown deployment mode rather than persisting a broken value;
+    # an empty/absent mode leaves the existing choice untouched.
+    if data.get("deployment_mode") and data["deployment_mode"] not in DEPLOYMENT_MODES:
+        data.pop("deployment_mode", None)
+    if data.get("remote_server_url"):
+        data["remote_server_url"] = data["remote_server_url"].rstrip("/")
     settings.save(data)
     reset_providers()   # apply new provider/model/key without a restart
     from ..services.mealie import reset_cache as reset_mealie_cache, reset_staple_cache

@@ -94,14 +94,47 @@ load_config() {
   ENABLE_MEALIE="${ENABLE_MEALIE:-false}"
   ENABLE_OLLAMA="${ENABLE_OLLAMA:-false}"
   ENABLE_KIOSK="${ENABLE_KIOSK:-auto}"
-  # ?kiosk=1 latches kiosk mode in the browser so the attached-display scale
-  # and orientation settings apply (and never affect other browsers).
-  KIOSK_URL="${KIOSK_URL:-http://localhost:9284/ui/?kiosk=1}"
   ENABLE_STREAMDECK="${ENABLE_STREAMDECK:-auto}"
   FOODASSISTANT_TAG="${FOODASSISTANT_TAG:-latest}"
   INSTALL_DIR="${INSTALL_DIR:-/opt/foodassistant}"
 
-  log "Config: HOSTNAME=$HOSTNAME TZ=$TZ MEALIE=$ENABLE_MEALIE OLLAMA=$ENABLE_OLLAMA KIOSK=$ENABLE_KIOSK STREAMDECK=$ENABLE_STREAMDECK TAG=$FOODASSISTANT_TAG DIR=$INSTALL_DIR"
+  # Deployment mode (see DEPLOYMENT_MODES in the app's config.py):
+  #   pi_remote        - thin client: NO Docker/Grocy/Mealie here, just a kiosk
+  #                      and/or Stream Deck pointed at REMOTE_SERVER_URL.
+  #   pi_hosted/server - full local stack (the default behaviour).
+  # The wizard writes the chosen mode to the app's settings.json; on a Pi Remote
+  # box there is no local app to write it, so it comes from config.env instead.
+  # An existing settings.json wins (a user can switch modes after first boot).
+  DEPLOYMENT_MODE="${DEPLOYMENT_MODE:-}"
+  REMOTE_SERVER_URL="${REMOTE_SERVER_URL:-}"
+  _load_mode_from_settings
+
+  # The kiosk URL defaults to this device, except in remote mode where it points
+  # at the server being controlled. ?kiosk=1 latches kiosk mode in the browser
+  # so the attached-display scale/orientation apply (and never affect others).
+  if is_remote_mode; then
+    KIOSK_URL="${KIOSK_URL:-${REMOTE_SERVER_URL%/}/ui/?kiosk=1}"
+  else
+    KIOSK_URL="${KIOSK_URL:-http://localhost:9284/ui/?kiosk=1}"
+  fi
+
+  log "Config: HOSTNAME=$HOSTNAME TZ=$TZ MODE=${DEPLOYMENT_MODE:-<default>} MEALIE=$ENABLE_MEALIE OLLAMA=$ENABLE_OLLAMA KIOSK=$ENABLE_KIOSK STREAMDECK=$ENABLE_STREAMDECK TAG=$FOODASSISTANT_TAG DIR=$INSTALL_DIR"
+}
+
+# True when this device is a thin remote control surface (no local stack).
+is_remote_mode() { [ "${DEPLOYMENT_MODE:-}" = "pi_remote" ]; }
+
+# Pull deployment_mode / remote_server_url from a settings.json the wizard may
+# have written, so a choice made in the UI survives a re-provision. Best effort:
+# a tiny grep-based read keeps us free of a python/jq dependency here.
+_load_mode_from_settings() {
+  local sf="${SETTINGS_JSON:-$INSTALL_DIR/data/settings.json}"
+  [ -r "$sf" ] || return 0
+  local mode url
+  mode="$(grep -o '"deployment_mode"[[:space:]]*:[[:space:]]*"[^"]*"' "$sf" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')"
+  url="$(grep -o '"remote_server_url"[[:space:]]*:[[:space:]]*"[^"]*"' "$sf" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')"
+  [ -n "$mode" ] && DEPLOYMENT_MODE="$mode"
+  [ -n "$url" ] && REMOTE_SERVER_URL="$url"
 }
 
 # Timezone the OS is already set to (Raspberry Pi Imager writes this), so the
@@ -147,6 +180,25 @@ compose_profiles() {
   is_true "$ENABLE_OLLAMA" && profiles="$profiles --profile with-ollama"
   # Trim leading space.
   printf '%s' "${profiles# }"
+}
+
+# Ensure a local clone of the repo exists at $REPO_DIR, cloning it if needed.
+# A flashed/baked image carries the assets next to this script, but a device
+# provisioned by piping this script through bash (curl ... | sudo bash) has
+# only the script itself. In that case we clone the public repo so the compose
+# file, service build context, and Stream Deck package are all available.
+ensure_repo() {
+  [ -d "$REPO_DIR/.git" ] && return 0
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would clone $REPO_URL to $REPO_DIR"
+    return 0
+  fi
+  command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
+  command -v git >/dev/null 2>&1 \
+    || die "git unavailable; cannot fetch repo assets. Install git and re-run."
+  log "Cloning $REPO_URL to $REPO_DIR"
+  run git clone --depth 1 "$REPO_URL" "$REPO_DIR" \
+    || die "Could not clone $REPO_URL. Check internet access and try again."
 }
 
 # ── Step: hostname ─────────────────────────────────────────────────────────
@@ -263,7 +315,16 @@ EOF
 deploy_stack() {
   log "Deploying stack into $INSTALL_DIR"
   run mkdir -p "$INSTALL_DIR"
-  [ -f "$COMPOSE_SRC" ] || die "Appliance compose file not found at $COMPOSE_SRC"
+  # The compose file normally sits next to this script (baked image / git
+  # checkout). When the script is run standalone (curl ... | bash) it is not
+  # present, so fall back to a cloned copy of the repo.
+  if [ ! -f "$COMPOSE_SRC" ]; then
+    log "Compose file not found at $COMPOSE_SRC; fetching repo assets"
+    ensure_repo
+    COMPOSE_SRC="$REPO_DIR/scripts/image-build/docker-compose.appliance.yml"
+    [ -f "$COMPOSE_SRC" ] || [ "$DRY_RUN" = "1" ] \
+      || die "Appliance compose file still not found at $COMPOSE_SRC after clone"
+  fi
   run cp "$COMPOSE_SRC" "$INSTALL_DIR/docker-compose.yml"
   write_env_file "$INSTALL_DIR/.env"
 
@@ -285,14 +346,7 @@ deploy_stack() {
     log "Image pull failed; building from local source at $REPO_DIR/service (this takes a few minutes)"
     # Self-heal: a flashed device only carries the boot payload, not the full
     # repo. Clone it (the repo is public) so the build context exists.
-    if [ ! -d "$REPO_DIR/service" ]; then
-      command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
-      command -v git >/dev/null 2>&1 \
-        || die "git unavailable and image pull failed. Make the GHCR package public or pre-clone the repo to $REPO_DIR."
-      log "Source not present; cloning $REPO_URL to $REPO_DIR"
-      run git clone --depth 1 "$REPO_URL" "$REPO_DIR" \
-        || die "Could not clone $REPO_URL. Check internet, or make the GHCR package public."
-    fi
+    [ -d "$REPO_DIR/service" ] || ensure_repo
     # shellcheck disable=SC2086
     ( cd "$INSTALL_DIR" && docker compose $profiles build service ) \
       || die "Local build also failed. Check $REPO_DIR/service and Docker logs."
@@ -309,6 +363,18 @@ has_display() {
   [ -e /dev/dri/card0 ] && return 0
   [ -n "${WAYLAND_DISPLAY:-}" ] && return 0
   [ -n "${DISPLAY:-}" ] && return 0
+  return 1
+}
+
+# Returns 0 when the host is a Raspberry Pi (reads the device-tree model). Used
+# to decide which deployment modes apply and (eventually) to skip the heavy
+# install on a thin-client Pi Remote. FORCE_PI overrides for tests.
+is_raspberry_pi() {
+  [ -n "${FORCE_PI:-}" ] && return 0   # test hook
+  local f
+  for f in /proc/device-tree/model /sys/firmware/devicetree/base/model; do
+    [ -r "$f" ] && tr -d '\0' < "$f" | grep -qi 'raspberry pi' && return 0
+  done
   return 1
 }
 
@@ -412,12 +478,8 @@ configure_streamdeck() {
     sd_src="$REPO_DIR/streamdeck/foodassistant_streamdeck"
   fi
   # Not present anywhere yet: clone the public repo so the package exists.
-  if [ -z "$sd_src" ] && [ ! -d "$REPO_DIR/streamdeck/foodassistant_streamdeck" ]; then
-    command -v git >/dev/null 2>&1 || apt_install git || warn "git install failed"
-    if command -v git >/dev/null 2>&1; then
-      log "Stream Deck package not present; cloning $REPO_URL to $REPO_DIR"
-      run git clone --depth 1 "$REPO_URL" "$REPO_DIR" || warn "clone for streamdeck failed"
-    fi
+  if [ -z "$sd_src" ]; then
+    ensure_repo
     [ -d "$REPO_DIR/streamdeck/foodassistant_streamdeck" ] && sd_src="$REPO_DIR/streamdeck/foodassistant_streamdeck"
   fi
 
@@ -474,9 +536,16 @@ configure_streamdeck() {
     warn "plugdev group not found; skipping usermod"
   fi
 
+  # In remote mode the controller talks to the remote server, not localhost;
+  # the controller reads FOODASSISTANT_BASE_URL from its environment.
+  local sd_base_env=""
+  if is_remote_mode && [ -n "$REMOTE_SERVER_URL" ]; then
+    sd_base_env="Environment=FOODASSISTANT_BASE_URL=${REMOTE_SERVER_URL%/}"
+  fi
+
   # Write the systemd service unit.
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN would write /etc/systemd/system/foodassistant-streamdeck.service for user $sd_user"
+    log "DRY_RUN would write /etc/systemd/system/foodassistant-streamdeck.service for user $sd_user${sd_base_env:+ (base ${REMOTE_SERVER_URL%/})}"
     return 0
   fi
   cat > /etc/systemd/system/foodassistant-streamdeck.service <<EOF
@@ -491,6 +560,7 @@ WorkingDirectory=/opt/foodassistant
 Restart=always
 RestartSec=5
 User=$sd_user
+${sd_base_env}
 
 [Install]
 WantedBy=multi-user.target
@@ -543,6 +613,23 @@ main() {
   configure_hostname
   configure_timezone
   configure_mdns
+
+  if is_remote_mode; then
+    # Thin client: no Docker, no Grocy/Mealie, no local FoodAssistant service.
+    # Just a kiosk and/or Stream Deck pointed at the remote server. This is what
+    # keeps a Pi Remote viable on low-spec hardware (Pi 3).
+    if [ -z "$REMOTE_SERVER_URL" ]; then
+      warn "Pi Remote mode selected but REMOTE_SERVER_URL is empty; the kiosk/Stream Deck will have no server to talk to. Set REMOTE_SERVER_URL in config.env."
+    fi
+    log "Pi Remote mode: skipping Docker and the local stack; controlling ${REMOTE_SERVER_URL:-<unset>}"
+    configure_kiosk
+    configure_streamdeck
+    mark_done
+    log "FoodAssistant Pi Remote first-boot complete."
+    log "  This device controls: ${REMOTE_SERVER_URL:-<set REMOTE_SERVER_URL>}"
+    return 0
+  fi
+
   install_docker
   deploy_stack
   configure_kiosk
