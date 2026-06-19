@@ -45,6 +45,26 @@ _DEFAULT_UI_SCALE = "normal"
 DISPLAY_ROTATIONS = (0, 90, 180, 270)
 _DEFAULT_DISPLAY_ROTATION = 0
 
+# Deployment modes chosen on the first wizard step. They steer the rest of
+# setup and (on a Pi) what the first-boot provisioner installs:
+#   server     - FoodAssistant on a general server; connect to separately
+#                running Grocy/Mealie. The only non-Pi mode.
+#   pi_hosted  - everything runs on this Pi (FoodAssistant + Grocy + Mealie),
+#                with or without an attached display (kiosk auto-enables when a
+#                display is present, and a display can be added later).
+#   pi_remote  - thin client: this device only drives a Stream Deck and/or
+#                kiosk pointed at an existing FoodAssistant server on the LAN.
+#                No local Docker/Grocy/Mealie; runs on low-spec hardware.
+DEPLOYMENT_MODES = {
+    "server":    {"label": "Server hosted", "pi": False, "local_stack": True,
+                  "remote": False},
+    "pi_hosted": {"label": "Pi Hosted",     "pi": True,  "local_stack": True,
+                  "remote": False},
+    "pi_remote": {"label": "Pi Remote",     "pi": True,  "local_stack": False,
+                  "remote": True},
+}
+_DEFAULT_DEPLOYMENT_MODE = "server"
+
 
 def theme_info(name: str) -> dict:
     """Resolve a theme name to its descriptor, falling back to the default."""
@@ -66,6 +86,7 @@ _SAVEABLE = [
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
+    "deployment_mode", "remote_server_url",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
@@ -172,6 +193,18 @@ class Settings(BaseSettings):
     # DISPLAY_ROTATIONS; applied to the kiosk display only.
     display_rotation: int = _DEFAULT_DISPLAY_ROTATION
 
+    # Deployment mode chosen in the wizard (one of DEPLOYMENT_MODES). Empty
+    # until the user picks one. In "pi_remote" mode this device is only a
+    # control surface for a remote server (remote_server_url), so the local
+    # Grocy/Mealie requirements in is_configured() do not apply.
+    deployment_mode: str = ""
+    # For pi_remote: the base URL of the FoodAssistant server this device
+    # controls (e.g. http://192.168.1.50:9284). Unused in the other modes.
+    remote_server_url: str = ""
+
+    def is_remote_mode(self) -> bool:
+        return self.deployment_mode == "pi_remote"
+
     # User-defined storage categories beyond the four built-ins. Each is a
     # dict {key,label,icon,color,bg,location,match}. See storage_categories.py.
     custom_storage_categories: list = []
@@ -209,6 +242,15 @@ class Settings(BaseSettings):
 
     def is_configured(self) -> bool:
         """True when the minimum required settings have been supplied."""
+        # Pi Remote is a thin control surface: it has no local Grocy, so the
+        # only requirement is a reachable remote server URL (plus the usual
+        # password gate). The local-stack checks below do not apply.
+        if self.is_remote_mode():
+            if not self.remote_server_url:
+                return False
+            if self.auth_required and not self.auth_password:
+                return False
+            return True
         if not self.grocy_api_key:
             return False
         if not self.grocy_base_url or self.grocy_base_url == _DEFAULT_GROCY_URL:

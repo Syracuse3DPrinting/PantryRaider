@@ -333,6 +333,18 @@ has_display() {
   return 1
 }
 
+# Returns 0 when the host is a Raspberry Pi (reads the device-tree model). Used
+# to decide which deployment modes apply and (eventually) to skip the heavy
+# install on a thin-client Pi Remote. FORCE_PI overrides for tests.
+is_raspberry_pi() {
+  [ -n "${FORCE_PI:-}" ] && return 0   # test hook
+  local f
+  for f in /proc/device-tree/model /sys/firmware/devicetree/base/model; do
+    [ -r "$f" ] && tr -d '\0' < "$f" | grep -qi 'raspberry pi' && return 0
+  done
+  return 1
+}
+
 # Returns 0 if an Elgato Stream Deck (USB vendor 0fd9) is attached now.
 has_streamdeck() {
   [ -n "${FORCE_STREAMDECK:-}" ] && return 0   # test hook
