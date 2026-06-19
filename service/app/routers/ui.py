@@ -164,6 +164,14 @@ async def consume_item(request: Request, product_id: int, amount: float = Form(1
     return ingress_redirect(request, f"/ui/expiring?msg={msg}&msg_type={msg_type}")
 
 
+@router.get("/journal", response_class=HTMLResponse)
+async def journal_page(request: Request):
+    return templates.TemplateResponse(request, "journal.html", {
+        "request": request,
+        "active": "inventory",
+    })
+
+
 @router.get("/defaults", response_class=HTMLResponse)
 def defaults_page(
     request: Request,

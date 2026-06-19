@@ -103,6 +103,18 @@ async def delete_shopping_item(item_id: int):
     return {"ok": True}
 
 
+# Stock journal -----------------------------------------------------------
+
+@router.get("/stock-log")
+async def get_stock_log(limit: int = 50):
+    g = _client()
+    try:
+        rows = await g.get_stock_log(limit=min(limit, 200))
+    except GrocyError as e:
+        raise HTTPException(502, str(e))
+    return {"entries": rows}
+
+
 @router.post("/shopping/clear-done")
 async def clear_done_items(body: dict = Body(...)):
     g = _client()

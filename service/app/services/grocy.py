@@ -302,6 +302,24 @@ class GrocyClient:
             await self.delete_shopping_item(iid)
         return len(done_ids)
 
+    async def get_stock_log(self, limit: int = 50) -> list[dict]:
+        """Return recent stock log entries, newest first, enriched with product names."""
+        rows = await self._get(f"/objects/stock_log?limit={limit}&order=row_created_timestamp%3Adesc")
+        products = {str(p["id"]): p["name"] for p in await self.get_products()}
+        result = []
+        for row in rows:
+            pid = str(row.get("product_id") or "")
+            result.append({
+                "id": row.get("id"),
+                "timestamp": (row.get("row_created_timestamp") or "")[:19],
+                "product_name": products.get(pid, f"Product {pid}"),
+                "transaction_type": row.get("transaction_type") or "",
+                "amount": float(row.get("amount") or 0),
+                "note": row.get("note") or "",
+                "location_id": row.get("location_id"),
+            })
+        return result
+
     async def health_check(self) -> bool:
         try:
             await self._get("/system/info")
