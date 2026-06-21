@@ -73,6 +73,9 @@ class SetupPayload(BaseModel):
     barcode_llm_fallback: bool = False
     barcode_autocheck_shopping: bool = False
     cook_ai_context: str = ""
+    has_streamdeck: bool = False
+    streamdeck_key_count: int = 0
+    display_touch: bool = False
     auth_required: bool = True
     auth_password: str = ""
     api_key: str = ""

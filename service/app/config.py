@@ -87,6 +87,7 @@ _SAVEABLE = [
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
+    "has_streamdeck", "streamdeck_key_count", "display_touch",
     "deployment_mode", "remote_server_url",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
@@ -197,6 +198,13 @@ class Settings(BaseSettings):
     # Rotation (degrees) of the attached hardware display. One of
     # DISPLAY_ROTATIONS; applied to the kiosk display only.
     display_rotation: int = _DEFAULT_DISPLAY_ROTATION
+
+    # Hardware declared in the wizard (Pi modes only). has_streamdeck enables
+    # the controller setup hints; streamdeck_key_count is 6, 15, or 32.
+    # display_touch flags a touch-compatible kiosk screen for future UI hints.
+    has_streamdeck: bool = False
+    streamdeck_key_count: int = 0
+    display_touch: bool = False
 
     # Deployment mode chosen in the wizard (one of DEPLOYMENT_MODES). Empty
     # until the user picks one. In "pi_remote" mode this device is only a

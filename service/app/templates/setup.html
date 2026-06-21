@@ -102,13 +102,15 @@
     <div class="wiz-connector" id="con-1-2"></div>
     <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-2">2</div><div class="wiz-step-label">Security</div></div>
     <div class="wiz-connector" id="con-2-3"></div>
-    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-3">3</div><div class="wiz-step-label">Grocy</div></div>
+    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-3">3</div><div class="wiz-step-label">Hardware</div></div>
     <div class="wiz-connector" id="con-3-4"></div>
-    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-4">4</div><div class="wiz-step-label">AI</div></div>
+    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-4">4</div><div class="wiz-step-label">Grocy</div></div>
     <div class="wiz-connector" id="con-4-5"></div>
-    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-5">5</div><div class="wiz-step-label">Optional</div></div>
+    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-5">5</div><div class="wiz-step-label">AI</div></div>
     <div class="wiz-connector" id="con-5-6"></div>
-    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-6">6</div><div class="wiz-step-label">Done</div></div>
+    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-6">6</div><div class="wiz-step-label">Optional</div></div>
+    <div class="wiz-connector" id="con-6-7"></div>
+    <div class="wiz-step-dot"><div class="wiz-step-num" id="dot-7">7</div><div class="wiz-step-label">Done</div></div>
   </div>
 
   <!-- Step 1: Welcome / deployment mode -->
@@ -198,8 +200,75 @@
     </div>
   </div>
 
-  <!-- Step 3: Grocy -->
+  <!-- Step 3: Hardware -->
   <div class="wiz-card d-none" id="wiz-step-3">
+    <div class="wiz-card-title"><i class="bi bi-cpu text-info me-2"></i>Hardware</div>
+    <div class="wiz-card-sub">Tell FoodAssistant what's connected so it can configure the display and Stream Deck correctly. Skip anything you don't have.</div>
+
+    <div class="section-card mb-3">
+      <div class="section-title"><i class="bi bi-hdd-stack me-1"></i>Stream Deck</div>
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" role="switch" id="has_streamdeck"
+               {{ 'checked' if s.has_streamdeck else '' }}
+               onchange="toggleStreamDeckOptions()">
+        <label class="form-check-label" for="has_streamdeck">Stream Deck connected to this device</label>
+      </div>
+      <div id="wiz-streamdeck-opts" class="{{ '' if s.has_streamdeck else 'd-none' }}">
+        <label class="form-label mt-2">Key count <span class="text-secondary small">(which model?)</span></label>
+        <select class="form-select form-select-sm w-auto" id="streamdeck_key_count">
+          <option value="6" {{ 'selected' if s.streamdeck_key_count == 6 else '' }}>6 keys (Stream Deck Mini)</option>
+          <option value="15" {{ 'selected' if (s.streamdeck_key_count == 15 or not s.streamdeck_key_count) else '' }}>15 keys (Stream Deck MK.2 / Classic)</option>
+          <option value="32" {{ 'selected' if s.streamdeck_key_count == 32 else '' }}>32 keys (Stream Deck XL)</option>
+        </select>
+        <div class="form-text">Used to fill the key layout correctly. You can also set this in <code>config.toml</code>.</div>
+      </div>
+    </div>
+
+    <div class="section-card mb-3">
+      <div class="section-title"><i class="bi bi-display me-1"></i>Display</div>
+      <div class="form-check form-switch mb-2">
+        <input class="form-check-input" type="checkbox" role="switch" id="wiz_has_display"
+               {{ 'checked' if (s.ui_scale != "normal" or s.display_rotation != 0 or s.display_touch) else '' }}
+               onchange="toggleDisplayOptions()">
+        <label class="form-check-label" for="wiz_has_display">HDMI display connected to this device</label>
+      </div>
+      <div id="wiz-display-opts" class="{{ '' if (s.ui_scale != 'normal' or s.display_rotation != 0 or s.display_touch) else 'd-none' }}">
+        <div class="row g-3 mb-2">
+          <div class="col-sm-6">
+            <label class="form-label">Screen size</label>
+            <select class="form-select form-select-sm" id="ui_scale_wiz" onchange="syncScale()">
+              {% for key, sc in ui_scales.items() %}
+              <option value="{{ key }}" {{ 'selected' if s.ui_scale == key else '' }}>{{ sc.label }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Controls the zoom level in kiosk mode.</div>
+          </div>
+          <div class="col-sm-6">
+            <label class="form-label">Orientation</label>
+            <select class="form-select form-select-sm" id="display_rotation_wiz" onchange="syncRotation()">
+              {% for deg in display_rotations %}
+              <option value="{{ deg }}" {{ 'selected' if s.display_rotation == deg else '' }}>{{ deg }}&deg;{{ ' (normal)' if deg == 0 else '' }}</option>
+              {% endfor %}
+            </select>
+            <div class="form-text">Rotate if the display is mounted sideways or upside-down.</div>
+          </div>
+        </div>
+        <div class="form-check form-switch">
+          <input class="form-check-input" type="checkbox" role="switch" id="display_touch"
+                 {{ 'checked' if s.display_touch else '' }}>
+          <label class="form-check-label" for="display_touch">Touch-compatible display</label>
+        </div>
+      </div>
+    </div>
+
+    <div class="d-flex justify-content-between">
+      <button class="btn btn-outline-secondary" onclick="wizBack()"><i class="bi bi-arrow-left me-1"></i>Back</button>
+      <button class="btn btn-primary" onclick="wizNext()">Next <i class="bi bi-arrow-right ms-1"></i></button>
+    </div>
+  </div>
+
+  <!-- Step 4: Grocy -->
+  <div class="wiz-card d-none" id="wiz-step-4">
     <div class="wiz-card-title"><i class="bi bi-fridge text-info me-2"></i>Grocy — Inventory Backend</div>
     <div class="wiz-card-sub">Grocy stores your stock, locations, and consumption history. Connect it here.</div>
 
@@ -249,8 +318,8 @@
     </div>
   </div>
 
-  <!-- Step 4: AI Provider -->
-  <div class="wiz-card d-none" id="wiz-step-4">
+  <!-- Step 5: AI Provider -->
+  <div class="wiz-card d-none" id="wiz-step-5">
     <div class="wiz-card-title"><i class="bi bi-magic text-warning me-2"></i>AI Provider</div>
     <div class="wiz-card-sub">Analyzes food photos, receipts, and barcodes. Optional — you can add this later.</div>
 
@@ -337,8 +406,8 @@
     </div>
   </div>
 
-  <!-- Step 5: Optional Integrations -->
-  <div class="wiz-card d-none" id="wiz-step-5">
+  <!-- Step 6: Optional Integrations -->
+  <div class="wiz-card d-none" id="wiz-step-6">
     <div class="wiz-card-title"><i class="bi bi-puzzle text-secondary me-2"></i>Optional Integrations</div>
     <div class="wiz-card-sub">Connect a barcode scanner, Mealie for recipes, and more. All optional — add later in Settings.</div>
 
@@ -475,8 +544,8 @@
     </div>
   </div>
 
-  <!-- Step 6: Done -->
-  <div class="wiz-card d-none" id="wiz-step-6">
+  <!-- Step 7: Done -->
+  <div class="wiz-card d-none" id="wiz-step-7">
     <div class="wiz-card-title"><i class="bi bi-check-circle-fill text-success me-2"></i>Ready to Go</div>
     <div class="wiz-card-sub">Here's what you've configured. Click the button below to save and start using FoodAssistant.</div>
 
@@ -1600,8 +1669,11 @@ function buildPayload() {
     nav_order:       navState.map(t => t.key).join(','),
     nav_hidden:      navState.filter(t => t.hidden).map(t => t.key).join(','),
     ui_theme:        document.getElementById('ui_theme')?.value || 'dark',
-    ui_scale:        document.getElementById('ui_scale')?.value || 'normal',
-    display_rotation: parseInt(document.getElementById('display_rotation')?.value || '0', 10),
+    ui_scale:        document.getElementById('ui_scale_wiz')?.value || document.getElementById('ui_scale')?.value || 'normal',
+    display_rotation: parseInt(document.getElementById('display_rotation_wiz')?.value ?? document.getElementById('display_rotation')?.value ?? '0', 10),
+    has_streamdeck:  document.getElementById('has_streamdeck')?.checked || false,
+    streamdeck_key_count: parseInt(document.getElementById('streamdeck_key_count')?.value || '0', 10),
+    display_touch:   document.getElementById('display_touch')?.checked || false,
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
     api_key:         secretVal('api_key'),
@@ -1830,16 +1902,20 @@ async function _initTunnelStatus() {
 {% if not configured %}
 
 let _wizStep = 1;
-const _WIZ_TOTAL = 6;
+const _WIZ_TOTAL = 7;
 // Deployment mode: 'server' | 'pi_hosted' | 'pi_remote'. Drives Grocy URL
 // pre-fill and which steps the wizard shows.
 let _installMode = {{ current_mode | tojson }};
 
-// Steps shown for the current mode. Pi Remote installs no local stack, so it
-// skips Grocy (3), AI (4), and Optional integrations (5) — just mode, security,
-// and done.
+// Steps shown for each mode.
+// Hardware (3) is shown only on Pi modes (hosted/remote). Server installs
+// skip it since there is no attached display or Stream Deck.
+// Pi Remote skips Grocy (4), AI (5), and Optional (6) — just
+// mode, security, hardware, and done.
 function _wizStepSeq() {
-  return _installMode === 'pi_remote' ? [1, 2, 6] : [1, 2, 3, 4, 5, 6];
+  if (_installMode === 'pi_remote') return [1, 2, 3, 7];
+  if (_installMode === 'pi_hosted') return [1, 2, 3, 4, 5, 6, 7];
+  return [1, 2, 4, 5, 6, 7];  // server: skip Hardware
 }
 
 function selectInstallMode(mode) {
@@ -1920,16 +1996,16 @@ function wizNext() {
     }
     _wizSaveMode();
   }
-  if (_wizStep === 3) {
+  if (_wizStep === 4) {
     const url = val('grocy_base_url');
     const link = document.getElementById('grocy-open-link');
     if (link && url) link.href = url;
   }
-  if (_wizStep === 4) wizUpdateAiKeyVisibility();
+  if (_wizStep === 5) wizUpdateAiKeyVisibility();
 
   const next = seq[idx + 1];
-  if (next === 3) _wizApplyInstallMode();  // pre-fill/notes when entering Grocy
-  if (next === 6) _wizBuildSummary();      // build summary before the Done step
+  if (next === 4) _wizApplyInstallMode();  // pre-fill/notes when entering Grocy
+  if (next === 7) _wizBuildSummary();      // build summary before the Done step
   _wizShowStep(next);
 }
 
@@ -1959,6 +2035,28 @@ async function testRemote() {
   }
 }
 
+function toggleStreamDeckOptions() {
+  const checked = document.getElementById('has_streamdeck')?.checked;
+  document.getElementById('wiz-streamdeck-opts')?.classList.toggle('d-none', !checked);
+}
+
+function toggleDisplayOptions() {
+  const checked = document.getElementById('wiz_has_display')?.checked;
+  document.getElementById('wiz-display-opts')?.classList.toggle('d-none', !checked);
+}
+
+function syncScale() {
+  const wizVal = document.getElementById('ui_scale_wiz')?.value;
+  const settingsEl = document.getElementById('ui_scale');
+  if (settingsEl && wizVal) settingsEl.value = wizVal;
+}
+
+function syncRotation() {
+  const wizVal = document.getElementById('display_rotation_wiz')?.value;
+  const settingsEl = document.getElementById('display_rotation');
+  if (settingsEl && wizVal) settingsEl.value = wizVal;
+}
+
 function wizUpdateAiKeyVisibility() {
   const p = document.getElementById('vision_provider')?.value;
   const noneNote = document.getElementById('wiz-ai-none-note');
@@ -1967,7 +2065,7 @@ function wizUpdateAiKeyVisibility() {
   if (testRow) testRow.classList.toggle('d-none', p === 'none');
 }
 
-// Step 3: respond to install mode choice made in Step 1
+// Step 4: respond to install mode choice made in Step 1
 function _wizApplyInstallMode() {
   const applianceNote = document.getElementById('wiz-grocy-appliance-note');
   const urlField = document.getElementById('grocy_base_url');
@@ -1987,7 +2085,7 @@ function _wizApplyInstallMode() {
   }
 }
 
-// Build the Step 6 summary list
+// Build the Step 7 summary list
 function _wizBuildSummary() {
   const el = document.getElementById('wiz-summary');
   if (!el) return;
@@ -2046,9 +2144,9 @@ function _wizBuildSummary() {
   if (grocyUrl && hasGrocyKey) {
     items.push({icon:'bi-fridge text-success', label:'Grocy: ' + grocyUrl, ok:true, detail:''});
   } else if (!grocyUrl) {
-    items.push({icon:'bi-fridge text-danger', label:'Grocy URL not set', ok:false, step:3, detail:'Required.'});
+    items.push({icon:'bi-fridge text-danger', label:'Grocy URL not set', ok:false, step:4, detail:'Required.'});
   } else {
-    items.push({icon:'bi-fridge text-warning', label:'Grocy URL set, no API key', ok:false, step:3, detail:'Add your Grocy API key.'});
+    items.push({icon:'bi-fridge text-warning', label:'Grocy URL set, no API key', ok:false, step:4, detail:'Add your Grocy API key.'});
   }
 
   // AI
@@ -2059,7 +2157,7 @@ function _wizBuildSummary() {
     items.push({icon:'bi-magic text-success', label:'AI: ' + providerLabel, ok:true, detail:''});
   } else {
     const providerLabel = {'gemini':'Gemini','openai':'OpenAI','anthropic':'Anthropic'}[provider] || provider;
-    items.push({icon:'bi-magic text-warning', label:'AI: ' + providerLabel + ' — no API key', ok:false, step:4, detail:'Enter an API key or choose None.'});
+    items.push({icon:'bi-magic text-warning', label:'AI: ' + providerLabel + ' — no API key', ok:false, step:5, detail:'Enter an API key or choose None.'});
   }
 
   // Mealie
@@ -2067,6 +2165,21 @@ function _wizBuildSummary() {
     items.push({icon:'bi-journal-richtext text-success', label:'Mealie: ' + mealieUrl, ok:true, detail:''});
   } else {
     items.push({icon:'bi-journal-richtext text-secondary', label:'Mealie: not configured', ok:true, detail:'Optional — add later from Settings.'});
+  }
+
+  // Hardware (pi_hosted only; pi_remote already returned above)
+  if (_installMode === 'pi_hosted') {
+    const hasDeck = document.getElementById('has_streamdeck')?.checked;
+    const hasDisplay = document.getElementById('wiz_has_display')?.checked;
+    if (hasDeck) {
+      const kc = document.getElementById('streamdeck_key_count')?.value || '15';
+      items.push({icon:'bi-hdd-stack text-info', label:`Stream Deck (${kc} keys)`, ok:true, detail:''});
+    }
+    if (hasDisplay) {
+      const sz = document.getElementById('ui_scale_wiz')?.options[document.getElementById('ui_scale_wiz')?.selectedIndex]?.text || '';
+      const rot = document.getElementById('display_rotation_wiz')?.value || '0';
+      items.push({icon:'bi-display text-info', label:`Display: ${sz}${rot !== '0' ? ', rotated ' + rot + '°' : ''}`, ok:true, detail:''});
+    }
   }
 
   el.innerHTML = items.map(item => `
