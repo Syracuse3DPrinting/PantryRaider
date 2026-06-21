@@ -153,6 +153,68 @@ class WeatherState:
             self._fetched_at = time.monotonic()
 
 
+_HA_STATE_COLOR_ON = "#15803d"
+_HA_STATE_COLOR_OFF = "#475569"
+_HA_STATE_COLOR_ERROR = "#6b7280"
+
+_HA_ON_STATES = frozenset({"on", "home", "open", "playing", "active", "locked"})
+
+
+class HaEntityState:
+    """Caches Home Assistant entity state for a single key.
+
+    Refreshed from the HA REST API. The key shows a green background when
+    the entity is in an "on-like" state and gray otherwise. Unavailable or
+    error states fall back to a neutral gray so the key is never misleading.
+    """
+
+    def __init__(self, entity_id: str, color_on: str = _HA_STATE_COLOR_ON,
+                 color_off: str = _HA_STATE_COLOR_OFF) -> None:
+        self.entity_id = entity_id
+        self.color_on = color_on
+        self.color_off = color_off
+        self._state: str = ""   # raw HA state string
+        self._fetched_at: float = 0.0
+
+    def age_seconds(self) -> float:
+        return time.monotonic() - self._fetched_at
+
+    def is_on(self) -> bool:
+        return self._state.lower() in _HA_ON_STATES
+
+    def label(self, base_label: str) -> str:
+        if not self._fetched_at:
+            return base_label
+        suffix = "On" if self.is_on() else "Off"
+        return f"{base_label}\n{suffix}"
+
+    def color(self, base_color: str) -> str:
+        if not self._fetched_at:
+            return base_color
+        if self._state in ("unavailable", "unknown", ""):
+            return _HA_STATE_COLOR_ERROR
+        return self.color_on if self.is_on() else self.color_off
+
+    async def refresh(self, ha_base_url: str, ha_token: str) -> None:
+        try:
+            import httpx
+            url = f"{ha_base_url.rstrip('/')}/api/states/{self.entity_id}"
+            async with httpx.AsyncClient(timeout=5.0) as client:
+                r = await client.get(
+                    url,
+                    headers={"Authorization": f"Bearer {ha_token}",
+                             "Content-Type": "application/json"},
+                )
+            if r.status_code == 200:
+                self._state = r.json().get("state", "unknown")
+            else:
+                self._state = "unavailable"
+        except Exception:
+            self._state = "unavailable"
+        finally:
+            self._fetched_at = time.monotonic()
+
+
 @dataclass(frozen=True)
 class ActionSpec:
     """Static description of one bindable action."""
@@ -163,6 +225,8 @@ class ActionSpec:
     kind: str             # "status" | "trigger" | "nav" | "system"
     status_field: str = ""   # for kind=="status": which polled count to show
     target_path: str = ""    # for kind=="nav": app path to open in the kiosk
+    ha_entity_id: str = ""   # for kind=="ha_entity": HA entity to show/toggle
+    ha_service: str = ""     # for kind=="ha_entity": HA service to call on press
     description: str = ""
 
 
@@ -268,6 +332,16 @@ ACTIONS: dict[str, ActionSpec] = {
         description="Current weather from wttr.in. Configure location and units in config.toml. "
         "Press to refresh. No API key required.",
     ),
+    "ha_1": ActionSpec(name="ha_1", label="HA 1", color=_HA_STATE_COLOR_OFF, kind="ha_entity",
+                       description="Home Assistant entity slot 1. Configure in config.toml."),
+    "ha_2": ActionSpec(name="ha_2", label="HA 2", color=_HA_STATE_COLOR_OFF, kind="ha_entity",
+                       description="Home Assistant entity slot 2. Configure in config.toml."),
+    "ha_3": ActionSpec(name="ha_3", label="HA 3", color=_HA_STATE_COLOR_OFF, kind="ha_entity",
+                       description="Home Assistant entity slot 3. Configure in config.toml."),
+    "ha_4": ActionSpec(name="ha_4", label="HA 4", color=_HA_STATE_COLOR_OFF, kind="ha_entity",
+                       description="Home Assistant entity slot 4. Configure in config.toml."),
+    "ha_5": ActionSpec(name="ha_5", label="HA 5", color=_HA_STATE_COLOR_OFF, kind="ha_entity",
+                       description="Home Assistant entity slot 5. Configure in config.toml."),
 }
 
 # Order used when no explicit key list is configured. The controller trims or
@@ -332,6 +406,11 @@ class ActionContext:
     weather_refresh: Callable[[], Awaitable[None]] = field(
         default=lambda: __import__("asyncio").sleep(0)
     )
+    ha_base_url: str = ""
+    ha_token: str = ""
+    ha_entity_refresh: Callable[[], Awaitable[None]] = field(
+        default=lambda: __import__("asyncio").sleep(0)
+    )
 
 
 async def run_action(spec: ActionSpec, ctx: ActionContext) -> str:
@@ -380,5 +459,26 @@ async def run_action(spec: ActionSpec, ctx: ActionContext) -> str:
     if spec.kind == "weather":
         await ctx.weather_refresh()
         return "weather refreshed"
+
+    if spec.kind == "ha_entity":
+        entity_id = spec.ha_entity_id
+        service = spec.ha_service
+        if not entity_id or not service or not ctx.ha_base_url or not ctx.ha_token:
+            return "ha_entity: not configured"
+        domain, svc = (service.split(".", 1) + ["turn_on"])[:2]
+        try:
+            import httpx
+            url = f"{ctx.ha_base_url.rstrip('/')}/api/services/{domain}/{svc}"
+            async with httpx.AsyncClient(timeout=5.0) as ha:
+                r = await ha.post(
+                    url,
+                    json={"entity_id": entity_id},
+                    headers={"Authorization": f"Bearer {ctx.ha_token}",
+                             "Content-Type": "application/json"},
+                )
+            await ctx.ha_entity_refresh()
+            return f"{entity_id} -> {service} ({r.status_code})"
+        except Exception as e:  # noqa: BLE001
+            return f"ha error: {e}"
 
     return ""

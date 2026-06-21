@@ -46,6 +46,21 @@ class Config:
     weather_location: str = ""
     weather_units: str = "f"
     weather_poll_minutes: int = 15
+    # Home Assistant entity keys. ha_base_url is the HA instance URL;
+    # ha_token is a long-lived access token (Profile > Security in HA).
+    # ha_slots is an array of tables in TOML:
+    #   [[ha_slots]]
+    #   entity_id = "light.kitchen"
+    #   service = "light.toggle"
+    #   label = "Kitchen"
+    #   color_on = "#f59e0b"   # optional, default green
+    #   color_off = "#475569"  # optional, default gray
+    # Slots map to keys ha_1..ha_5 in order.
+    ha_base_url: str = ""
+    ha_token: str = ""
+    ha_slots: list = field(default_factory=list)
+    # How often to refresh HA entity states (seconds). 0 = only on press.
+    ha_poll_seconds: int = 30
 
     def validated(self) -> "Config":
         """Drop unknown action names and clamp numbers into sane ranges."""
@@ -56,6 +71,8 @@ class Config:
         self.base_url = self.base_url.rstrip("/")
         if self.rotation not in ALLOWED_ROTATIONS:
             self.rotation = 0
+        self.ha_base_url = self.ha_base_url.rstrip("/")
+        self.ha_poll_seconds = max(0, int(self.ha_poll_seconds))
         return self
 
 
@@ -96,12 +113,18 @@ def load(path: str | os.PathLike | None = None) -> Config:
 
 
 def _apply(cfg: Config, data: dict) -> None:
-    for name in ("base_url", "api_key", "kiosk_cdp_url", "weather_location", "weather_units"):
+    for name in ("base_url", "api_key", "kiosk_cdp_url", "weather_location", "weather_units",
+                 "ha_base_url", "ha_token"):
         if isinstance(data.get(name), str):
             setattr(cfg, name, data[name])
-    for name in ("brightness", "poll_seconds", "soon_days", "rotation", "weather_poll_minutes"):
+    for name in ("brightness", "poll_seconds", "soon_days", "rotation",
+                 "weather_poll_minutes", "ha_poll_seconds"):
         if isinstance(data.get(name), int):
             setattr(cfg, name, data[name])
+
+    raw_slots = data.get("ha_slots")
+    if isinstance(raw_slots, list):
+        cfg.ha_slots = [s for s in raw_slots if isinstance(s, dict)]
 
     # Keys may be given as a plain list of action names, or as an array of
     # tables each with an "action" field, to match the documented example.

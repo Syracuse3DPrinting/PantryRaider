@@ -17,7 +17,7 @@ from typing import Optional
 import httpx
 
 from . import actions, layout, render
-from .actions import ActionContext, ActionSpec, TimerState, WeatherState
+from .actions import ActionContext, ActionSpec, HaEntityState, TimerState, WeatherState
 from .config import BRIGHTNESS_STEPS, Config
 
 log = logging.getLogger("foodassistant.streamdeck")
@@ -40,6 +40,23 @@ class Controller:
         self.weather: WeatherState = WeatherState(
             location=config.weather_location, units=config.weather_units
         )
+        # Build per-slot HA entity state and override the static ActionSpec
+        # placeholders (ha_1..ha_5) with slot config from config.toml.
+        self.ha_entities: dict[str, HaEntityState] = {}
+        _slot_names = [f"ha_{i}" for i in range(1, 6)]
+        for slot_name, slot_cfg in zip(_slot_names, config.ha_slots):
+            entity_id = slot_cfg.get("entity_id", "")
+            if not entity_id:
+                continue
+            color_on = slot_cfg.get("color_on", actions._HA_STATE_COLOR_ON)
+            color_off = slot_cfg.get("color_off", actions._HA_STATE_COLOR_OFF)
+            label = slot_cfg.get("label", entity_id.split(".", 1)[-1].replace("_", " ").title())
+            svc = slot_cfg.get("service", "homeassistant.toggle")
+            actions.ACTIONS[slot_name] = ActionSpec(
+                name=slot_name, label=label, color=color_off,
+                kind="ha_entity", ha_entity_id=entity_id, ha_service=svc,
+            )
+            self.ha_entities[slot_name] = HaEntityState(entity_id, color_on, color_off)
 
         try:
             self._bright_idx = BRIGHTNESS_STEPS.index(
@@ -61,6 +78,7 @@ class Controller:
             self.deck.set_key_callback(self._on_key)
             await self._poll_once()
             await self._refresh_weather()
+            await self._refresh_ha_entities()
             self._draw_page()
             log.info(
                 "Connected to %s (%d keys, %d page(s))",
@@ -99,6 +117,12 @@ class Controller:
                 elif spec.kind == "weather":
                     label = self.weather.label(spec.label)
                     color = self.weather.color(spec.color)
+                    alert = False
+                    count = None
+                elif spec.kind == "ha_entity":
+                    ha = self.ha_entities.get(spec.name)
+                    label = ha.label(spec.label) if ha else spec.label
+                    color = ha.color(spec.color) if ha else spec.color
                     alert = False
                     count = None
                 else:
@@ -181,6 +205,9 @@ class Controller:
             page_prev=self._page_prev,
             timer_press=self._timer_press,
             weather_refresh=self._refresh_weather,
+            ha_base_url=self.config.ha_base_url,
+            ha_token=self.config.ha_token,
+            ha_entity_refresh=self._refresh_ha_entities,
         )
         try:
             msg = await actions.run_action(spec, ctx)
@@ -203,6 +230,13 @@ class Controller:
         if not has_weather_key:
             return
         await self.weather.refresh()
+        self._draw_page()
+
+    async def _refresh_ha_entities(self) -> None:
+        if not self.ha_entities or not self.config.ha_base_url or not self.config.ha_token:
+            return
+        for state in self.ha_entities.values():
+            await state.refresh(self.config.ha_base_url, self.config.ha_token)
         self._draw_page()
 
     def _cycle_brightness(self) -> int:
@@ -290,6 +324,11 @@ class Controller:
                 if (weather_secs > 0
                         and self.weather.age_seconds() >= weather_secs):
                     await self._refresh_weather()
+                ha_secs = self.config.ha_poll_seconds
+                if (ha_secs > 0 and self.ha_entities
+                        and any(e.age_seconds() >= ha_secs
+                                for e in self.ha_entities.values())):
+                    await self._refresh_ha_entities()
             except Exception as e:  # noqa: BLE001 - keep polling
                 log.debug("poll cycle failed: %s", e)
 

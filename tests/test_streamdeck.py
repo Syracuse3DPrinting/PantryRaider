@@ -478,3 +478,136 @@ def test_weather_refresh_via_context():
     )
     asyncio.run(actions.run_action(actions.ACTIONS["weather"], ctx))
     assert refreshed, "weather_refresh should have been called"
+
+
+# -- HA entity -------------------------------------------------------------
+
+def test_ha_actions_registered():
+    for i in range(1, 6):
+        name = f"ha_{i}"
+        assert name in actions.ACTIONS
+        assert actions.ACTIONS[name].kind == "ha_entity"
+
+
+def test_ha_entity_state_idle():
+    h = actions.HaEntityState("light.kitchen")
+    assert h.label("Kitchen") == "Kitchen"
+    assert h.color("#000") == "#000"
+
+
+def test_ha_entity_state_on():
+    import time
+    h = actions.HaEntityState("light.kitchen", color_on="#f59e0b")
+    h._state = "on"
+    h._fetched_at = time.monotonic()
+    assert h.is_on()
+    assert "On" in h.label("Kitchen")
+    assert h.color("#000") == "#f59e0b"
+
+
+def test_ha_entity_state_off():
+    import time
+    h = actions.HaEntityState("light.kitchen", color_off="#334155")
+    h._state = "off"
+    h._fetched_at = time.monotonic()
+    assert not h.is_on()
+    assert "Off" in h.label("Kitchen")
+    assert h.color("#000") == "#334155"
+
+
+def test_ha_entity_state_unavailable():
+    import time
+    h = actions.HaEntityState("light.kitchen")
+    h._state = "unavailable"
+    h._fetched_at = time.monotonic()
+    assert h.color("#000") == actions._HA_STATE_COLOR_ERROR
+
+
+def test_ha_config_loaded(tmp_path):
+    f = tmp_path / "config.toml"
+    f.write_text(
+        'ha_base_url = "http://192.168.1.50:8123"\n'
+        'ha_token = "abc123"\n'
+        'ha_poll_seconds = 15\n'
+        '[[ha_slots]]\n'
+        'entity_id = "light.kitchen"\n'
+        'service = "light.toggle"\n'
+        'label = "Kitchen"\n'
+    )
+    cfg = config.load(f)
+    assert cfg.ha_base_url == "http://192.168.1.50:8123"
+    assert cfg.ha_token == "abc123"
+    assert cfg.ha_poll_seconds == 15
+    assert len(cfg.ha_slots) == 1
+    assert cfg.ha_slots[0]["entity_id"] == "light.kitchen"
+
+
+def test_ha_run_action_unconfigured():
+    async def noop():
+        pass
+
+    ctx = actions.ActionContext(
+        client=None,
+        base_url="http://x",
+        refresh=noop,
+        navigate=lambda _: noop(),
+        cycle_brightness=lambda: 80,
+        page_next=lambda: None,
+        page_prev=lambda: None,
+    )
+    msg = asyncio.run(actions.run_action(actions.ACTIONS["ha_1"], ctx))
+    assert "not configured" in msg
+
+
+def test_ha_run_action_calls_service():
+    import json
+    calls = []
+
+    class FakeResp:
+        status_code = 200
+
+    class FakeClient:
+        async def __aenter__(self):
+            return self
+        async def __aexit__(self, *a):
+            pass
+        async def post(self, url, **kwargs):
+            calls.append({"url": url, **kwargs})
+            return FakeResp()
+
+    original_spec = actions.ACTIONS["ha_1"]
+    actions.ACTIONS["ha_1"] = actions.ActionSpec(
+        name="ha_1", label="Kitchen", color="#000",
+        kind="ha_entity",
+        ha_entity_id="light.kitchen",
+        ha_service="light.toggle",
+    )
+
+    refreshed = []
+
+    async def fake_ha_refresh():
+        refreshed.append(True)
+
+    async def noop():
+        pass
+
+    import unittest.mock as mock
+    with mock.patch("httpx.AsyncClient", return_value=FakeClient()):
+        ctx = actions.ActionContext(
+            client=None,
+            base_url="http://x",
+            refresh=noop,
+            navigate=lambda _: noop(),
+            cycle_brightness=lambda: 80,
+            page_next=lambda: None,
+            page_prev=lambda: None,
+            ha_base_url="http://192.168.1.50:8123",
+            ha_token="tok",
+            ha_entity_refresh=fake_ha_refresh,
+        )
+        msg = asyncio.run(actions.run_action(actions.ACTIONS["ha_1"], ctx))
+
+    actions.ACTIONS["ha_1"] = original_spec
+    assert calls, "should have POSTed to HA"
+    assert "light/toggle" in calls[0]["url"]
+    assert refreshed, "ha_entity_refresh should have been called"
