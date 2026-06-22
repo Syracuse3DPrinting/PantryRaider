@@ -162,6 +162,22 @@ def _grocy_url_for_browser(request: Request, detected: str) -> str:
     return f"http://{server_host}:9383"
 
 
+def _suggest_mealie_url(request: Request) -> str:
+    """Return a suggested Mealie URL for the browser, or '' if not applicable.
+
+    On a Pi appliance Mealie runs (or will run) on the same host at port 9285.
+    Returns '' when Mealie is already configured or we are not on a Pi.
+    """
+    if not is_raspberry_pi():
+        return ""
+    if settings.mealie_base_url:
+        return ""
+    server_host = request.url.hostname or ""
+    if not server_host or server_host in ("127.0.0.1", "::1", "localhost"):
+        return "http://localhost:9285"
+    return f"http://{server_host}:9285"
+
+
 def available_modes() -> dict:
     """Deployment modes offered on this host.
 
@@ -197,6 +213,7 @@ async def setup_page(request: Request):
         "ui_scales": UI_SCALES,
         "display_rotations": DISPLAY_ROTATIONS,
         "suggested_grocy_url": suggested_grocy_url,
+        "suggested_mealie_url": _suggest_mealie_url(request),
         "deployment_modes": modes,
         "current_mode": current_mode,
         "is_pi": is_raspberry_pi(),
@@ -579,6 +596,58 @@ async def streamdeck_restart():
     try:
         async with httpx.AsyncClient(timeout=15.0) as c:
             r = await c.post(f"{_HOST_BRIDGE}/streamdeck/restart")
+        return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
+@router.post("/mealie/start")
+async def mealie_start():
+    """Start the Mealie container on a Pi appliance via the host bridge."""
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    try:
+        async with httpx.AsyncClient(timeout=130.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/mealie/start")
+        return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
+@router.get("/hardware/status")
+async def hardware_status():
+    """Display / Stream Deck presence and service state, via the Pi host bridge."""
+    if not is_raspberry_pi():
+        return {"ok": False, "error": "Not available on this platform."}
+    try:
+        async with httpx.AsyncClient(timeout=6.0) as c:
+            r = (await c.get(f"{_HOST_BRIDGE}/hardware/status")).json()
+        return r
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.post("/kiosk/install")
+async def kiosk_install():
+    """Provision the kiosk service for a display attached after first install."""
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/kiosk/install")
+        return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
+@router.post("/streamdeck/install")
+async def streamdeck_install():
+    """Provision the Stream Deck service for a deck attached after first install."""
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/streamdeck/install")
         return r.json()
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})

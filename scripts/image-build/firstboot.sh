@@ -322,6 +322,7 @@ EOF
 deploy_stack() {
   log "Deploying stack into $INSTALL_DIR"
   run mkdir -p "$INSTALL_DIR"
+  seed_app_settings
   # The compose file normally sits next to this script (baked image / git
   # checkout). When the script is run standalone (curl ... | bash) it is not
   # present, so fall back to a cloned copy of the repo.
@@ -732,6 +733,31 @@ mark_done() {
   date -u +%Y-%m-%dT%H:%M:%SZ > "$DONE_MARKER"
   # Disable the oneshot unit so we never run again.
   systemctl disable foodassistant-firstboot.service 2>/dev/null || true
+}
+
+seed_app_settings() {
+  local settings_file="$INSTALL_DIR/data/settings.json"
+  if grep -q '"grocy_api_key"' "$settings_file" 2>/dev/null; then
+    log "seed_app_settings: settings.json already contains grocy_api_key — skipping"
+    return 0
+  fi
+  local sd_val="false"
+  if is_true "${ENABLE_STREAMDECK:-auto}"; then
+    sd_val="true"
+  elif [ "${ENABLE_STREAMDECK:-auto}" = "auto" ] && has_streamdeck; then
+    sd_val="true"
+  fi
+  local mode="${DEPLOYMENT_MODE:-pi_hosted}"
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would write $settings_file: deployment_mode=$mode has_streamdeck=$sd_val"
+    return 0
+  fi
+  mkdir -p "$(dirname "$settings_file")"
+  cat > "$settings_file" <<EOF
+{"deployment_mode": "$mode", "has_streamdeck": $sd_val}
+EOF
+  chmod 600 "$settings_file"
+  log "seed_app_settings: wrote $settings_file (deployment_mode=$mode, has_streamdeck=$sd_val)"
 }
 
 # Returns 0 when step $1 should run: always when STEPS is empty (run all),
