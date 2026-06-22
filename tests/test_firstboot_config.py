@@ -245,20 +245,20 @@ def test_missing_config_uses_defaults(tmp_path):
     assert "http://foodassistant.local:9284/" in out
 
 
-def test_display_rotation_zero_skips(tmp_path):
-    # DISPLAY_ROTATION=0 should do nothing.
+def test_display_rotation_zero_normal(tmp_path):
+    # DISPLAY_ROTATION=0 maps to the compositor "normal" transform.
     rc, out = run_firstboot(tmp_path, "DISPLAY_ROTATION=0\n",
                             extra_env={"STEPS": "rotation"})
     assert rc == 0, out
-    assert "rotation is 0" in out
+    assert "WLR_OUTPUT_TRANSFORM=normal" in out
 
 
 def test_display_rotation_180_dry_run(tmp_path):
-    # DISPLAY_ROTATION=180 should log the DRY_RUN intent.
+    # DISPLAY_ROTATION=180 sets the compositor transform in the kiosk env file.
     rc, out = run_firstboot(tmp_path, "DISPLAY_ROTATION=180\n",
                             extra_env={"STEPS": "rotation"})
     assert rc == 0, out
-    assert "video=HDMI-A-1:rotate=180" in out or "cmdline.txt not found" in out
+    assert "WLR_OUTPUT_TRANSFORM=180" in out
 
 
 def test_display_rotation_invalid_warns(tmp_path):
