@@ -560,7 +560,7 @@ configure_streamdeck() {
   log "Installing Stream Deck controller"
 
   local venv_dir="/opt/foodassistant/venv"
-  local sd_dst="/opt/foodassistant/foodassistant_streamdeck"
+  local sd_dst="/opt/foodassistant/streamdeck"
   # The package may sit beside this script (boot payload) or in the cloned repo
   # under streamdeck/. Resolve whichever is present.
   local sd_src=""
@@ -656,7 +656,7 @@ Wants=network-online.target
 
 [Service]
 ExecStart=/opt/foodassistant/venv/bin/python -m foodassistant_streamdeck
-WorkingDirectory=/opt/foodassistant
+WorkingDirectory=$sd_dst
 Restart=always
 RestartSec=5
 User=$sd_user
