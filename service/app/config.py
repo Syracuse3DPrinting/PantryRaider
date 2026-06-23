@@ -88,10 +88,29 @@ _SAVEABLE = [
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
-    "deployment_mode", "remote_server_url",
+    "deployment_mode", "remote_server_url", "upstream_api_key",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
+]
+
+# Settings a satellite (pi_remote) pulls from its main server and mirrors
+# locally so it can talk to Grocy/Mealie/AI directly. These are READ-ONLY on a
+# satellite: edit them on the server. Device-local concerns (auth, UI theme,
+# hardware, tunnel, the upstream link itself) are deliberately excluded.
+SATELLITE_PULL_FIELDS = [
+    "vision_provider", "gemini_api_key", "gemini_model",
+    "ollama_base_url", "ollama_model",
+    "openai_api_key", "openai_model",
+    "anthropic_api_key", "anthropic_model",
+    "barcode_enrichment", "barcode_llm_fallback", "barcode_autocheck_shopping",
+    "enrich_provider", "enrich_model",
+    "grocy_base_url", "grocy_api_key", "grocy_public_url",
+    "mealie_base_url", "mealie_api_key", "mealie_public_url",
+    "recipe_source", "themealdb_api_key", "spoonacular_api_key",
+    "staple_items", "cook_ai_context",
+    "perishable_days", "expiring_soon_days", "suggest_per_tier",
+    "custom_storage_categories",
 ]
 
 # Settings that hold credentials. These are redacted from backups unless the
@@ -207,16 +226,28 @@ class Settings(BaseSettings):
     display_touch: bool = False
 
     # Deployment mode chosen in the wizard (one of DEPLOYMENT_MODES). Empty
-    # until the user picks one. In "pi_remote" mode this device is only a
-    # control surface for a remote server (remote_server_url), so the local
-    # Grocy/Mealie requirements in is_configured() do not apply.
+    # until the user picks one. "pi_remote" is a SATELLITE: it runs the full
+    # app but installs no local Grocy/Mealie stack. It pulls all backend config
+    # (Grocy/Mealie/AI keys and the expiry defaults) from a main server and then
+    # talks to those backends directly. See SATELLITE_PULL_FIELDS.
     deployment_mode: str = ""
-    # For pi_remote: the base URL of the FoodAssistant server this device
-    # controls (e.g. http://192.168.1.50:9284). Unused in the other modes.
+    # Satellite only: base URL of the main FoodAssistant server to pull config
+    # from (e.g. http://192.168.1.50:9284), plus the API key used to authenticate
+    # that pull. Unused in the other modes.
     remote_server_url: str = ""
+    upstream_api_key: str = ""
 
     def is_remote_mode(self) -> bool:
         return self.deployment_mode == "pi_remote"
+
+    # Clearer name for the same thing: pi_remote == a satellite of a main server.
+    def is_satellite(self) -> bool:
+        return self.deployment_mode == "pi_remote"
+
+    def manages_local_stack(self) -> bool:
+        """True when this device runs/controls its own Grocy/Mealie Docker
+        stack (server, pi_hosted). A satellite points at a remote stack."""
+        return not self.is_satellite()
 
     def features(self) -> "dict[str, bool]":
         """Which capability groups are active for this deployment_mode.
@@ -227,16 +258,18 @@ class Settings(BaseSettings):
         """
         from .hardware import is_raspberry_pi  # deferred to avoid import-time side-effects
         is_pi = is_raspberry_pi()
-        remote = self.deployment_mode == "pi_remote"
+        satellite = self.is_satellite()
         return {
-            # local_stack: Grocy, Mealie, AI providers, Docker controls
-            "local_stack": not remote,
+            # manages_stack: this device runs local Grocy/Mealie Docker, so it
+            # shows the "start/stop local stack" controls. A satellite does not.
+            "manages_stack": not satellite,
+            # satellite: pulls backend config from a main server; backend config
+            # panes are shown read-only and the upstream link pane is shown.
+            "satellite": satellite,
             # peripherals: kiosk display + Stream Deck panes (Pi only)
             "peripherals": is_pi,
             # streamdeck: Stream Deck pane visible (Pi + has a deck declared)
             "streamdeck": is_pi and bool(self.has_streamdeck),
-            # remote_config: show the remote server URL input
-            "remote_config": remote,
             # ai: vision/LLM provider config (always available)
             "ai": True,
         }
@@ -278,11 +311,11 @@ class Settings(BaseSettings):
 
     def is_configured(self) -> bool:
         """True when the minimum required settings have been supplied."""
-        # Pi Remote is a thin control surface: it has no local Grocy, so the
-        # only requirement is a reachable remote server URL (plus the usual
-        # password gate). The local-stack checks below do not apply.
-        if self.is_remote_mode():
-            if not self.remote_server_url:
+        # A satellite pulls its backend config from a main server, so the only
+        # things it must be given are that server's URL and an API key to
+        # authenticate the pull. Grocy/Mealie/AI then arrive via that sync.
+        if self.is_satellite():
+            if not self.remote_server_url or not self.upstream_api_key:
                 return False
             if self.auth_required and not self.auth_password:
                 return False

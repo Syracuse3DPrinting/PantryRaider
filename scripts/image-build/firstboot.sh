@@ -120,14 +120,11 @@ load_config() {
   # at the server being controlled. ?kiosk=1 latches kiosk mode in the browser
   # so the attached-display scale/orientation apply (and never affect others).
   if is_remote_mode; then
-    if [ -n "$REMOTE_SERVER_URL" ]; then
-      KIOSK_URL="${KIOSK_URL:-${REMOTE_SERVER_URL%/}/ui/?kiosk=1}"
-    else
-      # No server set yet: the local web service serves the setup wizard on
-      # port 80, so the attached display shows "configure me" until the user
-      # enters the server URL. No SSH needed.
-      KIOSK_URL="${KIOSK_URL:-http://localhost/setup?kiosk=1}"
-    fi
+    # A satellite runs the full app locally on port 80 (it pulls its backend
+    # config from the main server). The kiosk shows the LOCAL UI; if the device
+    # is not configured yet, the app's setup-redirect sends /ui to /setup, so a
+    # fresh box shows "configure me" without any special-casing here.
+    KIOSK_URL="${KIOSK_URL:-http://localhost/ui/?kiosk=1}"
   else
     KIOSK_URL="${KIOSK_URL:-http://localhost:9284/ui/?kiosk=1}"
   fi
@@ -631,16 +628,17 @@ configure_streamdeck() {
     warn "plugdev group not found; skipping usermod"
   fi
 
-  # In remote mode the controller talks to the remote server, not localhost;
-  # the controller reads FOODASSISTANT_BASE_URL from its environment.
+  # A satellite runs the full app locally on port 80, so its Stream Deck drives
+  # the LOCAL app (which talks to the shared Grocy/Mealie it pulled). Point the
+  # controller at localhost:80; the controller reads FOODASSISTANT_BASE_URL.
   local sd_base_env=""
-  if is_remote_mode && [ -n "$REMOTE_SERVER_URL" ]; then
-    sd_base_env="Environment=FOODASSISTANT_BASE_URL=${REMOTE_SERVER_URL%/}"
+  if is_remote_mode; then
+    sd_base_env="Environment=FOODASSISTANT_BASE_URL=http://localhost:80"
   fi
 
   # Write the systemd service unit.
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN would write /etc/systemd/system/foodassistant-streamdeck.service for user $sd_user${sd_base_env:+ (base ${REMOTE_SERVER_URL%/})}"
+    log "DRY_RUN would write /etc/systemd/system/foodassistant-streamdeck.service for user $sd_user${sd_base_env:+ (base http://localhost:80)}"
     return 0
   fi
   cat > /etc/systemd/system/foodassistant-streamdeck.service <<EOF
@@ -972,11 +970,11 @@ main() {
   _step_requested "mdns"        && configure_mdns
 
   if is_remote_mode; then
-    # Thin client: no Docker, no Grocy/Mealie stack. The FoodAssistant UI service
-    # runs directly in a Python venv on port 80, so the user can browse to
-    # http://<hostname>.local/ to configure the remote server URL and peripheral
-    # layout without ever needing SSH again.
-    log "Pi Remote mode: skipping Docker stack; controlling ${REMOTE_SERVER_URL:-<unset -- configure via web UI>}"
+    # Satellite: no local Docker/Grocy/Mealie stack. The full FoodAssistant app
+    # runs in a Python venv on port 80 and pulls its backend config (Grocy,
+    # Mealie, AI keys, expiry defaults) from a main server. The user browses to
+    # http://<hostname>.local/ to enter that server's URL + API key. No SSH.
+    log "Satellite mode: skipping Docker stack; will pull config from ${REMOTE_SERVER_URL:-<set in web UI>}"
     _step_requested "remote_service" && deploy_remote_service
     _step_requested "hostbridge"     && install_host_bridge
     _step_requested "rotation"       && configure_display_rotation
@@ -984,8 +982,8 @@ main() {
     _step_requested "streamdeck"     && configure_streamdeck
     [ -z "$STEPS" ] && mark_done
     local _svc_url="http://${HOSTNAME}.local/"
-    log "FoodAssistant Pi Remote first-boot complete."
-    log "  Open ${_svc_url} in a browser on your LAN to set the remote server URL."
+    log "FoodAssistant satellite first-boot complete."
+    log "  Open ${_svc_url} in a browser on your LAN to set the main server URL + API key."
     return 0
   fi
 

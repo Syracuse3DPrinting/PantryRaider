@@ -102,16 +102,19 @@ def test_remote_mode_configured_without_grocy(client, monkeypatch):
         "deployment_mode": "pi_remote",
         "remote_server_url": "http://server:9284",
     })
-    # No Grocy at all, but a password gate still applies.
-    assert settings.is_configured() is False
+    # A satellite pulls Grocy/AI from its server, so no local Grocy is needed.
+    # It does need the upstream API key (to authenticate the pull) and the
+    # usual password gate.
     settings.save({"auth_password": "secret"})
+    assert settings.is_configured() is False   # still missing the upstream key
+    settings.save({"upstream_api_key": "shared-key"})
     assert settings.is_configured() is True
 
 
 def test_remote_mode_needs_url(client, monkeypatch):
     _as_pi(monkeypatch, "Raspberry Pi 3 Model B")
     settings.save({"auth_password": "secret", "deployment_mode": "pi_remote",
-                   "remote_server_url": ""})
+                   "upstream_api_key": "shared-key", "remote_server_url": ""})
     assert settings.is_configured() is False
 
 

@@ -1,6 +1,7 @@
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..config import (
@@ -23,7 +24,7 @@ _SECRET_FIELDS = [
     "gemini_api_key", "openai_api_key", "anthropic_api_key",
     "grocy_api_key", "mealie_api_key",
     "themealdb_api_key", "spoonacular_api_key",
-    "auth_password", "api_key",
+    "auth_password", "api_key", "upstream_api_key",
 ]
 _CLEAR = "__CLEAR__"
 
@@ -70,6 +71,7 @@ class SetupPayload(BaseModel):
     display_rotation: int = _DEFAULT_DISPLAY_ROTATION
     deployment_mode: str = ""
     remote_server_url: str = ""
+    upstream_api_key: str = ""
     barcode_llm_fallback: bool = False
     barcode_autocheck_shopping: bool = False
     cook_ai_context: str = ""
@@ -111,6 +113,36 @@ async def test_remote(payload: TestRemotePayload):
         return {"ok": False, "error": f"HTTP {r.status_code} from {url}/health"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
+
+
+class SatelliteSyncPayload(BaseModel):
+    remote_server_url: str = ""
+    upstream_api_key: str = ""
+
+
+@router.post("/satellite/sync")
+async def satellite_sync(payload: SatelliteSyncPayload):
+    """Save the upstream link, then pull backend config + defaults from it.
+
+    Used by the satellite setup flow: enter the main server URL + API key, then
+    sync. On success the satellite has Grocy/Mealie/AI config and is usable.
+    """
+    data = {"deployment_mode": "pi_remote"}
+    if payload.remote_server_url:
+        data["remote_server_url"] = payload.remote_server_url.rstrip("/")
+    if payload.upstream_api_key and payload.upstream_api_key != _CLEAR:
+        data["upstream_api_key"] = payload.upstream_api_key
+    settings.save(data)
+
+    from ..services.satellite import sync_from_upstream
+    result = await run_in_threadpool(sync_from_upstream)
+    if result.get("ok"):
+        return {
+            "ok": True,
+            "message": f"Synced {len(result['applied'])} settings and "
+                       f"{result['defaults']} expiry defaults from the server.",
+        }
+    return {"ok": False, "error": result.get("error", "Sync failed.")}
 
 
 class TestProviderPayload(BaseModel):
