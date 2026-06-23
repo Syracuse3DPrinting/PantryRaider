@@ -29,6 +29,8 @@ def theme_context(request: Request) -> dict:
         "ui_scale_factor": ui_scale_factor(settings.ui_scale),
         "display_rotation": settings.display_rotation,
         "is_pi": is_raspberry_pi(),
+        "features": settings.features(),
+        "deployment_mode": settings.deployment_mode,
     }
 
 

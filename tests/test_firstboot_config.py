@@ -66,7 +66,7 @@ def test_both_optional_backends(tmp_path):
 def test_custom_hostname_in_output(tmp_path):
     rc, out = run_firstboot(tmp_path, "HOSTNAME=mypantry\n")
     assert rc == 0, out
-    assert "http://mypantry.local:9284/" in out
+    assert "http://mypantry.local/" in out
     assert "set hostname" in out.lower()
 
 
@@ -136,10 +136,12 @@ def test_remote_mode_kiosk_points_at_remote(tmp_path):
     assert "localhost:9284/ui" not in out
 
 
-def test_remote_mode_without_url_warns(tmp_path):
+def test_remote_mode_without_url_instructs_web_ui(tmp_path):
+    # No REMOTE_SERVER_URL: provisioner should succeed and tell the user to
+    # open the web UI to configure the URL (no longer a fatal warning).
     rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_remote\n")
     assert rc == 0, out
-    assert "REMOTE_SERVER_URL is empty" in out
+    assert "configure via web UI" in out or "browser" in out.lower()
 
 
 def test_remote_mode_streamdeck_gets_base_env(tmp_path):
@@ -242,7 +244,7 @@ def test_missing_config_uses_defaults(tmp_path):
     assert proc.returncode == 0, proc.stdout + proc.stderr
     out = proc.stdout + proc.stderr
     assert "No config file found" in out
-    assert "http://foodassistant.local:9284/" in out
+    assert "http://foodassistant.local/" in out
 
 
 def test_display_rotation_zero_normal(tmp_path):
