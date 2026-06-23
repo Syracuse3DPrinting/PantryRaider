@@ -146,17 +146,22 @@
     <!-- Pi Remote: collect and test the server URL inline -->
     <div class="section-card mb-3 d-none" id="wiz-remote-panel">
       <div class="mb-2">
-        <label class="form-label">FoodAssistant server URL <span class="badge bg-danger badge-req ms-1">Required</span></label>
+        <label class="form-label">Main server URL <span class="badge bg-danger badge-req ms-1">Required</span></label>
         <input type="url" class="form-control" id="remote_server_url"
                placeholder="http://192.168.1.50:9284" value="{{ s.remote_server_url }}">
-        <div class="form-text">Address of the FoodAssistant server this remote controls, no trailing slash.</div>
+        <div class="form-text">Address of the main FoodAssistant server, no trailing slash.</div>
       </div>
-      <button class="btn btn-outline-warning btn-sm" type="button" onclick="testRemote()">
-        <i class="bi bi-plug me-1"></i>Test Connection
+      <div class="mb-2">
+        <label class="form-label">Server API key <span class="badge bg-danger badge-req ms-1">Required</span></label>
+        {{ secret_input('upstream_api_key', 'API key from the main server') }}
+        <div class="form-text">From the main server: Settings &rarr; Security &rarr; API Key.</div>
+      </div>
+      <button class="btn btn-outline-warning btn-sm" type="button" onclick="syncFromUpstream()">
+        <i class="bi bi-arrow-repeat me-1"></i>Sync from server
       </button>
-      <div class="test-result" id="remote-result"></div>
+      <div class="test-result" id="upstream-result"></div>
       <div class="alert alert-secondary py-2 small mt-2 mb-0">
-        <i class="bi bi-info-circle me-1"></i>In Remote mode this device installs no Grocy or Mealie — the Grocy and AI steps are skipped.
+        <i class="bi bi-info-circle me-1"></i>This device pulls Grocy, Mealie, AI keys and expiry defaults from the main server, so those steps are skipped.
       </div>
     </div>
 
@@ -623,16 +628,15 @@
         {% set ai_ok  = s.vision_provider and s.vision_provider != 'none' %}
         {% set rec_ok = s.mealie_api_key %}
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
-        {% set rem_ok = s.remote_server_url %}
+        {% set rem_ok = s.remote_server_url and s.upstream_api_key %}
         <div class="nav flex-column nav-pills gap-1" role="tablist">
-          {% if features.remote_config %}
-          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-remote" type="button">
-            <i class="bi bi-plug me-2"></i>Remote Server
-            <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if rem_ok else 'Server URL required' }}"></i>
+          {% if features.satellite %}
+          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-upstream" type="button">
+            <i class="bi bi-hdd-network me-2"></i>Main Server
+            <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if rem_ok else 'Server URL + key required' }}"></i>
           </button>
-          {% endif %}
-          {% if features.local_stack %}
-          <button class="nav-link {{ 'active' if not features.remote_config else '' }} d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
+          {% else %}
+          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
             <i class="bi bi-fridge me-2"></i>Inventory
             <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
           </button>
@@ -645,7 +649,7 @@
             <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if rec_ok else 'Optional' }}"></i>
           </button>
           {% endif %}
-          <button class="nav-link {{ '' if features.remote_config or features.local_stack else 'active' }} d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
             <i class="bi bi-layout-sidebar me-2"></i>Interface
           </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
@@ -682,41 +686,41 @@
     <div class="col-md-9">
       <div class="tab-content">
 
-        <!-- Remote Server (pi_remote mode only) -->
-        {% if features.remote_config %}
-        <div class="tab-pane fade show active" id="pane-remote">
-          <p class="pane-intro">This Pi connects to a FoodAssistant server running elsewhere on your network. Enter that server's address below.</p>
+        <!-- Main Server (satellite mode only) -->
+        {% if features.satellite %}
+        <div class="tab-pane fade show active" id="pane-upstream">
+          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main FoodAssistant server.</p>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-plug text-info"></i> Remote FoodAssistant Server</div>
-            <p class="text-secondary small">All inventory, AI, and recipe requests are forwarded to the remote server. The URL must be reachable from this Pi.</p>
+            <div class="section-title"><i class="bi bi-hdd-network text-info"></i> Main FoodAssistant Server</div>
+            <p class="text-secondary small">Enter the server's address and its API key. This device authenticates with that key, pulls the shared config, then talks to Grocy/Mealie/AI directly. Find the API key in the server's Settings under Security.</p>
             <div class="mb-3">
               <label class="form-label">Server URL</label>
               <input type="url" class="form-control" id="remote_server_url"
                      placeholder="http://192.168.1.10:9284"
                      value="{{ s.remote_server_url or '' }}">
-              <div class="form-text">Full address of the FoodAssistant server — no trailing slash. Example: <code>http://192.168.1.10:9284</code></div>
+              <div class="form-text">Full address of the main server, no trailing slash. Example: <code>http://192.168.1.10:9284</code></div>
             </div>
-            <button class="btn btn-outline-info btn-sm" onclick="testRemote()">
-              <i class="bi bi-plug me-1"></i>Test Connection
+            <div class="mb-3">
+              <label class="form-label">Server API Key</label>
+              {{ secret_input('upstream_api_key', 'The API key set on the main server') }}
+              <div class="form-text">Must match the API key configured on the main server (Settings &rarr; Security).</div>
+            </div>
+            <button class="btn btn-primary btn-sm" onclick="syncFromUpstream()">
+              <i class="bi bi-arrow-repeat me-1"></i>Sync from server
             </button>
-            <div class="test-result" id="remote-result"></div>
+            <div class="test-result" id="upstream-result"></div>
           </div>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About Pi Remote Mode</div>
-            <p class="text-secondary small">In remote mode this Pi runs only a lightweight relay — no Docker, no local database. The remote server handles all data. You can use this Pi as a kiosk display or barcode scanner terminal.</p>
-            <ul class="small text-secondary mb-0">
-              <li>Stream Deck and barcode scanner connect to the remote server.</li>
-              <li>Kiosk browser opens the remote server's UI.</li>
-              <li>Changing the URL here restarts the relay service.</li>
-            </ul>
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About satellite mode</div>
+            <p class="text-secondary small">Backend settings and expiry defaults are managed on the main server and mirrored here read-only. Edit them there, then Sync. This device keeps its own display, Stream Deck, and security settings.</p>
           </div>
         </div>
         {% endif %}
 
         <!-- Inventory (Grocy + storage) -->
-        <div class="tab-pane fade {{ '' if features.remote_config else 'show active' }}" id="pane-inventory">
+        <div class="tab-pane fade {{ '' if features.satellite else 'show active' }}" id="pane-inventory">
           <p class="pane-intro">Where your stock lives: the Grocy backend and the storage buckets it's grouped into.</p>
 
           <div class="section-card">
@@ -2001,6 +2005,7 @@ function buildPayload() {
     // form it is undefined and these are simply omitted (kept as-is server-side).
     deployment_mode: (typeof _installMode !== 'undefined' && _installMode) ? _installMode : undefined,
     remote_server_url: val('remote_server_url') || undefined,
+    upstream_api_key: secretVal('upstream_api_key'),
   };
 }
 
@@ -2324,6 +2329,11 @@ async function _wizSaveMode() {
   } catch (e) { /* non-fatal: the final Save also persists it */ }
 }
 
+// Satellite step 1: require the server URL + API key before advancing.
+function _wizRemoteReady() {
+  return Boolean(val('remote_server_url') && secretVal('upstream_api_key'));
+}
+
 function wizNext() {
   const seq = _wizStepSeq();
   const idx = seq.indexOf(_wizStep);
@@ -2331,9 +2341,9 @@ function wizNext() {
 
   // Per-step "on leave" hooks.
   if (_wizStep === 1) {
-    if (_installMode === 'pi_remote' && !val('remote_server_url')) {
-      const r = document.getElementById('remote-result');
-      if (r) { r.className = 'test-result text-danger'; r.textContent = 'Enter the server URL to continue.'; }
+    if (_installMode === 'pi_remote' && !_wizRemoteReady()) {
+      const r = document.getElementById('upstream-result');
+      if (r) { r.className = 'test-result text-danger'; r.textContent = 'Enter the server URL and API key to continue.'; }
       return;
     }
     _wizSaveMode();
@@ -2371,6 +2381,29 @@ async function testRemote() {
     if (out) {
       out.className = 'test-result ' + (d.ok ? 'text-success' : 'text-danger');
       out.textContent = d.ok ? d.message : (d.error || 'Connection failed.');
+    }
+  } catch (e) {
+    if (out) { out.className = 'test-result text-danger'; out.textContent = String(e); }
+  }
+}
+
+// Satellite: save the upstream link, then pull backend config + defaults.
+async function syncFromUpstream() {
+  const out = document.getElementById('upstream-result');
+  if (out) { out.className = 'test-result text-secondary'; out.textContent = 'Syncing…'; }
+  try {
+    const r = await fetch('setup/satellite/sync', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        remote_server_url: val('remote_server_url') || '',
+        upstream_api_key: secretVal('upstream_api_key'),
+      }),
+    });
+    const d = await r.json();
+    if (out) {
+      out.className = 'test-result ' + (d.ok ? 'text-success' : 'text-danger');
+      out.textContent = d.ok ? d.message : (d.error || 'Sync failed.');
     }
   } catch (e) {
     if (out) { out.className = 'test-result text-danger'; out.textContent = String(e); }
@@ -2457,13 +2490,13 @@ function _wizBuildSummary() {
     items.push({icon:'bi-shield-exclamation text-danger', label:'No password set', ok:false, step:2, detail:'Required to complete setup.'});
   }
 
-  // Pi Remote: no local Grocy/AI/Mealie — just confirm the remote server.
+  // Satellite: confirm the main server link; backend config is pulled from it.
   if (_installMode === 'pi_remote') {
     const remoteUrl = val('remote_server_url');
-    if (remoteUrl) {
-      items.push({icon:'bi-dpad text-success', label:'Remote control of: ' + remoteUrl, ok:true, detail:'No local Grocy or AI installed on this device.'});
+    if (remoteUrl && secretVal('upstream_api_key')) {
+      items.push({icon:'bi-hdd-network text-success', label:'Pulls config from: ' + remoteUrl, ok:true, detail:'Grocy, Mealie, AI and defaults come from the main server.'});
     } else {
-      items.push({icon:'bi-dpad text-danger', label:'Server URL not set', ok:false, step:1, detail:'Required for Remote mode.'});
+      items.push({icon:'bi-hdd-network text-danger', label:'Main server not set', ok:false, step:1, detail:'Server URL and API key are required.'});
     }
     el.innerHTML = items.map(item => `
       <div class="summary-item">
@@ -2558,9 +2591,9 @@ async function wizSaveAll() {
   // require a UI password (the remote server owns auth). The only thing it
   // needs is the address of the server it controls.
   if (_installMode === 'pi_remote') {
-    if (!payload.remote_server_url) {
+    if (!payload.remote_server_url || !secretVal('upstream_api_key')) {
       resultEl.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle-fill me-1"></i>' +
-        'Server URL is required. <a href="#" onclick="event.preventDefault();_wizShowStep(1)">Go to Welcome</a></div>';
+        'Server URL and API key are required. <a href="#" onclick="event.preventDefault();_wizShowStep(1)">Go to Welcome</a></div>';
       btn.disabled = false;
       btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant';
       return;
@@ -2594,13 +2627,9 @@ async function wizSaveAll() {
     });
     const d = await r.json();
     if (d.ok) {
-      // Pi Remote has no local UI of its own; send the browser to the server
-      // it controls. Everything else opens the local app.
-      if (_installMode === 'pi_remote' && payload.remote_server_url) {
-        window.location.href = payload.remote_server_url.replace(/\/+$/, '') + '/ui/';
-      } else {
-        window.location.href = 'ui/';
-      }
+      // A satellite is a full local app (it pulled its config), so open its
+      // own UI like any other mode.
+      window.location.href = 'ui/';
     } else {
       throw new Error(d.detail || 'Unknown error');
     }

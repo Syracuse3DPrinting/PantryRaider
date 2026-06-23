@@ -117,13 +117,16 @@ def test_remote_mode_skips_docker_and_stack(tmp_path):
         "DEPLOYMENT_MODE=pi_remote\nREMOTE_SERVER_URL=http://192.168.1.50:9284\n",
     )
     assert rc == 0, out
-    assert "Pi Remote mode: skipping Docker" in out
+    assert "Satellite mode: skipping Docker" in out
     # The heavy steps must not run in remote mode.
     assert "Deploying stack" not in out
     assert "192.168.1.50:9284" in out
 
 
-def test_remote_mode_kiosk_points_at_remote(tmp_path):
+def test_remote_mode_kiosk_points_at_local_app(tmp_path):
+    # A satellite runs the full app locally on port 80 and pulls its backend
+    # config from the main server, so the kiosk shows the LOCAL UI. The app's
+    # setup-redirect handles the unconfigured case.
     rc, out = run_firstboot(
         tmp_path,
         "DEPLOYMENT_MODE=pi_remote\nREMOTE_SERVER_URL=http://server.local:9284\n",
@@ -131,9 +134,9 @@ def test_remote_mode_kiosk_points_at_remote(tmp_path):
     )
     assert rc == 0, out
     assert "Installing Chromium kiosk" in out
-    # Kiosk URL is the remote server, not localhost.
-    assert "server.local:9284/ui/?kiosk=1" in out
-    assert "localhost:9284/ui" not in out
+    # Kiosk URL is the local app on port 80, not the remote server.
+    assert "localhost/ui/?kiosk=1" in out
+    assert "server.local:9284/ui" not in out
 
 
 def test_remote_mode_without_url_instructs_web_ui(tmp_path):
@@ -144,15 +147,17 @@ def test_remote_mode_without_url_instructs_web_ui(tmp_path):
     assert "configure via web UI" in out or "browser" in out.lower()
 
 
-def test_remote_mode_streamdeck_gets_base_env(tmp_path):
+def test_remote_mode_streamdeck_drives_local_app(tmp_path):
     rc, out = run_firstboot(
         tmp_path,
         "DEPLOYMENT_MODE=pi_remote\nREMOTE_SERVER_URL=http://server.local:9284\n",
         extra_env={"FORCE_STREAMDECK": "1"},
     )
     assert rc == 0, out
-    # The DRY_RUN streamdeck step announces the remote base it will inject.
-    assert "base http://server.local:9284" in out
+    # The satellite's deck drives its own local app on port 80, not the server.
+    assert "base http://localhost:80" in out
+    # The deck base must not be the remote server.
+    assert "base http://server.local:9284" not in out
 
 
 def test_hosted_mode_still_deploys_stack(tmp_path):
@@ -171,7 +176,7 @@ def test_mode_read_from_settings_json(tmp_path):
         extra_env={"SETTINGS_JSON": str(sf)},
     )
     assert rc == 0, out
-    assert "Pi Remote mode: skipping Docker" in out
+    assert "Satellite mode: skipping Docker" in out
     assert "from-json:9284" in out
 
 

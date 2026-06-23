@@ -11,7 +11,7 @@ from .database import engine, get_db, Base
 from .ingress import ingress_redirect
 from .models import db_models  # noqa: F401: registers models with Base
 from .services.defaults import seed_defaults
-from .routers import analyze, defaults, inventory, expiring, ui, setup, pending, mealie, admin, qr, tunnel, grocy
+from .routers import analyze, defaults, inventory, expiring, ui, setup, pending, mealie, admin, qr, tunnel, grocy, satellite
 
 
 @asynccontextmanager
@@ -22,6 +22,14 @@ async def lifespan(app: FastAPI):
         seed_defaults(db)
     finally:
         db.close()
+    # A satellite mirrors its main server: pull backend config + defaults on
+    # boot. Best-effort so an unreachable server never blocks startup.
+    if settings.is_satellite():
+        try:
+            from .services.satellite import sync_from_upstream
+            sync_from_upstream()
+        except Exception:
+            pass
     yield
 
 
@@ -46,6 +54,10 @@ _SETUP_BYPASS = {
     "/setup/test/grocy", "/setup/test/vision", "/setup/test/remote",
     "/setup/test/provider", "/setup/test/mealie", "/setup/test/recipes",
     "/setup/totp/generate", "/setup/totp/verify", "/setup/totp/disable",
+    "/setup/satellite/sync",
+    # Satellites pull config here; the handler enforces its own X-API-Key, so
+    # it is safe to skip the setup-redirect/auth wrappers.
+    "/api/config/satellite",
     "/health", "/docs", "/openapi.json", "/redoc",
 }
 # "/" only redirects to /ui/, so it can safely skip auth (the target enforces it)
@@ -111,6 +123,7 @@ app.include_router(expiring.router)
 app.include_router(tunnel.router)
 app.include_router(ui.router)
 app.include_router(qr.router)
+app.include_router(satellite.router)
 
 
 @app.get("/")
