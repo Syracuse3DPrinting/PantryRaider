@@ -584,7 +584,10 @@ configure_touch() {
     if [ -z "$cfg" ]; then
       warn "No Pi boot config.txt found; cannot write dtoverlay for ADS7846"
     else
-      local overlay_line="dtoverlay=ads7846,cs=1,penirq=25,speed=50000,keep_vcc,swapxy=1,pmax=255,xohms=150,xmin=200,xmax=3900,ymin=200,ymax=3900"
+      # penirq_pull=2 sets a pull-up on the PENIRQ GPIO. PENIRQ is active-low
+      # (driven low on touch), so without the pull-up the line floats and the
+      # controller registers no touches. Waveshare's own config includes it.
+      local overlay_line="dtoverlay=ads7846,cs=1,penirq=25,penirq_pull=2,speed=50000,keep_vcc,swapxy=1,pmax=255,xohms=150,xmin=200,xmax=3900,ymin=200,ymax=3900"
       if grep -q 'dtoverlay=ads7846' "$cfg" 2>/dev/null; then
         log "ads7846 dtoverlay already present in $cfg; leaving untouched"
       elif [ "$DRY_RUN" = "1" ]; then
