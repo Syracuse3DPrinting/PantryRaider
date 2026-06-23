@@ -40,10 +40,19 @@ def run_firstboot(tmp_path: Path, config: str, extra_env: dict | None = None):
     return proc.returncode, proc.stdout + proc.stderr
 
 
-def test_defaults_only_grocy(tmp_path):
+def test_default_enables_mealie(tmp_path):
+    # A pi_hosted appliance is a full kitchen hub, so a default (non-remote)
+    # install now ships Mealie on and pulls its image during provisioning.
     rc, out = run_firstboot(tmp_path, "HOSTNAME=foodassistant\n")
     assert rc == 0, out
-    # No optional profiles requested -> compose runs with <none>.
+    assert "--profile with-mealie" in out
+    assert "with-ollama" not in out
+
+
+def test_mealie_disabled_runs_grocy_only(tmp_path):
+    # Explicit opt-out drops back to Grocy only (<none> optional profiles).
+    rc, out = run_firstboot(tmp_path, "ENABLE_MEALIE=false\n")
+    assert rc == 0, out
     assert "Compose profiles: <none>" in out
     assert "with-mealie" not in out
     assert "with-ollama" not in out
