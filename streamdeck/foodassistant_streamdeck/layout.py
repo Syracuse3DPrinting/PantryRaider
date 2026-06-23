@@ -24,38 +24,63 @@ def supported_key_counts() -> tuple[int, ...]:
     return tuple(sorted(GRID))
 
 
+def display_dims(key_count: int, rotation: int) -> tuple[int, int]:
+    """Return the (cols, rows) of the grid as the user sees it after rotating.
+
+    For 0 and 180 the deck keeps its native shape. For 90 and 270 it is turned
+    on its side, so columns and rows swap (an 8x4 XL becomes a 4x8 portrait).
+    """
+    cols, rows = GRID[key_count]
+    if rotation in (90, 270):
+        return rows, cols
+    return cols, rows
+
+
 def rotated_index(index: int, key_count: int, rotation: int) -> int:
-    """Map a visual key position to the physical key index after rotation.
+    """Map a visual slot to the physical key it lands on after rotation.
 
-    When the deck is rotated, the key the user sees in (say) the top-left no
-    longer matches physical index 0, so a press must be translated back. We work
-    in (row, col) using the deck's GRID, rotate the coordinate, then flatten.
-
-    For 180 the remap is exact: it is a full reversal of the grid. For 90 and
-    270 a faithful remap needs the transposed grid (cols x rows), which is a
-    different shape than the source. We do a best-effort transpose-based map so
-    the most common keys still line up; near-square decks behave well, but a
-    wide deck like the XL (8x4) cannot map perfectly onto its 4x8 transpose, so
-    treat 90/270 index mapping as approximate. The image itself rotates exactly
-    for all four values.
+    ``index`` is a slot in row-major order of the *displayed* grid (the grid the
+    web editor draws, with columns and rows swapped for 90/270). We recover its
+    (row, col) using the displayed dimensions, rotate the coordinate into the
+    deck's native grid, and flatten to a physical key. The map is an exact
+    bijection for all four rotations, so every slot lands on a distinct key.
     """
     if rotation == 0 or key_count not in GRID:
         return index
-    cols, rows = GRID[key_count]
-    if not (0 <= index < rows * cols):
+    p_cols, p_rows = GRID[key_count]
+    d_cols, d_rows = display_dims(key_count, rotation)
+    if not (0 <= index < d_cols * d_rows):
         return index
-    r, c = divmod(index, cols)
+    vr, vc = divmod(index, d_cols)
     if rotation == 180:
-        nr, nc = rows - 1 - r, cols - 1 - c
-        return nr * cols + nc
-    # 90 / 270: transpose onto a (rows x cols) -> (cols x rows) grid. The result
-    # is clamped back into range so it is always a valid physical key.
-    if rotation == 90:
-        nr, nc = c, rows - 1 - r
+        pr, pc = p_rows - 1 - vr, p_cols - 1 - vc
+    elif rotation == 90:
+        pr, pc = p_rows - 1 - vc, vr
     else:  # 270
-        nr, nc = cols - 1 - c, r
-    flat = nr * cols + nc
-    return flat if 0 <= flat < rows * cols else index
+        pr, pc = vc, p_cols - 1 - vr
+    return pr * p_cols + pc
+
+
+def slot_for_physical(phys: int, key_count: int, rotation: int) -> int:
+    """Inverse of ``rotated_index``: physical key -> displayed-grid slot.
+
+    Used when a key is pressed: the device reports the physical index, and we
+    recover which slot the user sees there so the right action fires.
+    """
+    if rotation == 0 or key_count not in GRID:
+        return phys
+    p_cols, p_rows = GRID[key_count]
+    d_cols, d_rows = display_dims(key_count, rotation)
+    if not (0 <= phys < p_cols * p_rows):
+        return phys
+    pr, pc = divmod(phys, p_cols)
+    if rotation == 180:
+        vr, vc = p_rows - 1 - pr, p_cols - 1 - pc
+    elif rotation == 90:
+        vr, vc = pc, p_rows - 1 - pr
+    else:  # 270
+        vr, vc = p_cols - 1 - pc, pr
+    return vr * d_cols + vc
 
 
 def _specs(names: list[str]) -> list[ActionSpec]:

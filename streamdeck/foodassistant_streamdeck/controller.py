@@ -164,22 +164,13 @@ class Controller:
         return w, h
 
     def _visual_slot(self, phys: int) -> int:
-        """Invert the draw-time index mapping for a pressed physical key.
+        """Recover the displayed-grid slot for a pressed physical key.
 
-        ``rotated_index`` maps visual slot -> physical key. We invert it by
-        searching the visual slots for the one that lands on ``phys``. For 180
-        this is exact; for 90/270 it inherits the same best-effort transpose
-        limitation noted in ``layout.rotated_index`` (a wide deck cannot map
-        perfectly onto its transpose), so an unmapped press falls back to the
-        physical index unchanged.
+        ``layout.slot_for_physical`` is the exact inverse of the draw-time
+        ``rotated_index`` mapping, so a press always resolves to the slot the
+        user sees, for every rotation.
         """
-        rotation = self.config.rotation
-        if not rotation:
-            return phys
-        for slot in range(self.key_count):
-            if layout.rotated_index(slot, self.key_count, rotation) == phys:
-                return slot
-        return phys
+        return layout.slot_for_physical(phys, self.key_count, self.config.rotation)
 
     # -- input -------------------------------------------------------------
 

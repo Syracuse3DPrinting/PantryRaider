@@ -96,6 +96,28 @@ def _streamdeck_present():
     return False
 
 
+# Elgato USB product IDs mapped to their key counts. Lets the web editor size
+# its grid to the deck that is actually attached instead of guessing.
+_SD_PRODUCT_KEYS = {
+    "0060": 15, "006d": 15, "0080": 15,   # Original / v2 / MK.2
+    "0063": 6, "0090": 6,                 # Mini / Mini MK.2
+    "006c": 32, "008f": 32,               # XL / XL v2
+}
+
+
+def _streamdeck_keycount():
+    """Best-effort key count for the attached deck, or None if unknown."""
+    try:
+        import re
+        out = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=5).stdout
+        m = re.search(r"0fd9:([0-9a-fA-F]{4})", out)
+        if m:
+            return _SD_PRODUCT_KEYS.get(m.group(1).lower())
+    except Exception:
+        pass
+    return None
+
+
 def _installing(step):
     p = _INSTALL_PROCS.get(step)
     return bool(p and p.poll() is None)
@@ -366,6 +388,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "present": _streamdeck_present(),
                 "active": _service_active("foodassistant-streamdeck.service"),
                 "installing": _installing("streamdeck"),
+                "key_count": _streamdeck_keycount(),
             },
         })
 

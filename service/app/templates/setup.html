@@ -2901,7 +2901,13 @@ async function loadHardwareStatus() {
     if (!r.ok) { _renderHwRow('kiosk', null); _renderHwRow('streamdeck', null); return; }
     _renderHwRow('kiosk', r.kiosk);
     _renderHwRow('streamdeck', r.streamdeck);
-    
+
+    // Auto-select model when the bridge can identify the attached deck.
+    if (r.streamdeck?.key_count) {
+      const kcEl = document.getElementById('streamdeck_key_count');
+      if (kcEl) kcEl.value = String(r.streamdeck.key_count);
+    }
+
     // Load streamdeck config
     try {
       const cfg_resp = await fetch('setup/streamdeck/config').then(x => x.json());
