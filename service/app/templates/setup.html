@@ -193,9 +193,14 @@
         <div class="form-text" id="auth-pw-hint">Required while authentication is on. Setup will not complete without it.</div>
       </div>
       <div class="mb-3" id="wiz-apikey-row">
-        <label class="form-label">API Key <span class="text-secondary small">(optional — for Home Assistant / headless clients)</span></label>
+        <label class="form-label">API Key <span class="text-secondary small">(Home Assistant, headless clients, satellite devices)</span></label>
         {{ secret_input('api_key', 'Sent as X-API-Key header') }}
-        <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
+        <div class="d-flex align-items-center gap-2 mt-1">
+          <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generateApiKey()">
+            <i class="bi bi-arrow-repeat me-1"></i>Generate
+          </button>
+          <span class="form-text mb-0">Satellite devices enter this key in their setup wizard under "Main Server."</span>
+        </div>
       </div>
     </div>
 
@@ -1153,10 +1158,20 @@
                 finish setup without it.</div>
             </div>
             <div class="mb-3">
-              <label class="form-label">API Key <span class="text-secondary small">(Home Assistant / headless clients)</span></label>
+              <label class="form-label">API Key <span class="text-secondary small">(Home Assistant, headless clients, satellite devices)</span></label>
               {{ secret_input('api_key', 'Sent as X-API-Key header') }}
-              <div class="form-text">Generate with: <code>openssl rand -hex 24</code></div>
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generateApiKey()">
+                  <i class="bi bi-arrow-repeat me-1"></i>Generate
+                </button>
+                <span class="form-text mb-0">Click Generate, then Save Settings and copy this key to any satellite devices.</span>
+              </div>
             </div>
+            {% if not features.satellite %}
+            <div class="alert alert-secondary py-2 small mb-0">
+              <i class="bi bi-broadcast me-1"></i><strong>Satellite devices</strong> enter this key in their setup wizard under "Main Server." Regenerating a new key invalidates existing satellite connections until they re-sync.
+            </div>
+            {% endif %}
           </div>
 
           <div class="section-card">
@@ -1692,6 +1707,21 @@ async function checkUpdate(btn) {
   }
   btn.disabled = false;
   btn.innerHTML = orig;
+}
+
+function generateApiKey() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  // Set value in every api_key input on the page (wizard + settings share the same ID).
+  ['api_key'].forEach(id => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.value = hex;
+    el.type = 'text';
+    el.dataset.clear = '';
+    el.disabled = false;
+  });
 }
 
 function clearSecret(id) {
