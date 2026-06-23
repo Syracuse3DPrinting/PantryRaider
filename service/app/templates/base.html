@@ -35,6 +35,8 @@
   </script>
   <!-- Applies scale + orientation on the attached kiosk display only -->
   <script src="static/js/kiosk-display.js"></script>
+  <!-- USB-keyboard navigation: number keys jump to nav tabs, "?" shows help -->
+  <script src="static/js/keyboard-nav.js"></script>
   <style>
     body { padding-top: 60px; }
     .navbar-brand { font-weight: 700; letter-spacing: -0.5px; }
@@ -74,6 +76,12 @@
           </li>
         </ul>
         <ul class="navbar-nav">
+          <li class="nav-item">
+            <a class="nav-link" href="#" title="Keyboard shortcuts (press ?)"
+               onclick="if(window.__kbdNavHelp){window.__kbdNavHelp();}return false;">
+              <i class="bi bi-keyboard"></i>
+            </a>
+          </li>
           <li class="nav-item">
             <button class="nav-link btn btn-link" data-bs-toggle="modal" data-bs-target="#qrModal" title="Phone QR code">
               <i class="bi bi-qr-code"></i>
