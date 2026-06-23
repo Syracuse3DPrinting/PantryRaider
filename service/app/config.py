@@ -218,6 +218,29 @@ class Settings(BaseSettings):
     def is_remote_mode(self) -> bool:
         return self.deployment_mode == "pi_remote"
 
+    def features(self) -> "dict[str, bool]":
+        """Which capability groups are active for this deployment_mode.
+
+        Templates and routers use these flags to show or hide sections.
+        The method does NOT import at module level (hardware detection reads
+        /proc/device-tree, which is unavailable in tests and CI).
+        """
+        from .hardware import is_raspberry_pi  # deferred to avoid import-time side-effects
+        is_pi = is_raspberry_pi()
+        remote = self.deployment_mode == "pi_remote"
+        return {
+            # local_stack: Grocy, Mealie, AI providers, Docker controls
+            "local_stack": not remote,
+            # peripherals: kiosk display + Stream Deck panes (Pi only)
+            "peripherals": is_pi,
+            # streamdeck: Stream Deck pane visible (Pi + has a deck declared)
+            "streamdeck": is_pi and bool(self.has_streamdeck),
+            # remote_config: show the remote server URL input
+            "remote_config": remote,
+            # ai: vision/LLM provider config (always available)
+            "ai": True,
+        }
+
     # User-defined storage categories beyond the four built-ins. Each is a
     # dict {key,label,icon,color,bg,location,match}. See storage_categories.py.
     custom_storage_categories: list = []

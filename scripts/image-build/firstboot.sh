@@ -685,7 +685,6 @@ install_rotation_helper() {
 # reaches it on 127.0.0.1:9299 because docker-compose.appliance.yml uses
 # network_mode: host.
 install_host_bridge() {
-  is_remote_mode && return 0   # thin remote has no local app container
 
   local bridge_src="" svc_src=""
   for candidate in "$ASSET_DIR/foodassistant-host-bridge" \
@@ -758,6 +757,150 @@ EOF
   log "seed_app_settings: wrote $settings_file (deployment_mode=$mode, has_streamdeck=$sd_val)"
 }
 
+# Step: deploy the FoodAssistant UI service in a Python venv for Pi Remote.
+# No Docker needed: just uvicorn + the app, bound directly on port 80.
+# The user can then browse to http://<hostname>.local/ to set the remote URL.
+deploy_remote_service() {
+  local venv_dir="/opt/foodassistant/venv"
+  local svc_src=""
+  if [ -d "$REPO_DIR/service" ]; then
+    svc_src="$REPO_DIR/service"
+  elif [ -d "$ASSET_DIR/service" ]; then
+    svc_src="$ASSET_DIR/service"
+  fi
+
+  log "Installing FoodAssistant remote UI service (Python venv, port 80)"
+  apt_install python3-venv python3-pip || die "python3-venv install failed"
+
+  if [ -d "$venv_dir" ]; then
+    log "Reusing existing venv at $venv_dir"
+  else
+    if [ "$DRY_RUN" = "1" ]; then
+      log "DRY_RUN would create venv at $venv_dir"
+    else
+      python3 -m venv "$venv_dir"
+    fi
+  fi
+
+  if [ -n "$svc_src" ] && [ -f "$svc_src/requirements.txt" ]; then
+    log "Installing service requirements into venv"
+    if [ "$DRY_RUN" != "1" ]; then
+      "$venv_dir/bin/pip" install --quiet -r "$svc_src/requirements.txt" \
+        || warn "pip install failed; service may not start"
+    fi
+  else
+    warn "service/requirements.txt not found; pip install skipped"
+  fi
+
+  # Copy service source into place (separate from venv so updates don't
+  # require reinstalling packages).
+  local app_dir="/opt/foodassistant/service"
+  if [ -n "$svc_src" ]; then
+    log "Copying service app from $svc_src to $app_dir"
+    if [ "$DRY_RUN" != "1" ]; then
+      run mkdir -p "$app_dir"
+      cp -a "$svc_src/." "$app_dir/"
+    fi
+  fi
+
+  # Write the .env file that the service reads on startup.
+  local env_file="/opt/foodassistant/remote.env"
+  if [ ! -f "$env_file" ] || [ "$DRY_RUN" = "1" ]; then
+    log "Writing $env_file"
+    if [ "$DRY_RUN" = "1" ]; then
+      log "DRY_RUN would write $env_file (DEPLOYMENT_MODE=pi_remote, REMOTE_SERVER_URL, TZ)"
+    else
+      cat > "$env_file" <<EOF
+DEPLOYMENT_MODE=pi_remote
+REMOTE_SERVER_URL=${REMOTE_SERVER_URL:-}
+TZ=${TZ:-America/New_York}
+AUTH_REQUIRED=false
+FOODASSISTANT_FORCE_MODEL=Raspberry Pi
+EOF
+      chmod 600 "$env_file"
+    fi
+  fi
+
+  seed_app_settings
+
+  # Systemd service: run uvicorn directly on port 80 (CAP_NET_BIND_SERVICE
+  # lets an unprivileged binary bind ports below 1024 when set on the binary,
+  # but systemd AmbientCapabilities is the most portable approach here).
+  local sd_user
+  sd_user="$(primary_user)"
+  local exec_uvicorn="$venv_dir/bin/uvicorn"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would write /etc/systemd/system/foodassistant-remote.service"
+  else
+    cat > /etc/systemd/system/foodassistant-remote.service <<EOF
+[Unit]
+Description=FoodAssistant Pi Remote UI
+Documentation=https://github.com/Syracuse3DPrinting/FoodAssistant
+After=network.target
+Wants=network.target
+
+[Service]
+Type=simple
+User=${sd_user:-foodassistant}
+WorkingDirectory=$app_dir
+EnvironmentFile=$env_file
+ExecStart=$exec_uvicorn app.main:app --host 0.0.0.0 --port 80
+Restart=on-failure
+RestartSec=5
+# Allow binding port 80 without running as root.
+AmbientCapabilities=CAP_NET_BIND_SERVICE
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    systemctl daemon-reload
+    systemctl enable foodassistant-remote.service || warn "remote service enable failed"
+    systemctl start  foodassistant-remote.service || warn "remote service start failed (will retry on boot)"
+  fi
+  log "FoodAssistant remote UI service installed; reachable at http://${HOSTNAME}.local/"
+}
+
+# Step: port-80 redirect for Pi Hosted.
+# Routes incoming TCP port 80 to port 9284 so users can browse to
+# http://<hostname>.local/ without specifying a port. Uses iptables NAT
+# (no nginx needed) and persists the rule via iptables-persistent.
+configure_port80() {
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would add iptables PREROUTING 80->9284 and persist via iptables-persistent"
+    return 0
+  fi
+  # Check if iptables-persistent is available; install quietly if not.
+  if ! dpkg -l iptables-persistent &>/dev/null; then
+    # Pre-answer the "save current rules?" prompt to avoid interactive install.
+    echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" \
+      | debconf-set-selections 2>/dev/null || true
+    echo "iptables-persistent iptables-persistent/autosave_v6 boolean false" \
+      | debconf-set-selections 2>/dev/null || true
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      iptables-persistent 2>/dev/null || true
+  fi
+
+  # Idempotent: only add the rule if it is not already there.
+  if ! iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9284 2>/dev/null; then
+    iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9284
+    log "Added iptables PREROUTING rule: port 80 -> 9284"
+  fi
+  # Same for loopback (OUTPUT chain covers connections from localhost).
+  if ! iptables -t nat -C OUTPUT -p tcp --dport 80 -j REDIRECT --to-port 9284 2>/dev/null; then
+    iptables -t nat -A OUTPUT     -p tcp --dport 80 -j REDIRECT --to-port 9284
+  fi
+
+  # Persist rules across reboots.
+  if command -v netfilter-persistent >/dev/null 2>&1; then
+    netfilter-persistent save 2>/dev/null || warn "netfilter-persistent save failed"
+  elif [ -f /etc/iptables/rules.v4 ]; then
+    iptables-save > /etc/iptables/rules.v4 || warn "iptables-save failed"
+  fi
+  log "Port 80 -> 9284 redirect configured (pi_hosted)"
+}
+
 # Returns 0 when step $1 should run: always when STEPS is empty (run all),
 # or when $1 appears in the comma-separated STEPS list.
 _step_requested() {
@@ -809,24 +952,26 @@ main() {
   _step_requested "mdns"        && configure_mdns
 
   if is_remote_mode; then
-    # Thin client: no Docker, no Grocy/Mealie, no local FoodAssistant service.
-    # Just a kiosk and/or Stream Deck pointed at the remote server. This is what
-    # keeps a Pi Remote viable on low-spec hardware (Pi 3).
-    if [ -z "$REMOTE_SERVER_URL" ]; then
-      warn "Pi Remote mode selected but REMOTE_SERVER_URL is empty; the kiosk/Stream Deck will have no server to talk to. Set REMOTE_SERVER_URL in config.env."
-    fi
-    log "Pi Remote mode: skipping Docker and the local stack; controlling ${REMOTE_SERVER_URL:-<unset>}"
-    _step_requested "rotation"    && configure_display_rotation
-    _step_requested "kiosk"       && configure_kiosk
-    _step_requested "streamdeck"  && configure_streamdeck
+    # Thin client: no Docker, no Grocy/Mealie stack. The FoodAssistant UI service
+    # runs directly in a Python venv on port 80, so the user can browse to
+    # http://<hostname>.local/ to configure the remote server URL and peripheral
+    # layout without ever needing SSH again.
+    log "Pi Remote mode: skipping Docker stack; controlling ${REMOTE_SERVER_URL:-<unset -- configure via web UI>}"
+    _step_requested "remote_service" && deploy_remote_service
+    _step_requested "hostbridge"     && install_host_bridge
+    _step_requested "rotation"       && configure_display_rotation
+    _step_requested "kiosk"          && configure_kiosk
+    _step_requested "streamdeck"     && configure_streamdeck
     [ -z "$STEPS" ] && mark_done
+    local _svc_url="http://${HOSTNAME}.local/"
     log "FoodAssistant Pi Remote first-boot complete."
-    log "  This device controls: ${REMOTE_SERVER_URL:-<set REMOTE_SERVER_URL>}"
+    log "  Open ${_svc_url} in a browser on your LAN to set the remote server URL."
     return 0
   fi
 
   _step_requested "docker"      && install_docker
   _step_requested "stack"       && deploy_stack
+  _step_requested "port80"      && configure_port80
   _step_requested "hostbridge"  && install_host_bridge
   _step_requested "rotation"    && configure_display_rotation
   _step_requested "kiosk"       && configure_kiosk
@@ -834,8 +979,8 @@ main() {
   [ -z "$STEPS" ] && mark_done
 
   log "FoodAssistant first-boot complete. Reach the UI at:"
-  log "  http://${HOSTNAME}.local:9284/   (or http://<device-ip>:9284/)"
-  log "First-time setup wizard: http://${HOSTNAME}.local:9284/setup"
+  log "  http://${HOSTNAME}.local/   (or http://<device-ip>/)"
+  log "First-time setup wizard: http://${HOSTNAME}.local/setup"
 }
 
 main "$@"
