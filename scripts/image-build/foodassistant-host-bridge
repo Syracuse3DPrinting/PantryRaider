@@ -10,7 +10,8 @@ as Wi-Fi, hostname, display KMS rotation, and service restarts.
 
 Endpoints
 ---------
-GET  /wifi/status          current Wi-Fi SSID (from nmcli)
+GET  /wifi/status          current Wi-Fi state + SSID (from nmcli)
+GET  /wifi/scan            list visible networks {ssid, signal, security}
 POST /wifi/connect         connect to a network  {ssid, password?}
 GET  /hostname             current hostname
 POST /hostname             change hostname       {hostname}
@@ -141,6 +142,108 @@ def _installing(step):
     return bool(p and p.poll() is None)
 
 
+# Wi-Fi helpers
+# -------------
+# nmcli is always invoked in terse mode (-t -f) so the output is colon-separated
+# and stable across versions. nmcli escapes literal colons in field values as
+# "\:", so splitting must unescape them rather than a naive str.split(":").
+
+def _nmcli_split(line):
+    """Split one terse nmcli line into fields, honoring backslash escapes.
+
+    nmcli escapes ':' and '\\' in values as '\\:' and '\\\\'. A naive split on
+    ':' would break SSIDs that contain a colon, so walk the string instead.
+    """
+    fields = []
+    cur = []
+    i = 0
+    while i < len(line):
+        ch = line[i]
+        if ch == "\\" and i + 1 < len(line):
+            cur.append(line[i + 1])
+            i += 2
+            continue
+        if ch == ":":
+            fields.append("".join(cur))
+            cur = []
+            i += 1
+            continue
+        cur.append(ch)
+        i += 1
+    fields.append("".join(cur))
+    return fields
+
+
+def _parse_wifi_device(out):
+    """Pick the wifi device from `nmcli -t -f DEVICE,TYPE,STATE device` output.
+
+    Returns (device, state) for the first wifi device, or (None, None) when no
+    wifi hardware is present. state is the raw nmcli state string, for example
+    "connected", "disconnected", or "unmanaged".
+    """
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = _nmcli_split(line)
+        if len(parts) < 3:
+            continue
+        device, dtype, state = parts[0], parts[1], parts[2]
+        if dtype == "wifi":
+            return device, state
+    return None, None
+
+
+def _parse_active_ssid(out):
+    """Connected SSID from `nmcli -t -f ACTIVE,SSID dev wifi`, or "" if none."""
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = _nmcli_split(line)
+        if len(parts) >= 2 and parts[0] == "yes":
+            return parts[1]
+    return ""
+
+
+def _parse_wifi_scan(out):
+    """Parse `nmcli -t -f SSID,SIGNAL,SECURITY dev wifi list` output.
+
+    Returns a list of {ssid, signal, security} dicts, hidden/blank SSIDs
+    dropped, deduped by SSID (keeping the strongest signal), sorted by signal
+    descending.
+    """
+    best = {}
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        parts = _nmcli_split(line)
+        if len(parts) < 1:
+            continue
+        ssid = parts[0]
+        if not ssid:
+            continue
+        try:
+            signal = int(parts[1]) if len(parts) > 1 and parts[1] else 0
+        except ValueError:
+            signal = 0
+        security = parts[2] if len(parts) > 2 else ""
+        prev = best.get(ssid)
+        if prev is None or signal > prev["signal"]:
+            best[ssid] = {"ssid": ssid, "signal": signal, "security": security}
+    return sorted(best.values(), key=lambda n: n["signal"], reverse=True)
+
+
+def _nm_running():
+    """True when NetworkManager (nmcli) is reachable."""
+    try:
+        r = subprocess.run(
+            ["nmcli", "-t", "-f", "RUNNING", "general"],
+            capture_output=True, text=True, timeout=5
+        )
+        return r.returncode == 0 and "running" in r.stdout.lower()
+    except Exception:
+        return False
+
+
 class _Handler(http.server.BaseHTTPRequestHandler):
     def _send(self, code, data):
         body = json.dumps(data).encode()
@@ -157,6 +260,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def do_GET(self):
         if self.path == "/wifi/status":
             self._wifi_status()
+        elif self.path == "/wifi/scan":
+            self._wifi_scan()
         elif self.path == "/hostname":
             self._get_hostname()
         elif self.path == "/display/rotation":
@@ -195,16 +300,80 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(404, {"error": "not found"})
 
     def _wifi_status(self):
+        # Report a structured state the UI can show instead of a bare blank:
+        #   no-networkmanager -> nmcli/NetworkManager is not running
+        #   no-adapter        -> no wifi hardware on this device
+        #   unmanaged         -> wifi device exists but NM does not manage it
+        #   disconnected      -> wifi adapter present, no active connection
+        #   connected         -> joined a network (ssid is set)
         try:
-            out = subprocess.run(
+            if not _nm_running():
+                self._send(200, {
+                    "ok": True, "state": "no-networkmanager", "ssid": "",
+                    "detail": "NetworkManager is not running.",
+                })
+                return
+            dev_out = subprocess.run(
+                ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
+                capture_output=True, text=True, timeout=5
+            ).stdout
+            device, dev_state = _parse_wifi_device(dev_out)
+            if not device:
+                self._send(200, {
+                    "ok": True, "state": "no-adapter", "ssid": "",
+                    "detail": "No Wi-Fi adapter found.",
+                })
+                return
+            if dev_state == "unmanaged":
+                self._send(200, {
+                    "ok": True, "state": "unmanaged", "ssid": "", "device": device,
+                    "detail": "Wi-Fi device is not managed by NetworkManager.",
+                })
+                return
+            ssid_out = subprocess.run(
                 ["nmcli", "-t", "-f", "ACTIVE,SSID", "dev", "wifi"],
                 capture_output=True, text=True, timeout=5
             ).stdout
-            ssid = next(
-                (line[4:] for line in out.splitlines() if line.startswith("yes:")),
-                ""
+            ssid = _parse_active_ssid(ssid_out)
+            self._send(200, {
+                "ok": True,
+                "state": "connected" if ssid else "disconnected",
+                "ssid": ssid,
+                "device": device,
+            })
+        except Exception as e:
+            self._send(500, {"ok": False, "error": str(e)})
+
+    def _wifi_scan(self):
+        try:
+            if not _nm_running():
+                self._send(200, {
+                    "ok": True, "state": "no-networkmanager", "networks": [],
+                    "detail": "NetworkManager is not running.",
+                })
+                return
+            dev_out = subprocess.run(
+                ["nmcli", "-t", "-f", "DEVICE,TYPE,STATE", "device"],
+                capture_output=True, text=True, timeout=5
+            ).stdout
+            device, _ = _parse_wifi_device(dev_out)
+            if not device:
+                self._send(200, {
+                    "ok": True, "state": "no-adapter", "networks": [],
+                    "detail": "No Wi-Fi adapter found.",
+                })
+                return
+            r = subprocess.run(
+                ["nmcli", "-t", "-f", "SSID,SIGNAL,SECURITY", "dev", "wifi", "list"],
+                capture_output=True, text=True, timeout=20
             )
-            self._send(200, {"ok": True, "ssid": ssid})
+            if r.returncode != 0:
+                self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
+                return
+            self._send(200, {
+                "ok": True, "state": "ok",
+                "networks": _parse_wifi_scan(r.stdout),
+            })
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
 

@@ -76,3 +76,70 @@ def test_compose_env_uses_provisioner_repo_dir(monkeypatch):
     )
     env = bridge._compose_env()
     assert env["REPO_DIR"] == "/x"
+
+
+# Wi-Fi parsing helpers (FoodAssistant-cqw)
+
+
+def test_nmcli_split_plain():
+    assert bridge._nmcli_split("wlan0:wifi:connected") == ["wlan0", "wifi", "connected"]
+
+
+def test_nmcli_split_unescapes_colon_and_backslash():
+    # nmcli escapes ':' as '\:' inside a field value (for example an SSID).
+    assert bridge._nmcli_split(r"My\:Net:80:WPA2") == ["My:Net", "80", "WPA2"]
+    assert bridge._nmcli_split(r"a\\b:1") == ["a\\b", "1"]
+
+
+def test_parse_wifi_device_finds_wifi():
+    out = "eth0:ethernet:connected\nwlan0:wifi:disconnected\nlo:loopback:unmanaged\n"
+    assert bridge._parse_wifi_device(out) == ("wlan0", "disconnected")
+
+
+def test_parse_wifi_device_none_when_no_wifi():
+    out = "eth0:ethernet:connected\nlo:loopback:unmanaged\n"
+    assert bridge._parse_wifi_device(out) == (None, None)
+
+
+def test_parse_wifi_device_reports_unmanaged_state():
+    out = "wlan0:wifi:unmanaged\n"
+    assert bridge._parse_wifi_device(out) == ("wlan0", "unmanaged")
+
+
+def test_parse_active_ssid():
+    out = "no:OtherNet\nyes:HomeNet\nno:Guest\n"
+    assert bridge._parse_active_ssid(out) == "HomeNet"
+
+
+def test_parse_active_ssid_none_connected():
+    out = "no:OtherNet\nno:Guest\n"
+    assert bridge._parse_active_ssid(out) == ""
+
+
+def test_parse_active_ssid_with_escaped_colon():
+    out = r"yes:Home\:Net" + "\n"
+    assert bridge._parse_active_ssid(out) == "Home:Net"
+
+
+def test_parse_wifi_scan_sorts_and_dedupes():
+    out = (
+        "HomeNet:42:WPA2\n"
+        "HomeNet:88:WPA2\n"   # stronger duplicate wins
+        "Cafe:55:--\n"
+        ":30:WPA2\n"          # hidden / blank SSID dropped
+    )
+    nets = bridge._parse_wifi_scan(out)
+    assert nets == [
+        {"ssid": "HomeNet", "signal": 88, "security": "WPA2"},
+        {"ssid": "Cafe", "signal": 55, "security": "--"},
+    ]
+
+
+def test_parse_wifi_scan_handles_bad_signal():
+    out = "Net:xx:WPA2\n"
+    nets = bridge._parse_wifi_scan(out)
+    assert nets == [{"ssid": "Net", "signal": 0, "security": "WPA2"}]
+
+
+def test_parse_wifi_scan_empty():
+    assert bridge._parse_wifi_scan("") == []

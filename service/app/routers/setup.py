@@ -540,8 +540,23 @@ async def network_status():
         return {
             "ok": True,
             "ssid": wifi.get("ssid", ""),
+            "wifi_state": wifi.get("state", ""),
+            "wifi_detail": wifi.get("detail", ""),
             "hostname": hn.get("hostname", ""),
         }
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+
+@router.get("/network/scan")
+async def network_scan():
+    """List visible Wi-Fi networks, via the Pi host bridge."""
+    if not is_raspberry_pi():
+        return {"ok": False, "error": "Not available on this platform."}
+    try:
+        async with httpx.AsyncClient(timeout=25.0) as c:
+            r = (await c.get(f"{_HOST_BRIDGE}/wifi/scan")).json()
+        return r
     except Exception as e:
         return {"ok": False, "error": str(e)}
 
