@@ -104,6 +104,20 @@ load_config() {
   ENABLE_KIOSK="${ENABLE_KIOSK:-auto}"
   ENABLE_STREAMDECK="${ENABLE_STREAMDECK:-auto}"
   DISPLAY_ROTATION="${DISPLAY_ROTATION:-0}"
+  # Touch driver for the kiosk display:
+  #   auto     - try to detect (checks for SPI/ADS7846 and existing HID touch)
+  #   ads7846  - SPI resistive (Waveshare HDMI displays, many small Pi screens)
+  #   usb      - USB HID touch (larger HDMI touch monitors, connects via USB)
+  #   none     - no touchscreen; skip all touch config
+  # When ads7846 is active, dtoverlay=ads7846 is added to /boot/firmware/config.txt.
+  # TOUCH_CALIBRATION_MATRIX can override the libinput coordinate transform:
+  #   "1 0 0 0 1 0"    - identity (no transform, default)
+  #   "0 1 0 -1 0 1"   - 90 degrees CW
+  #   "-1 0 1 0 -1 1"  - 180 degrees
+  #   "0 -1 1 1 0 0"   - 270 degrees CW
+  # Leave empty to auto-derive from DISPLAY_ROTATION.
+  TOUCH_DRIVER="${TOUCH_DRIVER:-auto}"
+  TOUCH_CALIBRATION_MATRIX="${TOUCH_CALIBRATION_MATRIX:-}"
   FOODASSISTANT_TAG="${FOODASSISTANT_TAG:-latest}"
   INSTALL_DIR="${INSTALL_DIR:-/opt/foodassistant}"
 
@@ -481,6 +495,126 @@ has_streamdeck() {
   fi
   grep -qil '0fd9' /sys/bus/usb/devices/*/idVendor 2>/dev/null && return 0
   return 1
+}
+
+# Return the Pi OS boot config path: /boot/firmware/config.txt on Bookworm+,
+# /boot/config.txt on older releases. Returns empty string if neither exists.
+_pi_config_txt() {
+  if [ -f /boot/firmware/config.txt ]; then
+    echo /boot/firmware/config.txt
+  elif [ -f /boot/config.txt ]; then
+    echo /boot/config.txt
+  fi
+}
+
+# Derive a libinput calibration matrix from DISPLAY_ROTATION when the user has
+# not supplied an explicit TOUCH_CALIBRATION_MATRIX. The 6-float matrix maps
+# from touch-panel coordinates to screen coordinates, accounting for the same
+# rotation applied to the display. Values match standard libinput conventions.
+_touch_calibration_matrix() {
+  local m="${TOUCH_CALIBRATION_MATRIX:-}"
+  if [ -n "$m" ]; then
+    echo "$m"
+    return
+  fi
+  case "${DISPLAY_ROTATION:-0}" in
+    90)  echo "0 -1 1 1 0 0" ;;
+    180) echo "-1 0 1 0 -1 1" ;;
+    270) echo "0 1 0 -1 0 1" ;;
+    *)   echo "1 0 0 0 1 0" ;;
+  esac
+}
+
+# Write a libinput quirks file so the touch panel's axes are mapped correctly
+# without needing to run xinput_calibrator or touchscreen_calibrator.
+# Works for both X11 and Wayland (cage/wlroots reads libinput, not X).
+_write_libinput_touch_quirk() {
+  local match_name="$1"    # MatchName glob, e.g. "ADS7846*" or "Goodix*"
+  local matrix
+  matrix="$(_touch_calibration_matrix)"
+
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would write /etc/libinput/local-overrides.quirks (match=$match_name matrix=$matrix)"
+    return 0
+  fi
+
+  mkdir -p /etc/libinput
+  cat > /etc/libinput/local-overrides.quirks <<EOF
+[FoodAssistant touchscreen calibration]
+MatchName=${match_name}
+AttrCalibrationMatrix=${matrix}
+EOF
+  log "Wrote libinput calibration quirk: MatchName=${match_name} matrix=${matrix}"
+}
+
+configure_touch() {
+  local driver="${TOUCH_DRIVER:-auto}"
+
+  # Explicit opt-out
+  if [ "$driver" = "none" ]; then
+    log "Touch driver set to none; skipping touch configuration"
+    return 0
+  fi
+
+  # Auto-detect: check for SPI bus (ADS7846 candidate) or existing HID touch
+  if [ "$driver" = "auto" ]; then
+    if ls /dev/spidev* >/dev/null 2>&1 || \
+       grep -qr 'ads7846\|ADS7846' /sys/bus/spi/devices/ 2>/dev/null; then
+      log "Auto-detected SPI bus; assuming ADS7846 touch controller"
+      driver="ads7846"
+    elif find /dev/input -name 'event*' 2>/dev/null | \
+         xargs -I{} grep -lqE 'touchscreen|Touch' /sys/class/input/*/device/name 2>/dev/null; then
+      log "Auto-detected HID touch input device; driver=usb"
+      driver="usb"
+    else
+      log "No touch device auto-detected (TOUCH_DRIVER=auto). Set TOUCH_DRIVER=ads7846 or usb in config.env if a touchscreen is attached, then re-run with STEPS=touch."
+      return 0
+    fi
+  fi
+
+  log "Configuring touch driver: $driver"
+
+  if [ "$driver" = "ads7846" ]; then
+    # ADS7846 is a SPI resistive touch controller used on Waveshare HDMI
+    # panels and many small Pi HAT displays. It needs a device tree overlay
+    # in config.txt. The defaults below work for Waveshare 3.5"-4" HDMI LCD;
+    # adjust cs/penirq/speed in config.env for other layouts.
+    local cfg
+    cfg="$(_pi_config_txt)"
+    if [ -z "$cfg" ]; then
+      warn "No Pi boot config.txt found; cannot write dtoverlay for ADS7846"
+    else
+      local overlay_line="dtoverlay=ads7846,cs=1,penirq=25,speed=50000,keep_vcc,swapxy=1,pmax=255,xohms=150,xmin=200,xmax=3900,ymin=200,ymax=3900"
+      if grep -q 'dtoverlay=ads7846' "$cfg" 2>/dev/null; then
+        log "ads7846 dtoverlay already present in $cfg; leaving untouched"
+      elif [ "$DRY_RUN" = "1" ]; then
+        log "DRY_RUN would append to $cfg: $overlay_line"
+      else
+        printf '\n# FoodAssistant: ADS7846 SPI touch\n%s\n' "$overlay_line" >> "$cfg"
+        log "Appended ads7846 dtoverlay to $cfg (takes effect after reboot)"
+      fi
+    fi
+    # SPI must also be enabled for the overlay to work. Add dtparam=spi=on if
+    # missing (idempotent: do nothing if already present or if no config found).
+    if [ -n "$cfg" ] && ! grep -q 'dtparam=spi=on' "$cfg" 2>/dev/null; then
+      if [ "$DRY_RUN" = "1" ]; then
+        log "DRY_RUN would append dtparam=spi=on to $cfg"
+      else
+        printf 'dtparam=spi=on\n' >> "$cfg"
+        log "Enabled SPI (dtparam=spi=on) in $cfg"
+      fi
+    fi
+    _write_libinput_touch_quirk "ADS7846*"
+  fi
+
+  if [ "$driver" = "usb" ]; then
+    # USB HID touch panels enumerate as generic input devices and need no kernel
+    # overlay, but the coordinate axes are sometimes mirrored or rotated. Write
+    # a calibration quirk with a broad match so most panels are covered. The
+    # matrix defaults to identity; set TOUCH_CALIBRATION_MATRIX in config.env
+    # if the touch is mis-mapped.
+    _write_libinput_touch_quirk "* Touchscreen"
+  fi
 }
 
 configure_kiosk() {
@@ -1091,6 +1225,7 @@ main() {
     _step_requested "remote_service" && deploy_remote_service
     _step_requested "hostbridge"     && install_host_bridge
     _step_requested "rotation"       && configure_display_rotation
+    _step_requested "touch"          && configure_touch
     _step_requested "kiosk"          && configure_kiosk
     _step_requested "streamdeck"     && configure_streamdeck
     [ -z "$STEPS" ] && mark_done
@@ -1105,6 +1240,7 @@ main() {
   _step_requested "port80"      && configure_port80
   _step_requested "hostbridge"  && install_host_bridge
   _step_requested "rotation"    && configure_display_rotation
+  _step_requested "touch"       && configure_touch
   _step_requested "kiosk"       && configure_kiosk
   _step_requested "streamdeck"  && configure_streamdeck
   [ -z "$STEPS" ] && mark_done
