@@ -62,6 +62,26 @@ def logout(request: Request):
     return ingress_redirect(request, "/ui/login")
 
 
+@router.get("/pin", response_class=HTMLResponse)
+def pin_page(request: Request):
+    # No PIN configured (or not a satellite): nothing to unlock.
+    if not settings.pin_lock_active() or request.session.get("pin_ok"):
+        return ingress_redirect(request, "/ui/")
+    return templates.TemplateResponse(request, "pin.html",
+        {"request": request, "error": None})
+
+
+@router.post("/pin/verify")
+def pin_verify(request: Request, pin: str = Form(None)):
+    if not settings.pin_lock_active():
+        return ingress_redirect(request, "/ui/")
+    if pin and secrets.compare_digest(pin.strip(), settings.kiosk_pin):
+        request.session["pin_ok"] = True
+        return ingress_redirect(request, "/ui/")
+    return templates.TemplateResponse(request, "pin.html",
+        {"request": request, "error": "Incorrect PIN."}, status_code=401)
+
+
 @router.get("/", response_class=HTMLResponse)
 @router.get("/inventory", response_class=HTMLResponse)
 async def inventory_page(request: Request):

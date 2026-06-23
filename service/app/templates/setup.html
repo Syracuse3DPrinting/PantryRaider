@@ -202,6 +202,11 @@
           <span class="form-text mb-0">Satellite devices enter this key in their setup wizard under "Main Server."</span>
         </div>
       </div>
+      <div class="mb-3 d-none" id="wiz-pin-row" style="max-width: 240px;">
+        <label class="form-label">Kiosk PIN <span class="text-secondary small">(optional, digits only)</span></label>
+        {{ secret_input('kiosk_pin', 'e.g. 1234') }}
+        <div class="form-text">A lightweight lock for this device's touchscreen. Leave blank for none.</div>
+      </div>
     </div>
 
     <div class="d-flex justify-content-between">
@@ -715,6 +720,17 @@
               <i class="bi bi-arrow-repeat me-1"></i>Sync from server
             </button>
             <div class="test-result" id="upstream-result"></div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-keypad text-info"></i> Kiosk PIN
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">A satellite turns the UI password off by default (the main server owns access control). Set a short numeric PIN for a lightweight lock that is easy to enter on the touchscreen. Leave blank for no lock.</p>
+            <div class="mb-2" style="max-width: 220px;">
+              <label class="form-label">PIN <span class="text-secondary small">(digits only)</span></label>
+              {{ secret_input('kiosk_pin', 'e.g. 1234') }}
+            </div>
+            <div class="form-text">Applies only to this device's screen. Use Settings here to change or clear it. It does not affect the main server.</div>
           </div>
 
           <div class="section-card">
@@ -2036,6 +2052,7 @@ function buildPayload() {
     deployment_mode: (typeof _installMode !== 'undefined' && _installMode) ? _installMode : undefined,
     remote_server_url: val('remote_server_url') || undefined,
     upstream_api_key: secretVal('upstream_api_key'),
+    kiosk_pin:       secretVal('kiosk_pin'),
   };
 }
 
@@ -2285,10 +2302,12 @@ function selectInstallMode(mode) {
   }
   // Pi Remote owns no data and has no local API, so the UI password and API
   // key do not apply: the remote server handles access control. Default auth
-  // off and hide the API key. (An optional kiosk PIN can be added later.)
+  // off, hide the API key, and offer the optional touchscreen PIN instead.
   const isRemote = mode === 'pi_remote';
   const apikeyRow = document.getElementById('wiz-apikey-row');
   if (apikeyRow) apikeyRow.classList.toggle('d-none', isRemote);
+  const pinRow = document.getElementById('wiz-pin-row');
+  if (pinRow) pinRow.classList.toggle('d-none', !isRemote);
   const pwBadge = document.getElementById('wiz-pw-badge');
   if (pwBadge) pwBadge.classList.toggle('d-none', isRemote);
   const secSub = document.getElementById('wiz-sec-sub');

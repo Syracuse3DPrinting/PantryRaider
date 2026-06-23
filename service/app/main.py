@@ -107,6 +107,24 @@ async def require_auth(request: Request, call_next):
     return JSONResponse({"detail": "Unauthorized"}, status_code=401)
 
 
+@app.middleware("http")
+async def require_pin(request: Request, call_next):
+    """Optional numeric PIN gate for the kiosk UI on a satellite. It only guards
+    the browser UI (/ui and the root redirect), leaving /setup reachable so the
+    PIN can be changed or cleared without SSH. The unlock screen lives at
+    /ui/pin and stores a session flag once the code matches."""
+    if not settings.pin_lock_active():
+        return await call_next(request)
+    path = request.url.path
+    if not (path == "/" or path.startswith("/ui")):
+        return await call_next(request)
+    if path in ("/ui/pin", "/ui/pin/verify", "/ui/login") or _is_static(path):
+        return await call_next(request)
+    if request.session.get("pin_ok"):
+        return await call_next(request)
+    return ingress_redirect(request, "/ui/pin")
+
+
 # SessionMiddleware runs after middlewares above so request.session is available
 app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=60 * 60 * 24 * 30)
 

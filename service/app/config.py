@@ -88,7 +88,7 @@ _SAVEABLE = [
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
-    "deployment_mode", "remote_server_url", "upstream_api_key",
+    "deployment_mode", "remote_server_url", "upstream_api_key", "kiosk_pin",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
@@ -119,7 +119,7 @@ SECRET_SETTING_KEYS = [
     "gemini_api_key", "openai_api_key", "anthropic_api_key",
     "grocy_api_key", "mealie_api_key",
     "themealdb_api_key", "spoonacular_api_key",
-    "auth_password", "totp_secret", "api_key", "secret_key",
+    "auth_password", "totp_secret", "api_key", "secret_key", "kiosk_pin",
 ]
 
 _DEFAULT_GROCY_URL = "http://grocy:80"
@@ -236,6 +236,15 @@ class Settings(BaseSettings):
     # that pull. Unused in the other modes.
     remote_server_url: str = ""
     upstream_api_key: str = ""
+    # Satellite only: an optional numeric PIN that gates the kiosk UI. A
+    # satellite turns the UI password off by default (the main server owns
+    # access control), so this is a lightweight, touchscreen-friendly lock for
+    # the local screen. Empty means no PIN gate.
+    kiosk_pin: str = ""
+
+    def pin_lock_active(self) -> bool:
+        """True when the numeric kiosk PIN should gate the UI (satellite only)."""
+        return self.is_satellite() and bool(self.kiosk_pin)
 
     def is_remote_mode(self) -> bool:
         return self.deployment_mode == "pi_remote"
