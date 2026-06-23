@@ -253,7 +253,11 @@ configure_timezone() {
 }
 
 # Step: mDNS (avahi)
-# Makes the box reachable at <hostname>.local on the LAN.
+# Makes the box reachable at <hostname>.local on the LAN. avahi-daemon publishes
+# the host's name over multicast DNS, which resolves on Linux (nss-mdns),
+# macOS/iOS (Bonjour, built in), and Windows when Apple Bonjour is installed
+# (shipped with iTunes; otherwise users browse by IP). Enabling the daemon makes
+# it publish <hostname>.local automatically from the system hostname.
 configure_mdns() {
   if dpkg -s avahi-daemon >/dev/null 2>&1; then
     log "avahi-daemon already installed"
@@ -261,7 +265,11 @@ configure_mdns() {
     log "Installing avahi-daemon for mDNS"
     apt_install avahi-daemon
   fi
+  # Enable so it publishes <hostname>.local now and on every boot. avahi reads
+  # the system hostname, so configure_hostname must have run first (it does).
   run systemctl enable --now avahi-daemon || warn "avahi-daemon enable failed"
+  log "mDNS configured: ${HOSTNAME}.local should resolve on Linux, macOS, and iOS"
+  log "  (Windows clients need Apple Bonjour installed, else browse by IP)"
 }
 
 # Step: Docker + Compose v2
@@ -883,13 +891,29 @@ EOF
 # Step: port-80 redirect for Pi Hosted.
 # Routes incoming TCP port 80 to port 9284 so users can browse to
 # http://<hostname>.local/ without specifying a port. Uses iptables NAT
-# (no nginx needed) and persists the rule via iptables-persistent.
+# (no nginx needed). Persistence across reboots is handled two ways so it is
+# robust even if iptables-persistent is unavailable: (1) a tiny systemd unit
+# that re-applies the rule on every boot (the source of truth), and (2) a
+# best-effort iptables-persistent save when that package is present.
+#
+# Pi-only: this is invoked solely on the pi_hosted path so we never hijack
+# port 80 on a generic Linux server that may run its own web server.
 configure_port80() {
+  # The systemd unit re-applies an idempotent rule on each boot. We keep the
+  # add commands in one place so the live run and the boot-time run match.
+  local oneshot=/etc/systemd/system/foodassistant-port80.service
+
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN would add iptables PREROUTING 80->9284 and persist via iptables-persistent"
+    log "DRY_RUN would add iptables PREROUTING 80->9284 (idempotent -C/-A)"
+    log "DRY_RUN would install $oneshot to re-apply the redirect on every boot"
+    log "DRY_RUN would persist via iptables-persistent/netfilter-persistent if available"
+    log "DRY_RUN would enable foodassistant-port80.service (port 80 redirect persistence)"
     return 0
   fi
-  # Check if iptables-persistent is available; install quietly if not.
+
+  # Check if iptables-persistent is available; install quietly if not. This is
+  # best-effort: the systemd unit below is what actually guarantees the rule
+  # survives a reboot, so we do not fail if the package is missing.
   if ! dpkg -l iptables-persistent &>/dev/null; then
     # Pre-answer the "save current rules?" prompt to avoid interactive install.
     echo "iptables-persistent iptables-persistent/autosave_v4 boolean true" \
@@ -910,13 +934,39 @@ configure_port80() {
     iptables -t nat -A OUTPUT     -p tcp --dport 80 -j REDIRECT --to-port 9284
   fi
 
-  # Persist rules across reboots.
+  # Install a oneshot systemd unit that re-applies the rule on boot. iptables
+  # NAT rules live in the kernel and are wiped on reboot; relying on
+  # iptables-persistent alone is fragile (the package or its rules.v4 file may
+  # be missing). This unit is the durable source of truth: the same idempotent
+  # -C/-A guard means it is a no-op if the rule already exists.
+  cat > "$oneshot" <<'EOF'
+[Unit]
+Description=FoodAssistant port 80 -> 9284 redirect (pi_hosted)
+After=network-pre.target
+Wants=network-pre.target
+Before=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Idempotent: only add each rule if it is not already present.
+ExecStart=/bin/sh -c 'iptables -t nat -C PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9284 2>/dev/null || iptables -t nat -A PREROUTING -p tcp --dport 80 -j REDIRECT --to-port 9284'
+ExecStart=/bin/sh -c 'iptables -t nat -C OUTPUT -p tcp --dport 80 -j REDIRECT --to-port 9284 2>/dev/null || iptables -t nat -A OUTPUT -p tcp --dport 80 -j REDIRECT --to-port 9284'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable foodassistant-port80.service 2>/dev/null \
+    || warn "could not enable foodassistant-port80.service; port 80 may not redirect after reboot"
+
+  # Best-effort secondary persistence via iptables-persistent when present.
   if command -v netfilter-persistent >/dev/null 2>&1; then
     netfilter-persistent save 2>/dev/null || warn "netfilter-persistent save failed"
-  elif [ -f /etc/iptables/rules.v4 ]; then
-    iptables-save > /etc/iptables/rules.v4 || warn "iptables-save failed"
+  elif [ -d /etc/iptables ]; then
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || warn "iptables-save failed"
   fi
-  log "Port 80 -> 9284 redirect configured (pi_hosted)"
+  log "Port 80 -> 9284 redirect configured (pi_hosted); persistence via foodassistant-port80.service"
 }
 
 # Returns 0 when step $1 should run: always when STEPS is empty (run all),

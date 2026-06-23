@@ -167,6 +167,62 @@ def test_hosted_mode_still_deploys_stack(tmp_path):
     assert "Pi Remote mode" not in out
 
 
+def test_hosted_mode_configures_port80_redirect(tmp_path):
+    # pi_hosted should set up the iptables 80 -> 9284 redirect so the UI is
+    # reachable on port 80.
+    rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_hosted\n")
+    assert rc == 0, out
+    assert "PREROUTING 80->9284" in out
+    assert "9284" in out
+
+
+def test_hosted_mode_port80_persistence_invoked(tmp_path):
+    # The redirect must survive reboot: a systemd unit re-applies it on boot and
+    # iptables-persistent is used as a secondary save. Both must be referenced.
+    rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_hosted\n")
+    assert rc == 0, out
+    assert "foodassistant-port80.service" in out
+    assert "re-apply the redirect on every boot" in out
+    assert "iptables-persistent" in out
+
+
+def test_hosted_mode_configures_mdns_avahi(tmp_path):
+    # pi_hosted should install/enable avahi so <hostname>.local resolves.
+    rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_hosted\n")
+    assert rc == 0, out
+    assert "avahi-daemon" in out
+    assert "enable --now avahi-daemon" in out
+    assert ".local should resolve" in out
+
+
+def test_hosted_mode_mdns_notes_windows_bonjour(tmp_path):
+    # A note about Windows needing Bonjour helps users who cannot resolve .local.
+    rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_hosted\n")
+    assert rc == 0, out
+    assert "Bonjour" in out
+
+
+def test_remote_mode_does_not_redirect_port80(tmp_path):
+    # The satellite binds uvicorn directly on port 80; it must NOT run the
+    # iptables redirect step (no PREROUTING 80->9284 hijack).
+    rc, out = run_firstboot(
+        tmp_path,
+        "DEPLOYMENT_MODE=pi_remote\nREMOTE_SERVER_URL=http://server.local:9284\n",
+    )
+    assert rc == 0, out
+    assert "PREROUTING 80->9284" not in out
+    assert "foodassistant-port80.service" not in out
+
+
+def test_default_mode_runs_port80_step(tmp_path):
+    # A plain (non-remote) deployment with no explicit mode still runs the
+    # port80 redirect step (same hosted path).
+    rc, out = run_firstboot(tmp_path, "HOSTNAME=foodassistant\n")
+    assert rc == 0, out
+    assert "PREROUTING 80->9284" in out
+    assert "foodassistant-port80.service" in out
+
+
 def test_mode_read_from_settings_json(tmp_path):
     # A settings.json (written by the web wizard) overrides config.env mode.
     sf = tmp_path / "settings.json"
