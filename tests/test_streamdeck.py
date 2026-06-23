@@ -323,6 +323,24 @@ def test_rotation_rejects_bad_value(tmp_path):
 # -- rotation index remap --------------------------------------------------
 
 
+def test_display_dims_unrotated():
+    assert layout.display_dims(15, 0) == (5, 3)
+    assert layout.display_dims(32, 0) == (8, 4)
+    assert layout.display_dims(32, 180) == (8, 4)
+
+
+def test_display_dims_rotated_90():
+    # 90 and 270 swap cols/rows so the editor matches the physical orientation.
+    assert layout.display_dims(32, 90) == (4, 8)
+    assert layout.display_dims(32, 270) == (4, 8)
+    assert layout.display_dims(15, 90) == (3, 5)
+
+
+def test_rotated_index_zero_is_identity():
+    for i in range(32):
+        assert layout.rotated_index(i, 32, 0) == i
+
+
 def test_rotated_index_180_reverses_grid():
     # 15-key deck (5x3): top-left (0) maps to bottom-right (14) and back.
     assert layout.rotated_index(0, 15, 180) == 14
@@ -332,13 +350,36 @@ def test_rotated_index_180_reverses_grid():
         assert layout.rotated_index(layout.rotated_index(i, 15, 180), 15, 180) == i
 
 
-def test_rotated_index_zero_is_identity():
-    for i in range(32):
-        assert layout.rotated_index(i, 32, 0) == i
-
-
 def test_rotated_index_unknown_size_passthrough():
     assert layout.rotated_index(3, 7, 180) == 3
+
+
+def test_slot_for_physical_inverts_rotated_index():
+    # For every rotation and every known deck size, slot_for_physical must be
+    # the exact inverse of rotated_index across all valid slots.
+    for key_count in (6, 15, 32):
+        for rotation in (0, 90, 180, 270):
+            d_cols, d_rows = layout.display_dims(key_count, rotation)
+            total = d_cols * d_rows
+            for slot in range(total):
+                phys = layout.rotated_index(slot, key_count, rotation)
+                assert layout.slot_for_physical(phys, key_count, rotation) == slot, (
+                    f"round-trip failed: key_count={key_count} rotation={rotation} slot={slot} phys={phys}"
+                )
+
+
+def test_rotated_index_90_xl_top_left():
+    # XL (8x4) rotated 90 CW: visual slot 0 (top-left of the portrait grid)
+    # must land on a valid physical key and round-trip exactly.
+    phys = layout.rotated_index(0, 32, 90)
+    assert 0 <= phys < 32
+    assert layout.slot_for_physical(phys, 32, 90) == 0
+
+
+def test_rotated_index_270_xl_bijection():
+    # 270 must also be a bijection over all 32 keys (no two slots map same phys).
+    physicals = [layout.rotated_index(i, 32, 270) for i in range(32)]
+    assert len(set(physicals)) == 32, "rotated_index(270) is not injective"
 
 
 # -- timer widget ----------------------------------------------------------
