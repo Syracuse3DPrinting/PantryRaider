@@ -623,8 +623,16 @@
         {% set ai_ok  = s.vision_provider and s.vision_provider != 'none' %}
         {% set rec_ok = s.mealie_api_key %}
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
+        {% set rem_ok = s.remote_server_url %}
         <div class="nav flex-column nav-pills gap-1" role="tablist">
-          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
+          {% if features.remote_config %}
+          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-remote" type="button">
+            <i class="bi bi-plug me-2"></i>Remote Server
+            <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if rem_ok else 'Server URL required' }}"></i>
+          </button>
+          {% endif %}
+          {% if features.local_stack %}
+          <button class="nav-link {{ 'active' if not features.remote_config else '' }} d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
             <i class="bi bi-fridge me-2"></i>Inventory
             <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
           </button>
@@ -636,7 +644,8 @@
             <i class="bi bi-journal-richtext me-2"></i>Recipes
             <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if rec_ok else 'Optional' }}"></i>
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
+          {% endif %}
+          <button class="nav-link {{ '' if features.remote_config or features.local_stack else 'active' }} d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
             <i class="bi bi-layout-sidebar me-2"></i>Interface
           </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
@@ -673,8 +682,41 @@
     <div class="col-md-9">
       <div class="tab-content">
 
+        <!-- Remote Server (pi_remote mode only) -->
+        {% if features.remote_config %}
+        <div class="tab-pane fade show active" id="pane-remote">
+          <p class="pane-intro">This Pi connects to a FoodAssistant server running elsewhere on your network. Enter that server's address below.</p>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-plug text-info"></i> Remote FoodAssistant Server</div>
+            <p class="text-secondary small">All inventory, AI, and recipe requests are forwarded to the remote server. The URL must be reachable from this Pi.</p>
+            <div class="mb-3">
+              <label class="form-label">Server URL</label>
+              <input type="url" class="form-control" id="remote_server_url"
+                     placeholder="http://192.168.1.10:9284"
+                     value="{{ s.remote_server_url or '' }}">
+              <div class="form-text">Full address of the FoodAssistant server — no trailing slash. Example: <code>http://192.168.1.10:9284</code></div>
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="testRemote()">
+              <i class="bi bi-plug me-1"></i>Test Connection
+            </button>
+            <div class="test-result" id="remote-result"></div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About Pi Remote Mode</div>
+            <p class="text-secondary small">In remote mode this Pi runs only a lightweight relay — no Docker, no local database. The remote server handles all data. You can use this Pi as a kiosk display or barcode scanner terminal.</p>
+            <ul class="small text-secondary mb-0">
+              <li>Stream Deck and barcode scanner connect to the remote server.</li>
+              <li>Kiosk browser opens the remote server's UI.</li>
+              <li>Changing the URL here restarts the relay service.</li>
+            </ul>
+          </div>
+        </div>
+        {% endif %}
+
         <!-- Inventory (Grocy + storage) -->
-        <div class="tab-pane fade show active" id="pane-inventory">
+        <div class="tab-pane fade {{ '' if features.remote_config else 'show active' }}" id="pane-inventory">
           <p class="pane-intro">Where your stock lives: the Grocy backend and the storage buckets it's grouped into.</p>
 
           <div class="section-card">
@@ -1279,10 +1321,10 @@
               <input type="number" class="form-control" id="rclone_schedule_hours" min="0" max="720"
                      value="{{ s.rclone_schedule_hours }}" style="width:120px">
             </div>
-            <button class="btn btn-outline-secondary btn-sm" onclick="testRemote(this)">
+            <button class="btn btn-outline-secondary btn-sm" onclick="testRcloneRemote(this)">
               <i class="bi bi-plug me-1"></i>Test Remote
             </button>
-            <div class="test-result" id="remote-result"></div>
+            <div class="test-result" id="rclone-result"></div>
           </div>
 
           <div class="section-card">
@@ -2002,14 +2044,14 @@ async function disableTOTP() {
 }
 
 // Rclone remote
-async function testRemote(btn) {
+async function testRcloneRemote(btn) {
   const orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing…';
   await fetch('setup/save', {method:'POST',headers:{'Content-Type':'application/json'},
     body: JSON.stringify({rclone_remote: val('rclone_remote'), rclone_schedule_hours: num('rclone_schedule_hours',0)})});
   const d = await postJson('admin/backup/test-remote', {});
-  setResult('remote-result', d.ok, d.ok ? d.message : d.error);
+  setResult('rclone-result', d.ok, d.ok ? d.message : d.error);
   btn.disabled = false;
   btn.innerHTML = orig;
 }
