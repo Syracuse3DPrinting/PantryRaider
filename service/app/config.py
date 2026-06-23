@@ -89,6 +89,7 @@ _SAVEABLE = [
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
     "deployment_mode", "remote_server_url", "upstream_api_key", "kiosk_pin",
+    "satellite_sync_minutes",
     "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
@@ -245,6 +246,10 @@ class Settings(BaseSettings):
     def pin_lock_active(self) -> bool:
         """True when the numeric kiosk PIN should gate the UI (satellite only)."""
         return self.is_satellite() and bool(self.kiosk_pin)
+
+    # Satellite only: how often to re-pull backend config from the main server,
+    # in minutes. 0 disables the periodic refresh (boot + manual sync only).
+    satellite_sync_minutes: int = 15
 
     def is_remote_mode(self) -> bool:
         return self.deployment_mode == "pi_remote"

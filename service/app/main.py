@@ -1,3 +1,4 @@
+import asyncio
 import secrets
 
 from fastapi import FastAPI, Request
@@ -30,7 +31,33 @@ async def lifespan(app: FastAPI):
             sync_from_upstream()
         except Exception:
             pass
+        # Keep mirroring while the server-side config drifts.
+        app.state.sync_task = asyncio.create_task(_periodic_satellite_sync())
     yield
+    task = getattr(app.state, "sync_task", None)
+    if task is not None:
+        task.cancel()
+        try:
+            await task
+        except asyncio.CancelledError:
+            pass
+
+
+async def _periodic_satellite_sync():
+    """Re-pull backend config from the main server every
+    settings.satellite_sync_minutes (0 disables). Best-effort and cancellable."""
+    from fastapi.concurrency import run_in_threadpool
+    from .services.satellite import sync_from_upstream
+    while True:
+        minutes = settings.satellite_sync_minutes
+        if not minutes or minutes <= 0:
+            await asyncio.sleep(300)   # re-check the toggle later
+            continue
+        await asyncio.sleep(minutes * 60)
+        try:
+            await run_in_threadpool(sync_from_upstream)
+        except Exception:
+            pass
 
 
 app = FastAPI(
