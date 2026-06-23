@@ -610,7 +610,7 @@
     <a href="ui/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to app</a>
   </div>
 
-  {% set _inv_ok = s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80' %}
+  {% set _inv_ok = features.satellite or (s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80') %}
   {% set _sec_ok = (not s.auth_required) or s.auth_password %}
   {% if not _inv_ok or not _sec_ok %}
   <div class="alert alert-warning py-2 small mb-3 d-flex align-items-center gap-2">
@@ -629,7 +629,7 @@
     <div class="col-md-3">
       <div class="side-menu">
         {# inline status: True = configured, False/None = needs attention #}
-        {% set inv_ok = s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80' %}
+        {% set inv_ok = features.satellite or (s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80') %}
         {% set ai_ok  = s.vision_provider and s.vision_provider != 'none' %}
         {% set rec_ok = s.mealie_api_key %}
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
