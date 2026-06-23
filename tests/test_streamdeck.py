@@ -466,6 +466,41 @@ def test_timer_long_press_dismisses_alert():
     assert t._minutes == 0
 
 
+def test_timer_alert_blinks_bright_and_dim_by_phase():
+    t = actions.TimerState()
+    t.short_press()
+    t._deadline = t._deadline - 400
+    t.tick()
+    assert t.alerting
+    bright = t.alert_color(0)
+    dim = t.alert_color(1)
+    assert bright != dim
+    # Even phases are bright, odd phases are dim, so the key alternates.
+    assert t.alert_color(2) == bright
+    assert t.alert_color(3) == dim
+    assert t.alert_color(4) == bright
+
+
+def test_timer_color_uses_blink_phase_while_alerting():
+    t = actions.TimerState()
+    t.short_press()
+    t._deadline = t._deadline - 400
+    t.tick()
+    assert t.color("#000000", blink_phase=0) == t.alert_color(0)
+    assert t.color("#000000", blink_phase=1) == t.alert_color(1)
+    assert t.color("#000000", blink_phase=0) != t.color("#000000", blink_phase=1)
+
+
+def test_timer_color_ignores_blink_phase_when_not_alerting():
+    t = actions.TimerState()
+    # Idle: phase must never change the resting colour.
+    assert t.color("#123456", blink_phase=0) == "#123456"
+    assert t.color("#123456", blink_phase=1) == "#123456"
+    # Running: countdown colour is phase-independent.
+    t.short_press()
+    assert t.color("#123456", blink_phase=0) == t.color("#123456", blink_phase=1)
+
+
 def test_timer_action_registered():
     for name in ("timer_1", "timer_2", "timer_3"):
         assert name in actions.ACTIONS

@@ -46,13 +46,27 @@ class TimerState:
             return "Done!"
         return f"{secs // 60}:{secs % 60:02d}"
 
-    def color(self, base_color: str) -> str:
+    # The expired-alert colours the key blinks between: a bright red on the
+    # "on" phase and a dim red on the "off" phase, so the key flashes until the
+    # alert is dismissed.
+    _ALERT_BRIGHT = "#ef4444"
+    _ALERT_DIM = "#450a0a"
+
+    def color(self, base_color: str, blink_phase: int = 0) -> str:
         if self.alerting:
-            return "#ef4444"
+            return self.alert_color(blink_phase)
         if self._minutes == 0:
             return base_color
         secs = self.remaining_seconds()
         return "#f59e0b" if secs < 60 else "#0d9488"
+
+    def alert_color(self, blink_phase: int) -> str:
+        """Colour for an expired alert at the given blink phase.
+
+        Even phases are bright, odd phases are dim, so successive poll ticks
+        flash the key. Only meaningful while ``alerting`` is True.
+        """
+        return self._ALERT_BRIGHT if blink_phase % 2 == 0 else self._ALERT_DIM
 
     def alert_active(self) -> bool:
         return self.alerting

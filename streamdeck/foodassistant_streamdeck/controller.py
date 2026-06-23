@@ -38,6 +38,9 @@ class Controller:
         self.page = 0
         self.status: dict[str, int] = {"expiring": 0, "pending": 0}
         self.timers: dict[str, TimerState] = {}  # action name -> timer state
+        # Toggles each poll tick while a timer alert is active so the key blinks
+        # bright/dim until the alert is dismissed.
+        self._blink_phase: int = 0
         self._key_down_time: dict[int, float] = {}  # physical key -> press timestamp
         self.weather: WeatherState = WeatherState(
             location=config.weather_location, units=config.weather_units
@@ -113,7 +116,9 @@ class Controller:
                 if spec.kind == "timer":
                     t = self.timers.get(spec.name)
                     label = t.label(spec.label) if t else spec.label
-                    color = t.color(spec.color) if t else spec.color
+                    color = (
+                        t.color(spec.color, self._blink_phase) if t else spec.color
+                    )
                     alert = t.alert_active() if t else False
                     count = None
                 elif spec.kind == "weather":
@@ -208,6 +213,8 @@ class Controller:
             self.timers[name].long_press()
         else:
             self.timers[name].short_press()
+        # Reset the blink phase so a fresh alert starts on its bright frame.
+        self._blink_phase = 0
         self._draw_page()
 
     async def _handle(self, spec: ActionSpec, long_press: bool = False) -> None:
@@ -328,9 +335,16 @@ class Controller:
             try:
                 expired = self._tick_timers()
                 any_running = any(t.is_running() for t in self.timers.values())
-                # Redraw every second while a timer is active or just expired;
-                # otherwise only redraw after a full poll cycle.
-                if any_running or expired:
+                any_alerting = any(t.alert_active() for t in self.timers.values())
+                # While any timer alert is undismissed, advance the blink phase
+                # so the key flashes bright/dim each tick until it is pressed.
+                if any_alerting:
+                    self._blink_phase += 1
+                else:
+                    self._blink_phase = 0
+                # Redraw every second while a timer is active, alerting, or just
+                # expired; otherwise only redraw after a full poll cycle.
+                if any_running or any_alerting or expired:
                     self._draw_page()
                 if tick >= self.config.poll_seconds:
                     tick = 0
