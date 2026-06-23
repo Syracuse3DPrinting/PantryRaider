@@ -646,6 +646,10 @@ configure_streamdeck() {
     printf 'SUBSYSTEM=="usb", ATTR{idVendor}=="0fd9", GROUP="plugdev", MODE="0660"\n' \
       > /etc/udev/rules.d/99-streamdeck.rules
     udevadm control --reload-rules || warn "udevadm reload failed"
+    # Apply the rule to a Stream Deck that was already plugged in at install
+    # time; without this the existing device node keeps root-only perms and
+    # the controller cannot open it until the next replug or reboot.
+    udevadm trigger --attr-match=idVendor=0fd9 || warn "udevadm trigger failed"
   fi
 
   if getent group plugdev >/dev/null 2>&1; then
