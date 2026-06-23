@@ -182,11 +182,12 @@ interactive_config() {
     DEPLOYMENT_MODE="server"
   fi
 
-  if [ "$DEPLOYMENT_MODE" = "pi_remote" ]; then
-    while [ -z "$REMOTE_SERVER_URL" ]; do
-      REMOTE_SERVER_URL="$(prompt_line "FoodAssistant server URL (e.g. http://192.168.1.50:9284):" "")"
-      [ -z "$REMOTE_SERVER_URL" ] && warn "A server URL is required in Pi Remote mode."
-    done
+  # In Pi Remote mode the server URL is NOT asked here. The device boots
+  # with a small web setup app on port 80, so the end user (or you, before
+  # shipping) sets the server URL from a browser at the device address. Set
+  # REMOTE_SERVER_URL in the environment to pre-seed it for a hands-off image.
+  if [ "$DEPLOYMENT_MODE" = "pi_remote" ] && [ -z "$REMOTE_SERVER_URL" ]; then
+    say "Server URL will be set later in the web setup wizard (no SSH needed)."
   fi
 
   # Auto-detect kiosk and Stream Deck based on attached hardware.
@@ -210,7 +211,7 @@ confirm_plan() {
   hr
   say "Install plan"
   printf '  Mode:        %s\n' "$DEPLOYMENT_MODE"
-  [ "$DEPLOYMENT_MODE" = "pi_remote" ] && printf '  Controls:    %s\n' "$REMOTE_SERVER_URL"
+  [ "$DEPLOYMENT_MODE" = "pi_remote" ] && printf '  Controls:    %s\n' "${REMOTE_SERVER_URL:-(set later in web wizard)}"
   printf '  Hostname:    %s\n' "$HOSTNAME_CHOICE"
   if [ "$DEPLOYMENT_MODE" != "pi_remote" ]; then
     printf '  Mealie:      %s\n' "$(yesno "$ENABLE_MEALIE")"
@@ -267,8 +268,14 @@ run_provisioner() {
 print_done() {
   hr
   ok "FoodAssistant installed."
-  if [ "$DEPLOYMENT_MODE" = "pi_remote" ]; then
+  if [ "$DEPLOYMENT_MODE" = "pi_remote" ] && [ -n "$REMOTE_SERVER_URL" ]; then
     say "This device controls: $REMOTE_SERVER_URL"
+    say "To change it later, open the setup wizard in your browser:"
+    printf '    %shttp://%s.local/setup%s\n' "$C_GREEN" "$HOSTNAME_CHOICE" "$C_OFF"
+  elif [ "$DEPLOYMENT_MODE" = "pi_remote" ]; then
+    say "Open this URL in your browser to point the device at your server:"
+    printf '    %shttp://%s.local/setup%s\n' "$C_GREEN" "$HOSTNAME_CHOICE" "$C_OFF"
+    say "(If .local doesn't resolve, use the device IP instead.)"
   else
     say "Open this URL in your browser to finish configuration:"
     printf '    %shttp://%s.local:9284/setup%s\n' "$C_GREEN" "$HOSTNAME_CHOICE" "$C_OFF"

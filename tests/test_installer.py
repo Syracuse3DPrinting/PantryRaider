@@ -91,6 +91,26 @@ def test_pi_remote_keeps_server_url():
     assert p["remote"] == "http://192.168.1.50:9284"
 
 
+def test_interactive_does_not_require_remote_url():
+    # The interactive flow must never block waiting for a server URL: a shipped
+    # pi_remote device is configured from the web wizard, not an SSH prompt.
+    src = INSTALL.read_text()
+    assert 'while [ -z "$REMOTE_SERVER_URL" ]' not in src
+    assert "A server URL is required" not in src
+
+
+def test_pi_remote_without_url_does_not_block():
+    # A pre-provisioned image ships in pi_remote mode with no server URL; the
+    # installer must succeed and leave the URL empty for the web wizard to set.
+    # (No interactive prompt, no failure -- the regression we are guarding.)
+    p = plan({
+        "FORCE_PI": "1",
+        "DEPLOYMENT_MODE": "pi_remote",
+    })
+    assert p["mode"] == "pi_remote"
+    assert p["remote"] == ""
+
+
 def test_pi_remote_forces_mealie_ollama_off():
     # Even if the env asks for Mealie, a thin remote installs nothing heavy.
     p = plan({
