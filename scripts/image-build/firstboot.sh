@@ -1540,17 +1540,12 @@ EOF
       || chown -R "$sd_user" "$INSTALL_DIR" 2>/dev/null \
       || warn "could not chown $INSTALL_DIR to $sd_user; service may not be able to save settings"
     # Add the service user to the input group so it can read /dev/input/event*
-    # directly. This is needed for the web-UI touch calibration (evtest streaming
-    # from the FastAPI service without requiring a separate root process).
+    # directly. This is needed for the web-UI touch calibration: the app streams
+    # raw evtest events (the SSE endpoint) to draw the tap targets. Applying the
+    # resulting matrix is done by the host bridge (root), not the app, so no
+    # sudoers entry is needed here.
     usermod -aG input "$sd_user" 2>/dev/null \
       || warn "could not add $sd_user to the input group; touch calibration stream may be unavailable"
-    # Grant permission to apply a calibration matrix (writes a udev rule + reload).
-    # The sudoers rule is narrow: only the calibrate helper with --apply-matrix.
-    local sudoers_file="/etc/sudoers.d/foodassistant-touch"
-    cat > "$sudoers_file" <<SUDOEOF
-$sd_user ALL=(ALL) NOPASSWD: /usr/local/bin/foodassistant-touch-calibrate *
-SUDOEOF
-    chmod 440 "$sudoers_file"
   fi
 
   if [ "$DRY_RUN" = "1" ]; then

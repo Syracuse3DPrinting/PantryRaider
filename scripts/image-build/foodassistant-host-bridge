@@ -17,6 +17,7 @@ GET  /hostname             current hostname
 POST /hostname             change hostname       {hostname}
 GET  /display/rotation     current KMS rotation (from /boot/firmware/config.txt)
 POST /display/rotation     set KMS rotation      {degrees, reboot?}
+POST /touch/calibrate      apply touch matrix    {matrix: "a b c d e f"}
 POST /streamdeck/restart   restart Stream Deck service
 GET  /streamdeck/actions     list assignable deck actions (for the web editor)
 POST /kiosk/restart        restart the kiosk browser (apply scale/rotation)
@@ -429,6 +430,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._set_hostname()
         elif self.path == "/display/rotation":
             self._set_rotation()
+        elif self.path == "/touch/calibrate":
+            self._touch_calibrate()
         elif self.path == "/streamdeck/restart":
             self._streamdeck_restart()
         elif self.path == "/kiosk/restart":
@@ -604,6 +607,38 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
             if r.returncode == 0:
                 self._send(200, {"ok": True})
+            else:
+                self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
+        except Exception as e:
+            self._send(500, {"ok": False, "error": str(e)})
+
+    def _touch_calibrate(self):
+        # Apply a LIBINPUT_CALIBRATION_MATRIX by delegating to the calibrate
+        # helper's non-interactive mode. The bridge runs as root, so it can
+        # write the udev rule and reload udev without sudo (the app service
+        # cannot: its unit caps privileges to CAP_NET_BIND_SERVICE).
+        body = self._body()
+        matrix = (body.get("matrix") or "").strip()
+        parts = matrix.split()
+        if len(parts) != 6:
+            self._send(400, {"ok": False, "error": "matrix must be exactly 6 floats"})
+            return
+        try:
+            [float(p) for p in parts]
+        except ValueError:
+            self._send(400, {"ok": False, "error": "matrix has a non-numeric value"})
+            return
+        helper = "/usr/local/bin/foodassistant-touch-calibrate"
+        if not os.path.exists(helper):
+            self._send(500, {"ok": False, "error": "calibrate helper not installed"})
+            return
+        try:
+            r = subprocess.run(
+                [helper, "--apply-matrix", " ".join(parts)],
+                capture_output=True, text=True, timeout=15,
+            )
+            if r.returncode == 0:
+                self._send(200, {"ok": True, "message": r.stdout.strip()})
             else:
                 self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
         except Exception as e:

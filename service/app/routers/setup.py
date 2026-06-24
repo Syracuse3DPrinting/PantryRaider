@@ -2,7 +2,6 @@ import asyncio
 import json
 import re
 import socket
-import subprocess
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
@@ -1043,11 +1042,11 @@ class TouchMatrixPayload(BaseModel):
 
 @router.post("/calibrate/touch/apply")
 async def calibrate_touch_apply(payload: TouchMatrixPayload):
-    """Write a LIBINPUT_CALIBRATION_MATRIX to the udev rules file.
+    """Write a LIBINPUT_CALIBRATION_MATRIX via the host bridge.
 
-    Delegates to foodassistant-touch-calibrate --apply-matrix via sudo.
-    The service user must have a NOPASSWD sudoers entry for that command
-    (provisioned by firstboot.sh for pi_remote).
+    The app service runs with privileges capped to CAP_NET_BIND_SERVICE, so it
+    cannot write to /etc/udev/rules.d or run udevadm itself (and sudo fails
+    under that cap bound). The host bridge runs as root and applies the matrix.
     """
     if not is_raspberry_pi():
         return JSONResponse({"ok": False, "error": "Not available on this platform."})
@@ -1060,16 +1059,13 @@ async def calibrate_touch_apply(payload: TouchMatrixPayload):
         return JSONResponse({"ok": False, "error": "Non-numeric value in matrix."})
     matrix_str = " ".join(parts)
     try:
-        result = await run_in_threadpool(
-            lambda: subprocess.run(
-                ["sudo", "/usr/local/bin/foodassistant-touch-calibrate",
-                 "--apply-matrix", matrix_str],
-                capture_output=True, text=True, timeout=15,
-            )
-        )
-        if result.returncode == 0:
-            return {"ok": True, "message": result.stdout.strip()}
-        return JSONResponse({"ok": False, "error": result.stderr.strip() or result.stdout.strip()})
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/touch/calibrate",
+                             json={"matrix": matrix_str})
+        data = r.json()
+        if data.get("ok"):
+            return {"ok": True, "message": data.get("message", "")}
+        return JSONResponse({"ok": False, "error": data.get("error", f"HTTP {r.status_code}")})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
 
