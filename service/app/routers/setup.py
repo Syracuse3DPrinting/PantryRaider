@@ -1122,6 +1122,47 @@ async def calibrate_touch_pending():
     return {"pending": _CAL_FLAG.exists()}
 
 
+# Kiosk navigate-to-dashboard
+# ---------------------------
+# When the setup wizard is finished from a remote browser, the Pi's attached
+# kiosk display is still sitting on the wizard page. It cannot navigate itself,
+# so the wizard sets this flag and the kiosk poller (in base.html) picks it up
+# and drives its own display to the dashboard. Same one-shot flag pattern as the
+# touch-calibration flow above.
+_KIOSK_NAV_FLAG = Path(settings.data_dir) / "kiosk_navigate.flag"
+
+
+@router.post("/kiosk/navigate/request")
+async def kiosk_navigate_request():
+    """Signal the kiosk to leave the wizard and load the dashboard.
+
+    Called by the wizard once setup saves successfully. Best effort: if the flag
+    cannot be written we report it but never block finishing setup.
+    """
+    try:
+        _KIOSK_NAV_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _KIOSK_NAV_FLAG.write_text("1")
+    except OSError as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    return {"ok": True}
+
+
+@router.get("/kiosk/navigate/pending")
+async def kiosk_navigate_pending():
+    """Polled by the kiosk page; true once setup has finished. One-shot.
+
+    Clears the flag as it reports it so the kiosk navigates exactly once and the
+    poll does not loop the display back to the dashboard on every tick.
+    """
+    pending = _KIOSK_NAV_FLAG.exists()
+    if pending:
+        try:
+            _KIOSK_NAV_FLAG.unlink()
+        except OSError:
+            pass
+    return {"pending": pending}
+
+
 @router.get("/calibrate/touch/page", response_class=HTMLResponse)
 async def calibrate_touch_page(request: Request):
     """Fullscreen calibration page the kiosk navigates to. Clears the flag.

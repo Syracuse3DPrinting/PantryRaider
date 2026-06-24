@@ -3157,6 +3157,12 @@ async function wizSaveAll() {
     });
     const d = await r.json();
     if (d.ok) {
+      // Setup ran in this (possibly remote) browser. If a Pi kiosk display is
+      // sitting on the wizard, it cannot navigate itself, so signal it to leave
+      // the wizard and load the dashboard. Best effort: never block finishing.
+      try {
+        await fetch('setup/kiosk/navigate/request', { method: 'POST' });
+      } catch (e) { /* kiosk hand-off is optional */ }
       // A satellite is a full local app (it pulled its config), so open its
       // own UI like any other mode.
       window.location.href = 'ui/';

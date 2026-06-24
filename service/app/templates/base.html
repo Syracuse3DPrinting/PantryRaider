@@ -223,6 +223,29 @@
       poll();
     })();
   </script>
+  <script>
+    // Setup-complete kiosk hand-off (kiosk only). The wizard is finished from a
+    // remote browser, so the Pi's attached display is left on the wizard page.
+    // The wizard sets a server flag; the kiosk polls for it and drives its own
+    // display to the dashboard. The flag is one-shot (cleared when served), so
+    // this fires once and does not loop. Re-latch kiosk mode via ?kiosk=1, like
+    // the calibration page does on its way back.
+    (function () {
+      if (localStorage.getItem('kioskMode') !== 'true') return;
+      function poll() {
+        fetch('../setup/kiosk/navigate/pending', { cache: 'no-store' })
+          .then(r => r.json())
+          .then(d => {
+            if (d && d.pending) {
+              window.location.href = '../ui/?kiosk=1';
+            }
+          })
+          .catch(() => {});
+      }
+      setInterval(poll, 3000);
+      poll();
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
