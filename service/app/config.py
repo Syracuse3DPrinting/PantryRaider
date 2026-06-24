@@ -86,6 +86,7 @@ _SAVEABLE = [
     "barcode_enrichment", "barcode_llm_fallback", "barcode_autocheck_shopping", "enrich_provider", "enrich_model",
     "grocy_base_url", "grocy_api_key", "grocy_public_url",
     "mealie_base_url", "mealie_api_key", "mealie_public_url",
+    "device_hostname",
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "perishable_days", "expiring_soon_days", "suggest_per_tier",
     "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme", "ui_scale", "display_rotation",
@@ -130,18 +131,108 @@ _DEFAULT_GROCY_URL = "http://grocy:80"
 
 _LOCALHOST_HOSTS = {"localhost", "127.0.0.1", "::1", "0.0.0.0"}
 
+# The Pi host bridge (see routers/setup.py) reports the real host hostname. On a
+# pi_hosted appliance the app runs in a host-network container whose own
+# socket.gethostname() can be the container name (e.g. "foodassistant-service")
+# rather than the Pi's LAN hostname, so <that>.local would not resolve. Asking
+# the bridge gives the device's actual hostname, whatever the user named it.
+_HOST_BRIDGE_URL = "http://127.0.0.1:9299"
+
+
+def _bridge_hostname() -> str:
+    """Real host hostname from the Pi host bridge, or '' if unavailable.
+
+    Only consulted on a Raspberry Pi appliance (where the bridge runs on
+    127.0.0.1:9299 and answers instantly); skipped elsewhere so a missing bridge
+    never adds latency to a page render or connection test. Best-effort with a
+    short timeout regardless.
+    """
+    try:
+        from .hardware import is_raspberry_pi
+        if not is_raspberry_pi():
+            return ""
+    except Exception:
+        return ""
+    try:
+        import httpx
+        r = httpx.get(f"{_HOST_BRIDGE_URL}/hostname", timeout=1.5)
+        if r.status_code == 200:
+            name = (r.json() or {}).get("hostname") or ""
+            return name.strip()
+    except Exception:
+        pass
+    return ""
+
+
+def _lan_ip() -> str:
+    """This host's outbound LAN address, or '' if it cannot be determined.
+
+    Used as a fallback browser host when no stable hostname is available. It is
+    the current address (it can change when DHCP reassigns), so it is only a last
+    resort behind the mDNS hostname.
+    """
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("8.8.8.8", 80))
+            return sock.getsockname()[0]
+    except OSError:
+        return ""
+
+
+def device_hostname() -> str:
+    """The device's own hostname for building browser-facing links.
+
+    Resolution order, most stable first:
+      1. a user-set override (settings.device_hostname), trimmed of any scheme;
+      2. the real host hostname reported by the Pi host bridge;
+      3. socket.gethostname() (the process view; correct off-appliance).
+    Never returns a localhost alias. May return '' if nothing usable is found.
+    """
+    override = (getattr(settings, "device_hostname", "") or "").strip()
+    if override:
+        # Accept a bare name or a full host; keep only the hostname portion.
+        from urllib.parse import urlparse
+        if "://" in override:
+            override = urlparse(override).hostname or override
+        return override.rstrip("/")
+    bridge = _bridge_hostname()
+    if bridge and bridge.lower() not in _LOCALHOST_HOSTS:
+        return bridge
+    name = socket.gethostname().strip()
+    if name and name.lower() not in _LOCALHOST_HOSTS:
+        return name
+    return ""
+
+
+def browser_host() -> str:
+    """Best stable hostname (no port) for LAN browser links.
+
+    Prefers <hostname>.local (stable across DHCP) and falls back to the current
+    LAN IP only when no hostname is resolvable. Returns '' if neither is found.
+    """
+    name = device_hostname()
+    if name:
+        # Avoid doubling the suffix if the user already entered one.
+        if "." in name:
+            return name
+        return f"{name}.local"
+    return _lan_ip()
+
 
 def _mdns_rewrite(url: str, port: int) -> str:
-    """If url points to localhost, rewrite it to use the mDNS hostname.
+    """If url points to localhost, rewrite it to a LAN-reachable browser URL.
 
     This makes browser-facing links work from other devices on the LAN without
-    requiring a static IP, since <hostname>.local is stable across DHCP changes.
+    requiring a static IP: it prefers <hostname>.local (stable across DHCP
+    changes) and falls back to the current LAN IP. If no host can be resolved
+    the original URL is returned unchanged.
     """
     from urllib.parse import urlparse
     parsed = urlparse(url)
     if parsed.hostname in _LOCALHOST_HOSTS:
-        mdns = f"{socket.gethostname()}.local"
-        return f"http://{mdns}:{port}"
+        host = browser_host()
+        if host:
+            return f"http://{host}:{port}"
     return url
 
 
@@ -195,11 +286,19 @@ class Settings(BaseSettings):
     # Browser-facing Grocy URL (reverse-proxy / public address). Empty = use base URL.
     grocy_public_url: str = ""
 
+    # Optional override for the device's own hostname, used to build browser
+    # links to locally-hosted backends (Grocy, Mealie) as <hostname>.local. Empty
+    # means auto-detect (host bridge, then socket.gethostname()). Lets a user pin
+    # a stable name when there are several appliances on one LAN, so the link
+    # never depends on the device being named "foodassistant".
+    device_hostname: str = ""
+
     def grocy_link_url(self) -> str:
         """URL for browser-facing Grocy links (public address if set, else base).
 
         When no public URL is set and the base URL is localhost, rewrites to the
-        mDNS hostname so links work from other devices on the LAN.
+        device hostname (<hostname>.local, or the LAN IP as a fallback) so links
+        work from other devices on the LAN regardless of the current IP.
         """
         url = (self.grocy_public_url or self.grocy_base_url).rstrip("/")
         if not self.grocy_public_url:

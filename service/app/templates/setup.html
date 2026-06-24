@@ -340,6 +340,7 @@
         <div class="input-group">
           <input type="url" class="form-control" id="grocy_base_url"
                  placeholder="http://192.168.1.10:9383"
+                 oninput="_updateGrocyOpenLink()"
                  value="{{ s.grocy_base_url if (s.grocy_base_url and s.grocy_base_url != 'http://grocy:80') else suggested_grocy_url }}">
           <a class="btn btn-outline-secondary" id="grocy-open-link" href="#" target="_blank" title="Open Grocy in new tab">
             <i class="bi bi-box-arrow-up-right"></i>
@@ -840,6 +841,14 @@
                      placeholder="https://grocy.yourdomain.com"
                      value="{{ s.grocy_public_url }}">
               <div class="form-text">External address used when the UI links you to Grocy. Empty = internal URL.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Device hostname <span class="text-secondary small">(optional, for local browser links)</span></label>
+              <input type="text" class="form-control" id="device_hostname" name="device_hostname"
+                     placeholder="kitchen-pi"
+                     value="{{ s.device_hostname }}">
+              <div class="form-text">Used to build <span class="text-info">&lt;hostname&gt;.local</span> links to Grocy and Mealie on this device.
+                Empty = auto-detect. Set this when several FoodAssistant devices share one network.</div>
             </div>
             <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
               <i class="bi bi-plug me-1"></i>Test Connection
@@ -1773,10 +1782,32 @@ docker compose up -d</code></pre>
 const TABS = {{ tabs | tojson }};
 const HAS_AUTH_PASSWORD = {{ 'true' if has.auth_password else 'false' }};
 const IS_CONFIGURED = {{ 'true' if configured else 'false' }};
-const PI_GROCY_DEFAULT = {{ (('http://' + pi_mdns_host + ':9383') if pi_mdns_host else 'http://localhost:9383') | tojson }};
+// Server-side API base for a co-hosted Grocy. Always loopback so the app
+// container can reach it (mDNS may not resolve inside the container). The
+// browser "Open Grocy" link is a separate, hostname-based URL (GROCY_BROWSER_LINK).
+const PI_GROCY_DEFAULT = 'http://localhost:9383';
+// Human-facing link to open Grocy in a browser (<hostname>.local or LAN IP).
+const GROCY_BROWSER_LINK = {{ (grocy_browser_link or '') | tojson }};
 
 // Shared helpers
 function val(id) { return document.getElementById(id)?.value.trim() || ''; }
+
+// Where the "Open Grocy" button should point. A localhost/Docker API base is
+// not reachable from the browser, so prefer the server-computed browser link
+// (<hostname>.local or LAN IP); otherwise use the entered URL as-is.
+function _grocyOpenHref() {
+  const entered = val('grocy_base_url');
+  const isLocal = /^https?:\/\/(localhost|127\.0\.0\.1|0\.0\.0\.0|grocy)(:|\/|$)/i.test(entered);
+  if ((!entered || isLocal) && GROCY_BROWSER_LINK) return GROCY_BROWSER_LINK;
+  return entered;
+}
+function _updateGrocyOpenLink() {
+  const link = document.getElementById('grocy-open-link');
+  if (link) {
+    const href = _grocyOpenHref();
+    if (href) link.href = href;
+  }
+}
 function num(id, fallback) { const v = parseInt(val(id), 10); return isNaN(v) ? fallback : v; }
 
 function secretVal(id) {
@@ -2315,6 +2346,7 @@ function buildPayload() {
     grocy_base_url:  val('grocy_base_url'),
     grocy_api_key:   secretVal('grocy_api_key'),
     grocy_public_url: val('grocy_public_url'),
+    device_hostname: val('device_hostname'),
     mealie_base_url: val('mealie_base_url'),
     mealie_api_key:  secretVal('mealie_api_key'),
     mealie_public_url: val('mealie_public_url'),
@@ -2693,9 +2725,7 @@ function wizNext() {
     _wizSaveMode();
   }
   if (_wizStep === 4) {
-    const url = val('grocy_base_url');
-    const link = document.getElementById('grocy-open-link');
-    if (link && url) link.href = url;
+    _updateGrocyOpenLink();
   }
   if (_wizStep === 5) wizUpdateAiKeyVisibility();
 
@@ -2798,11 +2828,7 @@ function _wizApplyInstallMode() {
     if (applianceNote) applianceNote.classList.add('d-none');
   }
   // Update "Open Grocy" link
-  const link = document.getElementById('grocy-open-link');
-  if (link) {
-    const url = urlField?.value || '';
-    if (url) link.href = url;
-  }
+  _updateGrocyOpenLink();
 }
 
 // Build the Step 7 summary list
@@ -3881,6 +3907,7 @@ async function loadHardwareDetect() {
 
 document.addEventListener('DOMContentLoaded', checkApStatus);
 document.addEventListener('DOMContentLoaded', loadHardwareDetect);
+document.addEventListener('DOMContentLoaded', _updateGrocyOpenLink);
 </script>
 
 <script>
