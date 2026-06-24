@@ -32,10 +32,15 @@ import os
 import re
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 
 LISTEN_HOST = "127.0.0.1"
 LISTEN_PORT = 9299
 INSTALL_DIR = "/opt/foodassistant"
+# Mealie serves on this host port (mapped from the container's 9000 in the
+# appliance compose file). Used for the readiness probe below.
+MEALIE_PORT = 9285
 
 # Candidate locations for the provisioner script (curl-installer clone first,
 # then a baked-image asset dir, then the legacy home-dir clone).
@@ -48,6 +53,24 @@ _FIRSTBOOT_CANDIDATES = [
 # ("kiosk"/"streamdeck" installs, "mealie" start). Each value is a Popen whose
 # poll() tells us whether the work is still in flight.
 _INSTALL_PROCS = {}
+
+
+def _http_serving(url, timeout=3):
+    """True when a GET to url gets any HTTP response (server is up).
+
+    A redirect or even a 4xx still means the web server answered, so anything
+    short of a connection failure or a 5xx counts as serving. Used to tell a
+    container that is merely created apart from one that is actually ready.
+    """
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status < 500
+    except urllib.error.HTTPError:
+        # The server answered with an error status; it is up.
+        return True
+    except Exception:
+        return False
 
 
 def _find_firstboot():
@@ -535,8 +558,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
 
-    def _mealie_running(self):
-        """True when the Mealie container is up (compose service 'mealie')."""
+    def _mealie_container_up(self):
+        """True when the Mealie container exists (compose service 'mealie')."""
         try:
             r = subprocess.run(
                 ["docker", "compose", "ps", "--format=json", "mealie"],
@@ -547,25 +570,43 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception:
             return False
 
+    def _mealie_serving(self):
+        """True when Mealie actually answers HTTP on its port.
+
+        The container can sit in 'health: starting' for a minute after it is
+        created, during which docker compose ps already lists it but the web
+        server refuses connections. Probing the port is what tells us the link
+        the user is about to click will actually work.
+        """
+        return _http_serving(f"http://127.0.0.1:{MEALIE_PORT}/")
+
+    def _mealie_running(self):
+        """Backwards-compatible alias: True when Mealie is up and serving."""
+        return self._mealie_container_up() and self._mealie_serving()
+
     def _mealie_status(self):
-        # Report a single phase the web UI can poll on:
-        #   running        -> the container is up
-        #   starting       -> the background pull/up is still in flight
+        # Report a single phase the web UI can poll on. We only call Mealie
+        # 'running' once it actually answers HTTP, so the user never gets a
+        # link that refuses the connection:
+        #   running        -> the container is up AND serving HTTP
+        #   starting       -> the pull/up is in flight, OR the container exists
+        #                     but is not serving yet (health: starting)
         #   not-installed  -> neither (idle, image not pulled / not started)
         try:
-            running = self._mealie_running()
+            container_up = self._mealie_container_up()
+            serving = container_up and self._mealie_serving()
             starting = _installing("mealie")
-            if running:
+            if serving:
                 state = "running"
-            elif starting:
+            elif starting or container_up:
                 state = "starting"
             else:
                 state = "not-installed"
             self._send(200, {
                 "ok": True,
                 "state": state,
-                "running": running,
-                "starting": starting,
+                "running": serving,
+                "starting": state == "starting",
             })
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})

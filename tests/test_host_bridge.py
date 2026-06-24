@@ -78,6 +78,42 @@ def test_compose_env_uses_provisioner_repo_dir(monkeypatch):
     assert env["REPO_DIR"] == "/x"
 
 
+# Mealie readiness probe (FoodAssistant-28z)
+
+
+def test_http_serving_true_on_2xx(monkeypatch):
+    class FakeResp:
+        status = 200
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(bridge.urllib.request, "urlopen", lambda *a, **k: FakeResp())
+    assert bridge._http_serving("http://127.0.0.1:9285/") is True
+
+
+def test_http_serving_true_on_http_error(monkeypatch):
+    def raise_http_error(*a, **k):
+        raise bridge.urllib.error.HTTPError("u", 401, "no", {}, None)
+    monkeypatch.setattr(bridge.urllib.request, "urlopen", raise_http_error)
+    # A 401 still means the server answered, so it is serving.
+    assert bridge._http_serving("http://127.0.0.1:9285/") is True
+
+
+def test_http_serving_false_on_connection_refused(monkeypatch):
+    def raise_conn(*a, **k):
+        raise ConnectionRefusedError("refused")
+    monkeypatch.setattr(bridge.urllib.request, "urlopen", raise_conn)
+    assert bridge._http_serving("http://127.0.0.1:9285/") is False
+
+
+def test_http_serving_false_on_5xx(monkeypatch):
+    class FakeResp:
+        status = 502
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+    monkeypatch.setattr(bridge.urllib.request, "urlopen", lambda *a, **k: FakeResp())
+    assert bridge._http_serving("http://127.0.0.1:9285/") is False
+
+
 # Wi-Fi parsing helpers (FoodAssistant-cqw)
 
 
