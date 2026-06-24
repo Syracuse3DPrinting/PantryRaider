@@ -496,3 +496,48 @@ def test_calibrate_helper_rejects_degenerate_corners():
     samples = [(0.5, 0.5, 0.0, 0.0)] * 4
     with pytest.raises(ValueError):
         tc.solve_affine(samples)
+
+
+def test_read_minmax_ignores_pressure_axis():
+    """ABS_PRESSURE's Max=255 must not overwrite the ABS_Y Max after parsing."""
+    tc = _load_calibrate_helper()
+    # Simulate the evtest startup banner for ADS7846 with ABS_PRESSURE following.
+    # The bug: code stays "Y" when ABS_PRESSURE appears, so pressure Max=255
+    # overwrites the real ABS_Y Max=4095.
+    banner = [
+        "Input device name: \"ADS7846 Touchscreen\"\n",
+        "  Event type 3 (EV_ABS)\n",
+        "    Event code 0 (ABS_X)\n",
+        "      Value    0\n",
+        "      Min      0\n",
+        "      Max      4095\n",
+        "    Event code 1 (ABS_Y)\n",
+        "      Value    0\n",
+        "      Min      0\n",
+        "      Max      4095\n",
+        "    Event code 24 (ABS_PRESSURE)\n",
+        "      Value    0\n",
+        "      Min      0\n",
+        "      Max      255\n",
+        "Testing ... (interrupt to abort)\n",
+    ]
+    import io
+    import subprocess as sp
+    import types, re
+
+    # Patch subprocess.Popen to feed our banner lines
+    class _FakeProc:
+        def __init__(self):
+            self.stdout = iter(banner)
+        def terminate(self):
+            pass
+
+    orig = sp.Popen
+    sp.Popen = lambda *a, **kw: _FakeProc()
+    try:
+        ranges = tc.read_minmax("/dev/input/event0")
+    finally:
+        sp.Popen = orig
+
+    assert ranges["X"]["Max"] == 4095, ranges
+    assert ranges["Y"]["Max"] == 4095, "ABS_PRESSURE Max=255 contaminated ABS_Y range"

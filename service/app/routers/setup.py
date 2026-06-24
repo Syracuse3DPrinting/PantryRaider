@@ -1,7 +1,11 @@
+import asyncio
+import json
+import re
 import socket
+import subprocess
 import httpx
 from fastapi import APIRouter, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
@@ -882,6 +886,151 @@ async def ap_disable():
         async with httpx.AsyncClient(timeout=15.0) as c:
             r = await c.post(f"{_HOST_BRIDGE}/ap/disable")
         return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
+# Touch calibration
+# ------------------
+# These endpoints let the web UI stream raw touch events and apply a computed
+# calibration matrix. Only meaningful on Pi Remote (venv service) where the
+# process can access /dev/input/event* directly (service user in input group).
+
+def _find_touch_device() -> str | None:
+    """Return the first /dev/input/eventN that looks like a touchscreen."""
+    try:
+        blocks = open("/proc/bus/input/devices").read().split("\n\n")
+    except OSError:
+        return None
+    for b in blocks:
+        if re.search(r"touch", b, re.I):
+            m = re.search(r"Handlers=.*?(event\d+)", b)
+            if m:
+                return "/dev/input/" + m.group(1)
+    return None
+
+
+async def _evtest_sse(device: str):
+    """Async generator that yields SSE-formatted touch events from evtest."""
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            "evtest", device,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.DEVNULL,
+        )
+    except FileNotFoundError:
+        yield f"data: {json.dumps({'type': 'error', 'msg': 'evtest not found'})}\n\n"
+        return
+
+    code_x = code_y = None
+    ranges: dict = {}
+    ranges_sent = False
+    x = y = None
+
+    try:
+        async for raw in proc.stdout:
+            line = raw.decode(errors="replace")
+
+            # Startup banner: parse axis ranges
+            if not ranges_sent:
+                cm = re.search(r"\(ABS_(X|Y)\)", line)
+                if cm:
+                    code_x = cm.group(1)
+                elif re.search(r"Event code \d+", line):
+                    code_x = None
+                mm = re.search(r"(Min|Max)\s+(-?\d+)", line)
+                if mm and code_x:
+                    ranges.setdefault(code_x, {})[mm.group(1)] = int(mm.group(2))
+                if "Testing" in line:
+                    ranges_sent = True
+                    x_range = ranges.get("X", {})
+                    y_range = ranges.get("Y", {})
+                    yield (
+                        "data: " + json.dumps({
+                            "type": "ranges",
+                            "x_min": x_range.get("Min", 0),
+                            "x_max": x_range.get("Max", 4095),
+                            "y_min": y_range.get("Min", 0),
+                            "y_max": y_range.get("Max", 4095),
+                        }) + "\n\n"
+                    )
+                continue
+
+            # Live events: report completed taps (BTN_TOUCH release)
+            mx = re.search(r"\(ABS_X\), value (-?\d+)", line)
+            my = re.search(r"\(ABS_Y\), value (-?\d+)", line)
+            mr = re.search(r"\(BTN_TOUCH\), value 0", line)
+            if mx:
+                x = int(mx.group(1))
+            elif my:
+                y = int(my.group(1))
+            elif mr and x is not None and y is not None:
+                yield (
+                    "data: " + json.dumps({"type": "tap", "x": x, "y": y}) + "\n\n"
+                )
+                x = y = None
+    finally:
+        try:
+            proc.terminate()
+        except Exception:
+            pass
+
+
+@router.get("/calibrate/touch/events")
+async def calibrate_touch_events():
+    """SSE stream of raw ABS_X/ABS_Y touch events from the kernel input layer.
+
+    First event: {"type": "ranges", "x_min": 0, "x_max": 4095, ...}
+    Subsequent: {"type": "tap", "x": int, "y": int} on each BTN_TOUCH release.
+    """
+    if not is_raspberry_pi():
+        return JSONResponse({"error": "Not available on this platform."}, status_code=400)
+    device = _find_touch_device()
+    if not device:
+        return JSONResponse({"error": "No touch device found."}, status_code=400)
+    return StreamingResponse(
+        _evtest_sse(device),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+class TouchMatrixPayload(BaseModel):
+    matrix: str = ""
+
+
+@router.post("/calibrate/touch/apply")
+async def calibrate_touch_apply(payload: TouchMatrixPayload):
+    """Write a LIBINPUT_CALIBRATION_MATRIX to the udev rules file.
+
+    Delegates to foodassistant-touch-calibrate --apply-matrix via sudo.
+    The service user must have a NOPASSWD sudoers entry for that command
+    (provisioned by firstboot.sh for pi_remote).
+    """
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    parts = payload.matrix.strip().split()
+    if len(parts) != 6:
+        return JSONResponse({"ok": False, "error": "Matrix must be exactly 6 floats."})
+    try:
+        [float(p) for p in parts]
+    except ValueError:
+        return JSONResponse({"ok": False, "error": "Non-numeric value in matrix."})
+    matrix_str = " ".join(parts)
+    try:
+        result = await run_in_threadpool(
+            lambda: subprocess.run(
+                ["sudo", "/usr/local/bin/foodassistant-touch-calibrate",
+                 "--apply-matrix", matrix_str],
+                capture_output=True, text=True, timeout=15,
+            )
+        )
+        if result.returncode == 0:
+            return {"ok": True, "message": result.stdout.strip()}
+        return JSONResponse({"ok": False, "error": result.stderr.strip() or result.stdout.strip()})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
 
