@@ -851,6 +851,32 @@ async def streamdeck_install():
         return JSONResponse({"ok": False, "error": str(e)})
 
 
+@router.get("/ap/status")
+async def ap_status():
+    """Whether the fallback Wi-Fi AP is active (Pi appliance only)."""
+    if not is_raspberry_pi():
+        return {"ok": True, "active": False}
+    try:
+        async with httpx.AsyncClient(timeout=4.0) as c:
+            r = (await c.get(f"{_HOST_BRIDGE}/ap/status")).json()
+        return r
+    except Exception:
+        return {"ok": True, "active": False}
+
+
+@router.post("/ap/disable")
+async def ap_disable():
+    """Stop the fallback hotspot after the user has configured Wi-Fi."""
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/ap/disable")
+        return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
 # Backwards-compatible alias for the old endpoint name
 @router.post("/test/vision")
 async def test_vision_legacy(payload: dict):

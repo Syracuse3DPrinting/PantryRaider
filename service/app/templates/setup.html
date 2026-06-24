@@ -659,6 +659,14 @@
 {% if configured %}
 <div class="setup-wrap" id="settings-root">
 
+  <!-- AP fallback banner: shown when the device is in hotspot setup mode -->
+  <div id="ap-fallback-banner" class="alert alert-warning alert-dismissible fade show d-none" role="alert">
+    <i class="bi bi-wifi me-2"></i><strong>Running in Wi-Fi setup mode.</strong>
+    Connect your device to the <strong>FoodAssistant</strong> hotspot to configure the network,
+    then the hotspot will disable itself.
+    <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+  </div>
+
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 my-3">
     <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant
       <span class="text-secondary fw-normal fs-6 ms-1">Settings</span></div>
@@ -785,7 +793,15 @@
               <label class="form-label">PIN <span class="text-secondary small">(digits only)</span></label>
               {{ secret_input('kiosk_pin', 'e.g. 1234') }}
             </div>
-            <div class="form-text">Applies only to this device's screen. Use Settings here to change or clear it. It does not affect the main server.</div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="kiosk_readonly_when_locked"
+                     {% if s.kiosk_readonly_when_locked %}checked{% endif %}>
+              <label class="form-check-label" for="kiosk_readonly_when_locked">
+                Allow read-only browsing while locked
+              </label>
+              <div class="form-text">When enabled, visitors can browse inventory without entering the PIN. Write actions (adding or editing items) are blocked until they log in.</div>
+            </div>
+            <div class="form-text mt-1">Applies only to this device's screen. Use Settings here to change or clear it. It does not affect the main server.</div>
           </div>
 
           <div class="section-card">
@@ -1510,6 +1526,13 @@ docker compose up -d</code></pre>
                      {{ 'checked' if s.display_touch else '' }}>
               <label class="form-check-label" for="display_touch">Touch-compatible display</label>
             </div>
+            <div class="mb-3">
+              <label class="form-label" for="display_idle_timeout">Display sleep after N minutes idle (0 = off)</label>
+              <input class="form-control form-control-sm" style="max-width:120px" type="number"
+                     id="display_idle_timeout" min="0" max="120" step="5"
+                     value="{{ s.display_idle_timeout }}">
+              <div class="form-text">Blanks the kiosk screen after inactivity. 0 disables.</div>
+            </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
@@ -1606,6 +1629,13 @@ docker compose up -d</code></pre>
                     <option value="c">Celsius (°C)</option>
                   </select>
                 </div>
+              </div>
+              <div class="mb-3">
+                <label class="form-label" for="streamdeck_idle_timeout">Blank deck after N minutes idle (0 = off)</label>
+                <input class="form-control form-control-sm" style="max-width:120px" type="number"
+                       id="streamdeck_idle_timeout" min="0" max="120" step="5"
+                       value="{{ s.streamdeck_idle_timeout }}">
+                <div class="form-text">Sets all keys to black after inactivity. Any key press restores the display.</div>
               </div>
             </div>
             <div id="streamdeck-status-row" class="mb-2"><span class="text-secondary small">Checking...</span></div>
@@ -2267,7 +2297,9 @@ function buildPayload() {
     display_rotation: parseInt(document.getElementById('display_rotation_wiz')?.value ?? document.getElementById('display_rotation')?.value ?? '0', 10),
     has_streamdeck:  document.getElementById('has_streamdeck')?.checked || false,
     streamdeck_key_count: parseInt(document.getElementById('streamdeck_key_count')?.value || '0', 10),
+    streamdeck_idle_timeout: parseInt(document.getElementById('streamdeck_idle_timeout')?.value || '0', 10),
     display_touch:   document.getElementById('display_touch')?.checked || false,
+    display_idle_timeout: parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10),
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
     api_key:         secretVal('api_key'),
@@ -2279,6 +2311,7 @@ function buildPayload() {
     remote_server_url: val('remote_server_url') || undefined,
     upstream_api_key: secretVal('upstream_api_key'),
     kiosk_pin:       secretVal('kiosk_pin'),
+    kiosk_readonly_when_locked: document.getElementById('kiosk_readonly_when_locked')?.checked ?? false,
   };
 }
 
@@ -2966,6 +2999,7 @@ async function saveDisplaySettings() {
     document.getElementById('kms_rotation')?.value
     ?? document.getElementById('display_rotation')?.value ?? '0', 10);
   const display_touch = document.getElementById('display_touch')?.checked || false;
+  const display_idle_timeout = parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10);
   try {
     await fetch('setup/scale', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -2973,7 +3007,7 @@ async function saveDisplaySettings() {
     });
     await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch}),
+      body: JSON.stringify({display_touch, display_idle_timeout}),
     });
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Display settings saved.</span>';
@@ -3232,7 +3266,7 @@ async function saveStreamDeckSettings() {
   if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
   const has_streamdeck = document.getElementById('has_streamdeck')?.checked || false;
   const streamdeck_key_count = parseInt(document.getElementById('streamdeck_key_count')?.value || '15', 10);
-  
+  const streamdeck_idle_timeout = parseInt(document.getElementById('streamdeck_idle_timeout')?.value || '0', 10);
   const rotation = parseInt(document.getElementById('streamdeck_rotation')?.value || '0', 10);
   const brightness = parseInt(document.getElementById('streamdeck_brightness')?.value || '60', 10);
   const keys = _sdCollectKeys();
@@ -3242,9 +3276,9 @@ async function saveStreamDeckSettings() {
   try {
     await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({has_streamdeck, streamdeck_key_count}),
+      body: JSON.stringify({has_streamdeck, streamdeck_key_count, streamdeck_idle_timeout}),
     });
-    
+
     if (has_streamdeck) {
       await fetch('setup/streamdeck/config', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -3461,7 +3495,7 @@ async function changeWifi() {
     if (el) el.innerHTML = d.ok
       ? `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Connected to <strong>${ssid}</strong>.</span>`
       : `<span class="text-danger">${d.error}</span>`;
-    if (d.ok) loadNetworkStatus();
+    if (d.ok) { loadNetworkStatus(); disableAp(); }
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
   }
@@ -3634,6 +3668,31 @@ async function scanLan() {
     if (btn) btn.disabled = false;
   }
 }
+
+async function checkApStatus() {
+  try {
+    const r = await fetch('setup/ap/status');
+    const d = await r.json();
+    const banner = document.getElementById('ap-fallback-banner');
+    if (banner && d.active) {
+      banner.classList.remove('d-none');
+    }
+  } catch (e) {
+    // Bridge not reachable (non-Pi or bridge not running); silently ignore.
+  }
+}
+
+async function disableAp() {
+  try {
+    await fetch('setup/ap/disable', {method: 'POST'});
+    const banner = document.getElementById('ap-fallback-banner');
+    if (banner) banner.classList.add('d-none');
+  } catch (e) {
+    // Best effort; if it fails the AP will time out on its own.
+  }
+}
+
+document.addEventListener('DOMContentLoaded', checkApStatus);
 </script>
 </body>
 </html>

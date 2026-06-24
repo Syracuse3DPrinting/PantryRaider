@@ -1016,6 +1016,84 @@ install_host_bridge() {
   fi
 }
 
+# Step: Wi-Fi fallback AP mode
+# Installs hostapd and dnsmasq, then registers a watchdog service that
+# activates a fallback hotspot (SSID: FoodAssistant) when wlan0 is not
+# associated within 30 seconds of boot. The AP is NOT started immediately;
+# it only activates on failure, so a device that connects normally is
+# unaffected.
+configure_wifi_ap_fallback() {
+  log "Configuring Wi-Fi fallback AP mode"
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would install hostapd dnsmasq and write watchdog service"
+    return 0
+  fi
+
+  DEBIAN_FRONTEND=noninteractive apt-get install -y -q hostapd dnsmasq \
+    || warn "hostapd/dnsmasq install failed; AP fallback unavailable"
+
+  # hostapd configuration: WPA2 personal on wlan0, channel 6.
+  mkdir -p /etc/hostapd
+  cat > /etc/hostapd/hostapd.conf <<'EOF'
+interface=wlan0
+driver=nl80211
+ssid=FoodAssistant
+hw_mode=g
+channel=6
+wmm_enabled=0
+macaddr_acl=0
+auth_algs=1
+ignore_broadcast_ssid=0
+wpa=2
+wpa_passphrase=foodassist
+wpa_key_mgmt=WPA-PSK
+wpa_pairwise=TKIP
+rsn_pairwise=CCMP
+EOF
+
+  # dnsmasq DHCP range on the AP subnet. All DNS queries redirect to the
+  # gateway (captive portal NXD hint via dhcp-option=6).
+  mkdir -p /etc/dnsmasq.d
+  cat > /etc/dnsmasq.d/foodassistant-ap.conf <<'EOF'
+interface=wlan0
+dhcp-range=192.168.99.2,192.168.99.20,12h
+dhcp-option=3,192.168.99.1
+dhcp-option=6,192.168.99.1
+address=/#/192.168.99.1
+EOF
+
+  # Watchdog service: after network-online.target, check wlan0 association.
+  # If not connected after 30 s, bring up the AP interface and start the
+  # hotspot daemons. A flag file signals to the web UI that AP mode is active.
+  cat > /etc/systemd/system/foodassistant-ap-watchdog.service <<'EOF'
+[Unit]
+Description=FoodAssistant Wi-Fi fallback AP watchdog
+After=network-online.target
+Wants=network-online.target
+RemainAfterExit=yes
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/bash -c '\
+  sleep 30; \
+  if ! iw dev wlan0 link 2>/dev/null | grep -q "Connected"; then \
+    ip addr add 192.168.99.1/24 dev wlan0 2>/dev/null || true; \
+    systemctl start hostapd; \
+    systemctl start dnsmasq; \
+    touch /run/foodassistant-ap-active; \
+  fi'
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable foodassistant-ap-watchdog.service \
+    || warn "ap-watchdog service enable failed"
+  log "Wi-Fi fallback AP watchdog installed (activates only when wlan0 fails to connect)"
+}
+
 # Step: mark done
 mark_done() {
   if [ "$DRY_RUN" = "1" ]; then
@@ -1335,9 +1413,10 @@ main() {
     # Mealie, AI keys, expiry defaults) from a main server. The user browses to
     # http://<hostname>.local/ to enter that server's URL + API key. No SSH.
     log "Satellite mode: skipping Docker stack; will pull config from ${REMOTE_SERVER_URL:-<set in web UI>}"
-    _step_requested "remote_service" && deploy_remote_service
-    _step_requested "hostbridge"     && install_host_bridge
-    _step_requested "rotation"       && configure_display_rotation
+    _step_requested "remote_service"   && deploy_remote_service
+    _step_requested "hostbridge"       && install_host_bridge
+    _step_requested "wifi_ap_fallback" && configure_wifi_ap_fallback
+    _step_requested "rotation"         && configure_display_rotation
     _step_requested "touch"          && configure_touch
     _step_requested "kiosk"          && configure_kiosk
     _step_requested "streamdeck"     && configure_streamdeck
@@ -1348,11 +1427,12 @@ main() {
     return 0
   fi
 
-  _step_requested "docker"      && install_docker
-  _step_requested "stack"       && deploy_stack
-  _step_requested "port80"      && configure_port80
-  _step_requested "hostbridge"  && install_host_bridge
-  _step_requested "rotation"    && configure_display_rotation
+  _step_requested "docker"           && install_docker
+  _step_requested "stack"            && deploy_stack
+  _step_requested "port80"           && configure_port80
+  _step_requested "hostbridge"       && install_host_bridge
+  _step_requested "wifi_ap_fallback" && configure_wifi_ap_fallback
+  _step_requested "rotation"         && configure_display_rotation
   _step_requested "touch"       && configure_touch
   _step_requested "kiosk"       && configure_kiosk
   _step_requested "streamdeck"  && configure_streamdeck

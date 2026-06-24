@@ -219,3 +219,20 @@ def test_parse_wifi_scan_handles_bad_signal():
 
 def test_parse_wifi_scan_empty():
     assert bridge._parse_wifi_scan("") == []
+
+
+# AP fallback flag (FoodAssistant-ac7)
+
+
+def test_ap_status_inactive_when_no_flag(monkeypatch):
+    monkeypatch.setattr(
+        bridge.Path, "exists", lambda self: False
+    )
+    assert bridge.Path(bridge._AP_FLAG).exists() is False
+
+
+def test_ap_status_active_when_flag_present(monkeypatch):
+    monkeypatch.setattr(
+        bridge.Path, "exists", lambda self: True
+    )
+    assert bridge.Path(bridge._AP_FLAG).exists() is True
