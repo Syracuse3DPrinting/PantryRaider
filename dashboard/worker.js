@@ -456,13 +456,11 @@ function renderCommits(){
 }
 
 /* ── Boot ─────────────────────────────────────── */
-document.addEventListener("DOMContentLoaded", function() {
-  renderStats();
-  filt();
-  renderCL();
-  renderCommits();
-  document.getElementById("ts").textContent="Branch: "+BRANCH+" \u00b7 "+new Date().toLocaleTimeString();
-});
+renderStats();
+filt();
+renderCL();
+renderCommits();
+document.getElementById("ts").textContent="Branch: "+BRANCH+" \u00b7 "+new Date().toLocaleTimeString();
 </script>
 </body>
 </html>`;
