@@ -1764,7 +1764,7 @@ docker compose up -d</code></pre>
 const TABS = {{ tabs | tojson }};
 const HAS_AUTH_PASSWORD = {{ 'true' if has.auth_password else 'false' }};
 const IS_CONFIGURED = {{ 'true' if configured else 'false' }};
-const PI_GROCY_DEFAULT = {{ ('"http://' + pi_mdns_host + ':9383"') if pi_mdns_host else '"http://localhost:9383"' }};
+const PI_GROCY_DEFAULT = {{ (('http://' + pi_mdns_host + ':9383') if pi_mdns_host else 'http://localhost:9383') | tojson }};
 
 // Shared helpers
 function val(id) { return document.getElementById(id)?.value.trim() || ''; }
