@@ -10,6 +10,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import shutil
 import subprocess
 import time
@@ -18,6 +19,7 @@ from typing import Optional
 import httpx
 
 from . import actions, layout, render
+from . import config as config_mod
 from .actions import (
     KEYPAD_CANCEL,
     KEYPAD_CLEAR,
@@ -35,11 +37,20 @@ log = logging.getLogger("foodassistant.streamdeck")
 
 
 class Controller:
-    def __init__(self, deck, config: Config) -> None:
+    def __init__(self, deck, config: Config, config_path: Optional[str] = None) -> None:
         self.deck = deck
         self.config = config
+        # Path of the TOML this controller was loaded from, if any. The
+        # config-change watcher reloads it (and re-inits the deck) when the web
+        # setup page rewrites it, so an orientation change applies in-process
+        # without depending on a clean systemd bounce.
+        self.config_path = config_path
         self.client: Optional[httpx.AsyncClient] = None
         self.loop: Optional[asyncio.AbstractEventLoop] = None
+        # Guards a re-init so the watchdog and the config watcher cannot tear
+        # the deck down at the same time.
+        self._reinit_lock = asyncio.Lock()
+        self._config_mtime = self._read_config_mtime()
 
         self.key_count: int = deck.key_count()
         self.pages: list[list[Optional[ActionSpec]]] = layout.build_pages(
@@ -127,10 +138,7 @@ class Controller:
         headers = {"X-API-Key": self.config.api_key} if self.config.api_key else {}
         async with httpx.AsyncClient(timeout=8.0, headers=headers) as client:
             self.client = client
-            self.deck.open()
-            self.deck.reset()
-            self.deck.set_brightness(BRIGHTNESS_STEPS[self._bright_idx])
-            self.deck.set_key_callback(self._on_key)
+            self._open_deck()
             await self._poll_once()
             await self._refresh_weather()
             await self._refresh_ha_entities()
@@ -141,14 +149,102 @@ class Controller:
                 self.key_count,
                 len(self.pages),
             )
-            await asyncio.gather(self._poll_forever(), self._idle_loop())
+            await asyncio.gather(
+                self._poll_forever(),
+                self._idle_loop(),
+                self._watchdog_loop(),
+            )
 
-    def close(self) -> None:
+    def _open_deck(self) -> None:
+        """Open the HID device and put it into the rendered, callback-wired state.
+
+        Called both at startup and on every re-init. Re-asserting the callback
+        and brightness here (not just at first open) is what makes a re-opened
+        deck responsive again after a teardown.
+        """
+        self.deck.open()
+        self.deck.reset()
+        self.deck.set_brightness(BRIGHTNESS_STEPS[self._bright_idx])
+        self.deck.set_key_callback(self._on_key)
+        self._idle_blanked = False
+
+    def _teardown_deck(self) -> None:
+        """Reset and close the HID handle, swallowing any error.
+
+        On an orientation change or a crashed deck the old handle may already
+        be in a bad state, so every step is best-effort: the goal is to release
+        the USB device so a fresh open() can claim it cleanly.
+        """
         try:
             self.deck.reset()
-            self.deck.close()
-        except Exception:  # noqa: BLE001 - best effort on shutdown
+        except Exception:  # noqa: BLE001 - the handle may already be dead
             pass
+        try:
+            self.deck.close()
+        except Exception:  # noqa: BLE001
+            pass
+
+    async def reinit(self, reload_config: bool = False) -> bool:
+        """Tear down the deck and bring it back up cleanly.
+
+        Used for two cases: an orientation/config change (reload_config=True,
+        which re-reads the TOML and rebuilds the page layout for the new
+        rotation) and a watchdog recovery after the deck stopped responding.
+        Returns True on success. A failure here leaves self.deck closed; the
+        watchdog will retry on its next tick.
+        """
+        async with self._reinit_lock:
+            self._teardown_deck()
+            if reload_config and self.config_path:
+                try:
+                    new_cfg = config_mod.load(self.config_path)
+                    self._apply_config(new_cfg)
+                except Exception as e:  # noqa: BLE001 - keep the old config
+                    log.warning("config reload failed, keeping current: %s", e)
+            # If the original handle is gone (USB re-enumerated, e.g. after the
+            # controller chip reset on a crash), pick up the freshly attached
+            # deck instead of re-opening a stale handle.
+            try:
+                fresh = find_deck()
+                if fresh is not None:
+                    self.deck = fresh
+            except Exception as e:  # noqa: BLE001 - fall back to the old handle
+                log.debug("re-enumerate failed, reusing handle: %s", e)
+            try:
+                self._open_deck()
+                self._draw_page()
+                log.info("Stream Deck re-initialised (rotation=%d)", self.config.rotation)
+                return True
+            except Exception as e:  # noqa: BLE001 - watchdog will retry
+                log.error("Stream Deck re-init failed: %s", e)
+                return False
+
+    def _apply_config(self, cfg: Config) -> None:
+        """Adopt a freshly loaded config, rebuilding rotation-dependent layout.
+
+        Only the fields that a setup-page rewrite can change and that the
+        running controller reads each draw are refreshed here. The page grid is
+        rebuilt because rotation and the key list both change which slot maps to
+        which physical key.
+        """
+        self.config = cfg
+        self.key_count = self.deck.key_count()
+        self.pages = layout.build_pages(cfg.keys, self.key_count)
+        self.key_overrides = actions.overrides_to_specs(
+            getattr(cfg, "key_overrides", []) or [], self.key_count
+        )
+        layout.apply_overrides(self.pages, self.key_overrides, self.key_count)
+        self.keypad_pages = layout.build_keypad_pages(self.key_count)
+        self.page = self.page % len(self.pages)
+        try:
+            self._bright_idx = BRIGHTNESS_STEPS.index(
+                min(BRIGHTNESS_STEPS, key=lambda s: abs(s - cfg.brightness))
+            )
+        except ValueError:
+            self._bright_idx = len(BRIGHTNESS_STEPS) // 2
+
+    def close(self) -> None:
+        self._teardown_deck()
 
     # -- rendering ---------------------------------------------------------
 
@@ -421,6 +517,62 @@ class Controller:
             await asyncio.sleep(10)
             await self._idle_loop_once()
 
+    # -- watchdog / config watch -------------------------------------------
+
+    def _read_config_mtime(self) -> float:
+        """Modification time of the loaded config file, or 0 when there is none."""
+        if not self.config_path:
+            return 0.0
+        try:
+            return os.path.getmtime(self.config_path)
+        except OSError:
+            return 0.0
+
+    def _deck_is_healthy(self) -> bool:
+        """Cheap liveness probe for the deck.
+
+        Reads a property the StreamDeck library serves from the live HID handle.
+        A dead or unplugged deck raises here (the worker thread is gone or the
+        transport errored), which is exactly the unresponsive state a service
+        restart does not fix. While the deck is intentionally blanked for idle
+        we skip the probe so the watchdog does not fight the idle blanker.
+        """
+        if self._idle_blanked:
+            return True
+        try:
+            self.deck.key_count()
+            self.deck.key_image_format()
+            return True
+        except Exception:  # noqa: BLE001 - any failure means re-init
+            return False
+
+    async def _watchdog_once(self) -> None:
+        """One watchdog tick: apply a pending config change, then health-check.
+
+        A config rewrite (the setup page changing rotation or the key layout)
+        is handled first as a clean in-process re-init. Independently, if the
+        deck has stopped answering, it is re-initialised so it recovers without
+        a device reboot.
+        """
+        mtime = self._read_config_mtime()
+        if mtime and mtime != self._config_mtime:
+            self._config_mtime = mtime
+            log.info("config file changed; re-initialising deck")
+            await self.reinit(reload_config=True)
+            return
+        if not self._deck_is_healthy():
+            log.warning("Stream Deck not responding; re-initialising")
+            await self.reinit(reload_config=False)
+
+    async def _watchdog_loop(self) -> None:
+        """Periodically watch for config changes and a wedged deck."""
+        while True:
+            await asyncio.sleep(5)
+            try:
+                await self._watchdog_once()
+            except Exception as e:  # noqa: BLE001 - never let the watchdog die
+                log.debug("watchdog tick failed: %s", e)
+
     async def _refresh(self) -> None:
         await self._poll_once()
         self._draw_page()
@@ -565,12 +717,12 @@ def find_deck():
     return decks[0] if decks else None
 
 
-async def main_async(config: Config) -> int:
+async def main_async(config: Config, config_path: Optional[str] = None) -> int:
     deck = find_deck()
     if deck is None:
         log.error("No Stream Deck found. Check the USB connection and udev rule.")
         return 1
-    controller = Controller(deck, config)
+    controller = Controller(deck, config, config_path=config_path)
     try:
         await controller.run()
     finally:

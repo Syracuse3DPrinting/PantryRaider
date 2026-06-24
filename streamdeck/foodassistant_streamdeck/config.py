@@ -94,6 +94,21 @@ def default_config_path() -> Path:
     return Path(__file__).resolve().parent.parent / "config.toml"
 
 
+def resolved_config_path(path: str | os.PathLike | None = None) -> Path:
+    """The TOML path load() would read for the given (optional) override.
+
+    Lets a caller watch the same file load() used, so a controller can detect
+    a setup-page rewrite and re-init the deck for the new rotation.
+    """
+    return (
+        Path(path)
+        if path
+        else Path(os.environ[ENV_CONFIG])
+        if os.environ.get(ENV_CONFIG)
+        else default_config_path()
+    )
+
+
 def load(path: str | os.PathLike | None = None) -> Config:
     """Load configuration, layering file values over defaults then env vars.
 
@@ -103,13 +118,7 @@ def load(path: str | os.PathLike | None = None) -> Config:
     """
     cfg = Config()
 
-    resolved = (
-        Path(path)
-        if path
-        else Path(os.environ[ENV_CONFIG])
-        if os.environ.get(ENV_CONFIG)
-        else default_config_path()
-    )
+    resolved = resolved_config_path(path)
     if resolved.exists():
         data = tomllib.loads(resolved.read_text())
         _apply(cfg, data)

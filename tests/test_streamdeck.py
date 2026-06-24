@@ -1087,22 +1087,33 @@ class _FakeDeck:
         self._key_count = key_count
         self.brightness_calls: list[int] = []
         self.reset_calls: int = 0
+        self.open_calls: int = 0
+        self.close_calls: int = 0
         self._callback = None
+        # When True, the liveness probe and key writes raise, modelling a deck
+        # whose worker thread has died or whose USB transport has errored.
+        self.dead: bool = False
 
     def key_count(self) -> int:
+        if self.dead:
+            raise RuntimeError("deck not responding")
         return self._key_count
 
     def key_image_format(self) -> dict:
+        if self.dead:
+            raise RuntimeError("deck not responding")
         return {"size": (72, 72)}
 
     def deck_type(self) -> str:
         return "FakeDeck"
 
     def open(self) -> None:
-        pass
+        self.open_calls += 1
+        # A successful re-open means the deck is answering again.
+        self.dead = False
 
     def close(self) -> None:
-        pass
+        self.close_calls += 1
 
     def set_brightness(self, pct: int) -> None:
         self.brightness_calls.append(pct)
@@ -1219,4 +1230,87 @@ def test_wake_restores_page_and_clears_blank_flag():
     ctrl._idle_blanked = True
     loop.run_until_complete(ctrl._wake_from_idle())
     assert not ctrl._idle_blanked
+    loop.close()
+
+
+# -- re-init on orientation change + watchdog -----------------------------
+
+
+def test_reinit_tears_down_and_reopens_the_deck():
+    # A clean re-init (the path an orientation change takes) must close the old
+    # HID handle and open it again, not just flip a flag.
+    ctrl, deck, loop = _make_controller()
+    ok = loop.run_until_complete(ctrl.reinit())
+    assert ok is True
+    assert deck.close_calls >= 1
+    assert deck.open_calls >= 1
+    # Brightness is re-asserted so the re-opened deck is visible again.
+    assert deck.brightness_calls
+    loop.close()
+
+
+def test_deck_health_probe_detects_dead_deck():
+    ctrl, deck, loop = _make_controller()
+    assert ctrl._deck_is_healthy() is True
+    deck.dead = True
+    assert ctrl._deck_is_healthy() is False
+    loop.close()
+
+
+def test_health_probe_skipped_while_blanked():
+    # While intentionally blanked for idle, the watchdog must not treat the
+    # quiet deck as crashed.
+    ctrl, deck, loop = _make_controller(idle_timeout_minutes=1)
+    ctrl._idle_blanked = True
+    deck.dead = True
+    assert ctrl._deck_is_healthy() is True
+    loop.close()
+
+
+def test_watchdog_reinitializes_a_crashed_deck():
+    ctrl, deck, loop = _make_controller()
+    deck.dead = True
+    before = deck.open_calls
+    loop.run_until_complete(ctrl._watchdog_once())
+    # The watchdog noticed the dead deck and re-opened it; open() clears the
+    # dead flag in the fake, modelling a recovered device.
+    assert deck.open_calls > before
+    assert ctrl._deck_is_healthy() is True
+    loop.close()
+
+
+def test_watchdog_reloads_config_on_file_change(tmp_path):
+    from foodassistant_streamdeck.controller import Controller
+
+    cfg_file = tmp_path / "streamdeck.toml"
+    cfg_file.write_text("rotation = 0\n")
+    cfg = config.load(cfg_file)
+    deck = _FakeDeck()
+    ctrl = Controller(deck, cfg, config_path=str(cfg_file))
+    loop = asyncio.new_event_loop()
+    ctrl.loop = loop
+    ctrl._draw_page = lambda: None
+    assert ctrl.config.rotation == 0
+
+    # Simulate the setup page rewriting the config with a new orientation.
+    import os as _os
+    cfg_file.write_text("rotation = 90\n")
+    # Force a different mtime even on coarse-resolution filesystems.
+    _os.utime(cfg_file, (ctrl._config_mtime + 5, ctrl._config_mtime + 5))
+
+    before_open = deck.open_calls
+    loop.run_until_complete(ctrl._watchdog_once())
+    # The new rotation took effect and the deck was re-initialised in-process.
+    assert ctrl.config.rotation == 90
+    assert deck.open_calls > before_open
+    assert deck.close_calls >= 1
+    loop.close()
+
+
+def test_watchdog_no_op_when_nothing_changed():
+    ctrl, deck, loop = _make_controller()
+    before_open = deck.open_calls
+    loop.run_until_complete(ctrl._watchdog_once())
+    # Healthy deck, no config change: the watchdog must not churn the device.
+    assert deck.open_calls == before_open
     loop.close()

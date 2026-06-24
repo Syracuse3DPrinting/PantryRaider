@@ -10,7 +10,7 @@ import logging
 import sys
 
 from . import __version__
-from .config import load
+from .config import load, resolved_config_path
 from .controller import main_async
 
 
@@ -39,8 +39,9 @@ def main(argv: list[str] | None = None) -> int:
         format="%(asctime)s %(levelname)s %(message)s",
     )
     config = load(args.config)
+    config_path = str(resolved_config_path(args.config))
     try:
-        return asyncio.run(main_async(config))
+        return asyncio.run(main_async(config, config_path=config_path))
     except KeyboardInterrupt:
         return 0
 
