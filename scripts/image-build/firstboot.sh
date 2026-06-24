@@ -451,10 +451,11 @@ install_accel_rotation() {
 }
 
 # Step: KMS display rotation
-# Writes video=HDMI-A-1:rotate=N to cmdline.txt so the DRM/KMS framebuffer
-# (boot console, kiosk, everything) is rotated at the hardware level. Requires
-# a reboot to take effect; the provisioner's normal first-boot reboot handles
-# this automatically. Only runs when DISPLAY_ROTATION != 0.
+# Saves the requested kiosk rotation. cage uses the wlroots DRM backend, which
+# ignores WLR_OUTPUT_TRANSFORM, so rotation is applied at runtime with wlr-randr
+# (foodassistant-apply-rotation, run from the kiosk service ExecStartPost). The
+# value is stored in /etc/foodassistant/kiosk-rotation. Only the boot console
+# stays unrotated; the kiosk output rotates once cage is up.
 configure_display_rotation() {
   local rot="${DISPLAY_ROTATION:-0}"
   local transform="normal"
@@ -464,12 +465,17 @@ configure_display_rotation() {
     *) warn "DISPLAY_ROTATION=$rot is not valid (use 0, 90, 180, or 270); skipping"; return 0 ;;
   esac
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN: would set WLR_OUTPUT_TRANSFORM=$transform in /etc/foodassistant/kiosk-env"
+    log "DRY_RUN: would save transform $transform (kiosk-rotation) and WLR_OUTPUT_TRANSFORM=$transform (kiosk-env)"
     return 0
   fi
   mkdir -p /etc/foodassistant
+  # kiosk-rotation is the source of truth applied at runtime by
+  # foodassistant-apply-rotation (via wlr-randr) on every kiosk start. kiosk-env
+  # keeps WLR_OUTPUT_TRANSFORM in sync for dev/nested backends and so the host
+  # bridge can report the current value.
+  echo "$transform" > /etc/foodassistant/kiosk-rotation
   echo "WLR_OUTPUT_TRANSFORM=$transform" > /etc/foodassistant/kiosk-env
-  log "Kiosk rotation set to ${rot} degrees (compositor transform $transform; applies when the kiosk starts)"
+  log "Kiosk rotation set to ${rot} degrees (transform $transform; applied by wlr-randr when the kiosk starts)"
 }
 
 # Step: kiosk (opt-in, display-gated)
@@ -1008,6 +1014,10 @@ configure_kiosk() {
   apt_install cage || warn "cage install failed"
   apt_install chromium || apt_install chromium-browser \
     || warn "chromium install failed"
+  # wlr-randr applies the display rotation at runtime (cage ignores
+  # WLR_OUTPUT_TRANSFORM on the DRM backend). Best-effort: rotation just stays
+  # at normal if it is missing.
+  apt_install wlr-randr || warn "wlr-randr install failed; display rotation will not apply"
 
   # Bake absolute binary paths into the unit. cage execs the browser via PATH,
   # but a systemd service runs with a minimal environment, so we resolve full
@@ -1083,6 +1093,10 @@ ${cursor_env:+$cursor_env
 }ExecStart=$cage_bin -- $chromium_bin --kiosk --noerrdialogs \\
   --disable-infobars --no-first-run --ozone-platform=wayland \\
   --remote-debugging-port=9222 --disable-restore-session-state $KIOSK_URL
+# Apply the saved display rotation once cage is up (cage ignores
+# WLR_OUTPUT_TRANSFORM; the helper drives wlr-randr and retries while the
+# output comes up). Best-effort, so a missing helper never blocks the kiosk.
+ExecStartPost=-/usr/local/bin/foodassistant-apply-rotation
 Restart=always
 RestartSec=5
 
@@ -1243,12 +1257,25 @@ install_rotation_helper() {
     [ -f "$candidate" ] && src="$candidate" && break
   done
   [ -z "$src" ] && { warn "foodassistant-set-rotation not found; KMS rotation control unavailable"; return 0; }
+  # The apply helper does the actual wlr-randr call; set-rotation and the kiosk
+  # service's ExecStartPost both invoke it. Install it alongside.
+  local apply_src=""
+  for candidate in "$ASSET_DIR/foodassistant-apply-rotation" \
+                   "$REPO_DIR/scripts/image-build/foodassistant-apply-rotation"; do
+    [ -f "$candidate" ] && apply_src="$candidate" && break
+  done
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN would install $src to /usr/local/bin/foodassistant-set-rotation"
+    log "DRY_RUN would install $src and apply-rotation to /usr/local/bin"
     return 0
   fi
   install -m 755 "$src" /usr/local/bin/foodassistant-set-rotation
   log "Installed /usr/local/bin/foodassistant-set-rotation"
+  if [ -n "$apply_src" ]; then
+    install -m 755 "$apply_src" /usr/local/bin/foodassistant-apply-rotation
+    log "Installed /usr/local/bin/foodassistant-apply-rotation"
+  else
+    warn "foodassistant-apply-rotation not found; live rotation will not apply"
+  fi
 }
 
 # Step: host bridge (Pi Hosted / server modes only, not Pi Remote)

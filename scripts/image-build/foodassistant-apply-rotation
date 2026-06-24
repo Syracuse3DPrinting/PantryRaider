@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# foodassistant-apply-rotation -- apply the saved kiosk rotation to the running
+# Wayland compositor (cage) via wlr-randr.
+#
+# cage on the Pi uses the wlroots DRM backend, which ignores the
+# WLR_OUTPUT_TRANSFORM environment variable. The supported runtime path is the
+# wlr-output-management protocol, which cage exposes and wlr-randr drives. This
+# helper resolves the kiosk session's Wayland socket and the connected output,
+# then sets the transform. It retries for a short window so it can run from the
+# kiosk service's ExecStartPost before cage has finished bringing the output up.
+#
+# The desired transform is read from /etc/foodassistant/kiosk-rotation
+# (one of: normal, 90, 180, 270). Missing or empty means normal (no rotation).
+set -uo pipefail
+
+ROT_FILE=/etc/foodassistant/kiosk-rotation
+transform="$(cat "$ROT_FILE" 2>/dev/null || true)"
+[ -z "$transform" ] && transform="normal"
+
+if ! command -v wlr-randr >/dev/null 2>&1; then
+  echo "wlr-randr not installed; cannot apply rotation" >&2
+  exit 1
+fi
+
+# Find the kiosk Wayland socket and the connected output, retrying while the
+# compositor starts. The socket lives under /run/user/<uid>/wayland-N; skip the
+# matching .lock files.
+sock=""
+out=""
+for _ in $(seq 1 20); do
+  sock="$(ls /run/user/*/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1 || true)"
+  if [ -n "$sock" ]; then
+    export XDG_RUNTIME_DIR="$(dirname "$sock")"
+    export WAYLAND_DISPLAY="$(basename "$sock")"
+    # The connector line is the only one starting in column 0.
+    out="$(wlr-randr 2>/dev/null | awk '/^[A-Za-z]/{print $1; exit}' || true)"
+    [ -n "$out" ] && break
+  fi
+  sleep 0.5
+done
+
+if [ -z "$sock" ] || [ -z "$out" ]; then
+  echo "Could not reach the kiosk compositor (no socket/output)" >&2
+  exit 1
+fi
+
+wlr-randr --output "$out" --transform "$transform"
+echo "Applied transform=$transform to $out"
