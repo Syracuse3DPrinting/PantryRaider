@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Touch calibration</title>
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      background: #000; color: #fff; overflow: hidden;
+      touch-action: none; user-select: none;
+      font-family: sans-serif;
+    }
+    #crosshair {
+      position: absolute; width: 64px; height: 64px;
+      transform: translate(-50%, -50%); pointer-events: none;
+      display: none;
+    }
+    #msg {
+      position: fixed; bottom: 12%; left: 50%; transform: translateX(-50%);
+      text-align: center; font-size: 1.3rem; line-height: 1.7; width: 80%;
+    }
+    #cancel {
+      position: fixed; top: 1rem; right: 1rem;
+      background: rgba(255,255,255,0.12); border: 1px solid #fff;
+      color: #fff; padding: 0.6rem 1.2rem; border-radius: 6px;
+      font-size: 1rem; cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="crosshair">
+    <svg viewBox="0 0 64 64" width="64" height="64">
+      <line x1="32" y1="2"  x2="32" y2="62" stroke="#4dabf7" stroke-width="3"/>
+      <line x1="2"  y1="32" x2="62" y2="32" stroke="#4dabf7" stroke-width="3"/>
+      <circle cx="32" cy="32" r="11" fill="none" stroke="#4dabf7" stroke-width="3"/>
+    </svg>
+  </div>
+  <div id="msg">Connecting to the touch device...</div>
+  <button id="cancel" onclick="finishCalibration()">Cancel</button>
+
+<script>
+(function () {
+  // Targets are inset from the edges so the crosshair stays fully on screen.
+  const CORNERS = [
+    { label: 'top-left',     tx: 0.05, ty: 0.05 },
+    { label: 'top-right',    tx: 0.95, ty: 0.05 },
+    { label: 'bottom-right', tx: 0.95, ty: 0.95 },
+    { label: 'bottom-left',  tx: 0.05, ty: 0.95 },
+  ];
+
+  let es = null;
+  let step = 0;
+  let samples = [];
+  let ranges = null;
+
+  const chEl = document.getElementById('crosshair');
+  const msgEl = document.getElementById('msg');
+
+  function _solve3(A, b) {
+    const M = A.map((row, i) => [...row, b[i]]);
+    for (let i = 0; i < 3; i++) {
+      let p = i;
+      for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
+      [M[i], M[p]] = [M[p], M[i]];
+      for (let r = 0; r < 3; r++) {
+        if (r === i) continue;
+        const f = M[r][i] / M[i][i];
+        for (let c = i; c <= 3; c++) M[r][c] -= f * M[i][c];
+      }
+    }
+    return M.map((row, i) => row[3] / row[i]);
+  }
+
+  function solveAffine(s) {
+    let sxx = 0, sxy = 0, sx = 0, syy = 0, sy = 0, n = 0;
+    let bx0 = 0, bx1 = 0, bx2 = 0, by0 = 0, by1 = 0, by2 = 0;
+    for (const [nx, ny, tx, ty] of s) {
+      sxx += nx * nx; sxy += nx * ny; sx += nx;
+      syy += ny * ny; sy += ny; n++;
+      bx0 += nx * tx; bx1 += ny * tx; bx2 += tx;
+      by0 += nx * ty; by1 += ny * ty; by2 += ty;
+    }
+    const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
+    return [..._solve3(A, [bx0, bx1, bx2]), ..._solve3(A, [by0, by1, by2])];
+  }
+
+  function showCorner(idx) {
+    const c = CORNERS[idx];
+    chEl.style.left = (c.tx * 100) + '%';
+    chEl.style.top  = (c.ty * 100) + '%';
+    chEl.style.display = 'block';
+    msgEl.textContent = 'Tap the crosshair (' + c.label + ')  -  ' +
+                        (idx + 1) + ' of ' + CORNERS.length;
+  }
+
+  window.finishCalibration = function () {
+    if (es) { es.close(); es = null; }
+    // Return to the kiosk UI.
+    window.location.href = '../../../ui/?kiosk=1';
+  };
+
+  async function applyCalibration() {
+    const coeffs = solveAffine(samples);
+    const matrix = coeffs.map(v => v.toFixed(4)).join(' ');
+    msgEl.textContent = 'Applying calibration...';
+    try {
+      const r = await fetch('apply', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ matrix }),
+      });
+      const data = await r.json();
+      if (data.ok) {
+        msgEl.textContent = 'Calibration saved. Returning to the app...';
+      } else {
+        msgEl.textContent = 'Apply failed: ' + (data.error || 'unknown error');
+      }
+    } catch (e) {
+      msgEl.textContent = 'Request failed: ' + e;
+    }
+    setTimeout(window.finishCalibration, 2500);
+  }
+
+  function start() {
+    es = new EventSource('events');
+    es.onmessage = function (ev) {
+      let d;
+      try { d = JSON.parse(ev.data); } catch (e) { return; }
+      if (d.type === 'error') { msgEl.textContent = 'Error: ' + d.msg; return; }
+      if (d.type === 'ranges') {
+        ranges = d;
+        showCorner(0);
+        return;
+      }
+      if (d.type === 'tap' && ranges) {
+        const xr = (ranges.x_max - ranges.x_min) || 1;
+        const yr = (ranges.y_max - ranges.y_min) || 1;
+        const nx = (d.x - ranges.x_min) / xr;
+        const ny = (d.y - ranges.y_min) / yr;
+        const c = CORNERS[step];
+        samples.push([nx, ny, c.tx, c.ty]);
+        step++;
+        if (step < CORNERS.length) {
+          showCorner(step);
+        } else {
+          es.close(); es = null;
+          chEl.style.display = 'none';
+          applyCalibration();
+        }
+      }
+    };
+    es.onerror = function () {
+      msgEl.textContent = 'Touch stream disconnected. ' +
+        'Check that evtest is installed and the service user is in the input group.';
+    };
+  }
+
+  start();
+}());
+</script>
+</body>
+</html>

@@ -1531,7 +1531,8 @@ docker compose up -d</code></pre>
               <button class="btn btn-outline-secondary btn-sm" onclick="startTouchCalibration()">
                 <i class="bi bi-crosshair me-1"></i>Calibrate touchscreen
               </button>
-              <div class="form-text">Tap four corners in sequence to correct touch offset.</div>
+              <div class="form-text">Launches a four-corner tap test on the Pi's attached touchscreen. Stand at the device and tap each crosshair.</div>
+              <div class="test-result mt-2" id="touch-calibrate-result"></div>
             </div>
             {% endif %}
             <div class="mb-3">
@@ -3882,164 +3883,27 @@ document.addEventListener('DOMContentLoaded', checkApStatus);
 document.addEventListener('DOMContentLoaded', loadHardwareDetect);
 </script>
 
-{% if is_pi %}
-<!-- Touch calibration overlay -->
-<div id="touch-cal-overlay" style="
-    display:none; position:fixed; inset:0; z-index:9999;
-    background:#000; color:#fff; touch-action:none; user-select:none;
-    font-family:sans-serif;">
-  <div id="touch-cal-crosshair" style="
-      position:absolute; width:48px; height:48px; transform:translate(-50%,-50%);
-      pointer-events:none;">
-    <svg viewBox='0 0 48 48' width='48' height='48'>
-      <line x1='24' y1='2' x2='24' y2='46' stroke='#fff' stroke-width='2'/>
-      <line x1='2' y1='24' x2='46' y2='24' stroke='#fff' stroke-width='2'/>
-      <circle cx='24' cy='24' r='8' fill='none' stroke='#fff' stroke-width='2'/>
-    </svg>
-  </div>
-  <div id="touch-cal-msg" style="
-      position:fixed; bottom:10%; left:50%; transform:translateX(-50%);
-      text-align:center; font-size:1.1rem; line-height:1.6;"></div>
-  <button id="touch-cal-cancel" onclick="cancelTouchCalibration()" style="
-      position:fixed; top:1rem; right:1rem;
-      background:rgba(255,255,255,0.15); border:1px solid #fff;
-      color:#fff; padding:0.3rem 0.8rem; border-radius:4px; cursor:pointer;">
-    Cancel
-  </button>
-</div>
-
 <script>
-(function () {
-  const CORNERS = [
-    { label: 'top-left',     tx: 0.05, ty: 0.05 },
-    { label: 'top-right',    tx: 0.95, ty: 0.05 },
-    { label: 'bottom-right', tx: 0.95, ty: 0.95 },
-    { label: 'bottom-left',  tx: 0.05, ty: 0.95 },
-  ];
-
-  let _es = null;
-  let _step = 0;
-  let _samples = [];
-  let _ranges = null;
-
-  function _solve3(A, b) {
-    const M = A.map((row, i) => [...row, b[i]]);
-    for (let i = 0; i < 3; i++) {
-      let p = i;
-      for (let r = i + 1; r < 3; r++) if (Math.abs(M[r][i]) > Math.abs(M[p][i])) p = r;
-      [M[i], M[p]] = [M[p], M[i]];
-      for (let r = 0; r < 3; r++) {
-        if (r === i) continue;
-        const f = M[r][i] / M[i][i];
-        for (let c = i; c <= 3; c++) M[r][c] -= f * M[i][c];
-      }
+// Touch calibration is performed on the Pi's own display: clicking here sets a
+// server flag, and the kiosk (which polls for it) navigates its screen to the
+// fullscreen tap test. The person calibrating stands at the device.
+async function startTouchCalibration() {
+  const el = document.getElementById('touch-calibrate-result');
+  if (el) { el.className = 'test-result mt-2 text-info'; el.textContent = 'Starting...'; }
+  try {
+    const r = await fetch('/setup/calibrate/touch/request', { method: 'POST' });
+    const data = await r.json();
+    if (data.ok) {
+      if (el) { el.className = 'test-result mt-2 text-success';
+        el.textContent = 'Calibration started on the Pi touchscreen. Walk to the device and tap each crosshair in turn.'; }
+    } else if (el) {
+      el.className = 'test-result mt-2 text-danger';
+      el.textContent = 'Could not start: ' + (data.error || 'unknown error');
     }
-    return M.map((row, i) => row[3] / row[i]);
+  } catch (e) {
+    if (el) { el.className = 'test-result mt-2 text-danger'; el.textContent = 'Request failed: ' + e; }
   }
-
-  function solveAffine(samples) {
-    let sxx = 0, sxy = 0, sx = 0, syy = 0, sy = 0, n = 0;
-    let bx0 = 0, bx1 = 0, bx2 = 0, by0 = 0, by1 = 0, by2 = 0;
-    for (const [nx, ny, tx, ty] of samples) {
-      sxx += nx * nx; sxy += nx * ny; sx += nx;
-      syy += ny * ny; sy += ny; n++;
-      bx0 += nx * tx; bx1 += ny * tx; bx2 += tx;
-      by0 += nx * ty; by1 += ny * ty; by2 += ty;
-    }
-    const A = [[sxx, sxy, sx], [sxy, syy, sy], [sx, sy, n]];
-    return [
-      ..._solve3(A, [bx0, bx1, bx2]),
-      ..._solve3(A, [by0, by1, by2]),
-    ];
-  }
-
-  function _showCorner(idx) {
-    const overlay = document.getElementById('touch-cal-overlay');
-    const ch = document.getElementById('touch-cal-crosshair');
-    const msg = document.getElementById('touch-cal-msg');
-    const c = CORNERS[idx];
-    ch.style.left = (c.tx * 100) + '%';
-    ch.style.top  = (c.ty * 100) + '%';
-    msg.textContent = 'Tap the crosshair (' + c.label + ')  -- ' + (idx + 1) + ' of ' + CORNERS.length;
-    overlay.style.display = 'block';
-  }
-
-  window.startTouchCalibration = function () {
-    _step = 0;
-    _samples = [];
-    _ranges = null;
-    if (_es) { _es.close(); _es = null; }
-    const overlay = document.getElementById('touch-cal-overlay');
-    overlay.style.display = 'block';
-    document.getElementById('touch-cal-msg').textContent = 'Connecting to touch stream...';
-    document.getElementById('touch-cal-crosshair').style.display = 'none';
-
-    _es = new EventSource('/setup/calibrate/touch/events');
-    _es.onmessage = function (ev) {
-      let d;
-      try { d = JSON.parse(ev.data); } catch (e) { return; }
-      if (d.type === 'error') {
-        document.getElementById('touch-cal-msg').textContent = 'Error: ' + d.msg;
-        return;
-      }
-      if (d.type === 'ranges') {
-        _ranges = d;
-        document.getElementById('touch-cal-crosshair').style.display = 'block';
-        _showCorner(0);
-        return;
-      }
-      if (d.type === 'tap' && _ranges) {
-        const xr = _ranges.x_max - _ranges.x_min || 1;
-        const yr = _ranges.y_max - _ranges.y_min || 1;
-        const nx = (d.x - _ranges.x_min) / xr;
-        const ny = (d.y - _ranges.y_min) / yr;
-        const c = CORNERS[_step];
-        _samples.push([nx, ny, c.tx, c.ty]);
-        _step++;
-        if (_step < CORNERS.length) {
-          _showCorner(_step);
-        } else {
-          _es.close(); _es = null;
-          document.getElementById('touch-cal-crosshair').style.display = 'none';
-          document.getElementById('touch-cal-msg').textContent = 'Computing calibration...';
-          _applyCalibration();
-        }
-      }
-    };
-    _es.onerror = function () {
-      document.getElementById('touch-cal-msg').textContent =
-        'Stream disconnected. Check that evtest is installed and the service user is in the input group.';
-    };
-  };
-
-  window.cancelTouchCalibration = function () {
-    if (_es) { _es.close(); _es = null; }
-    document.getElementById('touch-cal-overlay').style.display = 'none';
-  };
-
-  async function _applyCalibration() {
-    const coeffs = solveAffine(_samples);
-    const matrix = coeffs.map(v => v.toFixed(4)).join(' ');
-    const msg = document.getElementById('touch-cal-msg');
-    msg.textContent = 'Applying matrix: ' + matrix + ' ...';
-    try {
-      const r = await fetch('/setup/calibrate/touch/apply', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ matrix }),
-      });
-      const data = await r.json();
-      if (data.ok) {
-        msg.textContent = 'Calibration saved. Restart the kiosk or reboot to apply.';
-      } else {
-        msg.textContent = 'Apply failed: ' + (data.error || 'unknown error');
-      }
-    } catch (e) {
-      msg.textContent = 'Request failed: ' + e;
-    }
-  }
-}());
+}
 </script>
-{% endif %}
 </body>
 </html>

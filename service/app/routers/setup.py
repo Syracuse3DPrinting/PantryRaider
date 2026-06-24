@@ -3,6 +3,7 @@ import json
 import re
 import socket
 import subprocess
+from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -974,6 +975,44 @@ async def _evtest_sse(device: str):
             proc.terminate()
         except Exception:
             pass
+
+
+# The kiosk on the Pi watches for this flag and, when present, navigates its own
+# display to the fullscreen calibration page. That is how a "Calibrate" click in
+# a remote browser starts the tap sequence on the Pi's physical touchscreen
+# (where the person actually is) instead of on the remote browser.
+_CAL_FLAG = Path(settings.data_dir) / "calibrate_touch.flag"
+
+
+@router.post("/calibrate/touch/request")
+async def calibrate_touch_request():
+    """Signal the kiosk to launch the fullscreen calibration page on its display."""
+    if not is_raspberry_pi():
+        return JSONResponse({"ok": False, "error": "Not available on this platform."})
+    if not _find_touch_device():
+        return JSONResponse({"ok": False, "error": "No touch device detected on this Pi."})
+    try:
+        _CAL_FLAG.parent.mkdir(parents=True, exist_ok=True)
+        _CAL_FLAG.write_text("1")
+    except OSError as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+    return {"ok": True, "message": "Calibration started on the Pi touchscreen."}
+
+
+@router.get("/calibrate/touch/pending")
+async def calibrate_touch_pending():
+    """Polled by the kiosk page; true once a remote browser asks to calibrate."""
+    return {"pending": _CAL_FLAG.exists()}
+
+
+@router.get("/calibrate/touch/page", response_class=HTMLResponse)
+async def calibrate_touch_page(request: Request):
+    """Fullscreen calibration page the kiosk navigates to. Clears the flag."""
+    try:
+        _CAL_FLAG.unlink()
+    except OSError:
+        pass
+    return templates.TemplateResponse("calibrate.html", {"request": request})
 
 
 @router.get("/calibrate/touch/events")

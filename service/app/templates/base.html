@@ -202,6 +202,27 @@
       }
     }).catch(() => {});
   </script>
+  <script>
+    // Touch-calibration launcher (kiosk only). A "Calibrate" click in any
+    // browser sets a server flag; the kiosk on the Pi polls for it and drives
+    // its own display to the fullscreen calibration page, so the person taps
+    // the physical screen with the crosshair visible in front of them.
+    (function () {
+      if (localStorage.getItem('kioskMode') !== 'true') return;
+      function poll() {
+        fetch('../setup/calibrate/touch/pending', { cache: 'no-store' })
+          .then(r => r.json())
+          .then(d => {
+            if (d && d.pending) {
+              window.location.href = '../setup/calibrate/touch/page';
+            }
+          })
+          .catch(() => {});
+      }
+      setInterval(poll, 3000);
+      poll();
+    })();
+  </script>
   {% block scripts %}{% endblock %}
 </body>
 </html>
