@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# FoodAssistant over-the-air update helper (Pi Remote / venv deployments).
+# ======================================================================
+# Pulls the latest source into the on-device git checkout, reinstalls Python
+# dependencies into the venv when requirements.txt changed, refreshes the
+# deployed app copy, and restarts the FoodAssistant service.
+#
+# It is invoked by the host bridge (POST /update), which runs as root, so it
+# can write under /opt and restart systemd units. It prints a short human log
+# to stdout and, as its LAST line, a single JSON object the bridge parses and
+# relays to the web UI. Every exit path emits that JSON line.
+#
+# Safety: if `git pull` fails the service is NOT restarted; the failure is
+# reported and the checkout is left as it was. Idempotent: a pull that brings
+# in nothing is a clean no-op ("already up to date").
+#
+# Layout on a Pi Remote device (see firstboot.sh deploy_remote_service):
+#   REPO_DIR  - git checkout that is the update source (pulled here)
+#   APP_DIR   - deployed app copy the service actually runs from
+#   VENV_DIR  - Python venv holding the service's dependencies
+#   SERVICE   - the systemd unit to restart after a successful update
+set -uo pipefail
+
+# Candidate locations for the git checkout, in priority order. The first that
+# is a git working tree wins. These mirror firstboot.sh's REPO_DIR default and
+# the baked-image / curl-installer clone locations.
+REPO_CANDIDATES="${REPO_DIR:-} /opt/foodassistant-src /home/foodassistant/FoodAssistant"
+APP_DIR="${APP_DIR:-/opt/foodassistant/service}"
+VENV_DIR="${VENV_DIR:-/opt/foodassistant/venv}"
+SERVICE="${SERVICE:-foodassistant-remote.service}"
+
+# Plain stdout log lines (the bridge tails stdout for a human summary too).
+log() { printf '%s\n' "$*"; }
+
+# Emit the final JSON result line and exit. A python one-liner does the JSON
+# encoding so log text with quotes/newlines is escaped correctly (no
+# hand-rolled JSON). The process exit code mirrors ok (0 on success).
+_result() {
+  local ok="$1" error="$2" before="$3" after="$4" restarted="$5"
+  OK="$ok" ERR="$error" BEFORE="$before" AFTER="$after" RESTARTED="$restarted" \
+  python3 -c '
+import json, os
+print(json.dumps({
+    "ok": os.environ["OK"] == "1",
+    "error": os.environ.get("ERR", ""),
+    "before": os.environ.get("BEFORE", ""),
+    "after": os.environ.get("AFTER", ""),
+    "restarted": os.environ.get("RESTARTED", "") == "1",
+}))'
+  if [ "$ok" = "1" ]; then exit 0; fi
+  exit 1
+}
+
+# Find the git checkout.
+REPO=""
+for cand in $REPO_CANDIDATES; do
+  [ -n "$cand" ] || continue
+  if [ -d "$cand/.git" ]; then REPO="$cand"; break; fi
+done
+if [ -z "$REPO" ]; then
+  log "No git checkout found (looked in: $REPO_CANDIDATES)."
+  _result 0 "No git checkout found on this device; cannot update." "" "" 0
+fi
+log "Using git checkout at $REPO"
+
+before="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+log "Current commit: $before"
+
+# Record requirements.txt before the pull so we can tell whether deps changed.
+req_before=""
+[ -f "$REPO/service/requirements.txt" ] && req_before="$(sha1sum "$REPO/service/requirements.txt" 2>/dev/null | cut -d' ' -f1)"
+
+log "Fetching and fast-forwarding..."
+if ! pull_out="$(git -C "$REPO" pull --ff-only 2>&1)"; then
+  log "git pull failed:"
+  log "$pull_out"
+  # Do NOT restart the service on a failed pull; report and stop.
+  _result 0 "git pull failed: ${pull_out}" "$before" "$before" 0
+fi
+log "$pull_out"
+
+after="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
+log "New commit: $after"
+
+if [ "$before" = "$after" ]; then
+  log "Already up to date; nothing to install or restart."
+  _result 1 "" "$before" "$after" 0
+fi
+
+# Reinstall requirements only when they changed (a Pi pip install is slow).
+req_after=""
+[ -f "$REPO/service/requirements.txt" ] && req_after="$(sha1sum "$REPO/service/requirements.txt" 2>/dev/null | cut -d' ' -f1)"
+if [ -n "$req_after" ] && [ "$req_before" != "$req_after" ] && [ -x "$VENV_DIR/bin/pip" ]; then
+  log "requirements.txt changed; installing into venv..."
+  if ! "$VENV_DIR/bin/pip" install --quiet -r "$REPO/service/requirements.txt"; then
+    log "pip install failed; service NOT restarted."
+    _result 0 "Dependency install failed; left running the old version." "$before" "$after" 0
+  fi
+else
+  log "requirements.txt unchanged; skipping pip install."
+fi
+
+# Refresh the deployed app copy (the service runs from APP_DIR, separate from
+# the git checkout so a pull never half-swaps files under a running process).
+if [ -d "$REPO/service" ] && [ -d "$APP_DIR" ]; then
+  log "Refreshing app copy at $APP_DIR"
+  cp -a "$REPO/service/." "$APP_DIR/" || log "WARN: could not refresh $APP_DIR"
+fi
+
+log "Restarting $SERVICE"
+if systemctl restart "$SERVICE"; then
+  log "Service restarted."
+  _result 1 "" "$before" "$after" 1
+else
+  log "Service restart failed."
+  _result 0 "Updated to ${after} but the service restart failed; check: systemctl status ${SERVICE}" "$before" "$after" 0
+fi

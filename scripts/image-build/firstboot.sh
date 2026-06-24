@@ -1374,6 +1374,25 @@ install_rotation_helper() {
   fi
 }
 
+# Install the foodassistant-update helper to /usr/local/bin so the host bridge's
+# /update endpoint (the in-app "Check for updates" button) can pull new source,
+# refresh the venv, and restart the service. Idempotent: copies whenever a
+# source is found. Resolves it from the boot payload (ASSET_DIR) or cloned repo.
+install_update_helper() {
+  local src=""
+  for candidate in "$ASSET_DIR/foodassistant-update" \
+                   "$REPO_DIR/scripts/image-build/foodassistant-update"; do
+    [ -f "$candidate" ] && src="$candidate" && break
+  done
+  [ -z "$src" ] && { warn "foodassistant-update not found; in-app updates unavailable"; return 0; }
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would install $src to /usr/local/bin/foodassistant-update"
+    return 0
+  fi
+  install -m 755 "$src" /usr/local/bin/foodassistant-update
+  log "Installed /usr/local/bin/foodassistant-update"
+}
+
 # Step: host bridge (Pi Hosted / server modes only, not Pi Remote)
 # Installs a small localhost HTTP helper that lets the Docker container call
 # host-level operations (Wi-Fi, hostname, KMS rotation, service restarts)
@@ -1406,6 +1425,8 @@ install_host_bridge() {
   install -m 755 "$bridge_src" /usr/local/bin/foodassistant-host-bridge
   # The bridge's /display/rotation endpoint shells out to this helper.
   install_rotation_helper
+  # The bridge's /update endpoint shells out to the OTA update helper.
+  install_update_helper
   if [ -n "$svc_src" ]; then
     install -m 644 "$svc_src" /etc/systemd/system/foodassistant-host-bridge.service
     systemctl daemon-reload

@@ -29,6 +29,7 @@ POST /kiosk/install        provision the kiosk service (display attached later)
 POST /streamdeck/install   provision the Stream Deck service (attached later)
 GET  /ap/status            whether the fallback AP is active {active: bool}
 POST /ap/disable           stop hostapd+dnsmasq and remove the AP flag file
+POST /update               git pull + venv pip + service restart (Pi Remote OTA)
 """
 import http.server
 import json
@@ -446,6 +447,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._streamdeck_set_config()
         elif self.path == "/ap/disable":
             self._ap_disable()
+        elif self.path == "/update":
+            self._update()
         else:
             self._send(404, {"error": "not found"})
 
@@ -928,6 +931,53 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 if Path(_AP_FLAG).exists():
                     Path(_AP_FLAG).unlink()
             self._send(200, {"ok": True})
+        except Exception as e:
+            self._send(500, {"ok": False, "error": str(e)})
+
+    def _update(self):
+        # Pull the latest source and restart the FoodAssistant service by
+        # delegating to the foodassistant-update helper. The bridge runs as
+        # root, so it can write under /opt and restart the unit (the app
+        # service cannot: its caps are bound to CAP_NET_BIND_SERVICE).
+        #
+        # The helper prints a human log to stdout and ends with a single JSON
+        # line {ok, error, before, after, restarted}. We parse that last line
+        # and pass the full text back as "log" so the setup UI can show it. A
+        # pull that fails leaves the service untouched (the helper guarantees
+        # this); we never restart from here directly.
+        helper = "/usr/local/bin/foodassistant-update"
+        if not os.path.exists(helper):
+            self._send(500, {"ok": False, "error": "update helper not installed"})
+            return
+        try:
+            # An update can pull, run pip, and restart, which on a Pi may take a
+            # couple of minutes when requirements change. Keep the timeout
+            # generous so a slow pip install does not look like a failure.
+            r = subprocess.run(
+                [helper], capture_output=True, text=True, timeout=600
+            )
+            out = (r.stdout or "").strip()
+            result = {}
+            if out:
+                # The JSON summary is the last non-empty stdout line.
+                last = out.splitlines()[-1].strip()
+                try:
+                    result = json.loads(last)
+                except ValueError:
+                    result = {}
+            if not result:
+                # The helper did not emit its summary line (it should always);
+                # fall back to the return code and whatever it printed.
+                self._send(500, {
+                    "ok": False,
+                    "error": (r.stderr or out or "update helper produced no output").strip(),
+                    "log": out,
+                })
+                return
+            result["log"] = out
+            self._send(200 if result.get("ok") else 500, result)
+        except subprocess.TimeoutExpired:
+            self._send(500, {"ok": False, "error": "update timed out"})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
 

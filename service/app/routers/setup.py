@@ -906,6 +906,29 @@ async def kiosk_install():
         return JSONResponse({"ok": False, "error": str(e)})
 
 
+@router.post("/update")
+async def update_software():
+    """Pull the latest source and restart the service, via the host bridge.
+
+    Only meaningful on a Pi Remote (satellite): that device runs the app from a
+    Python venv with no Docker image to re-pull, so the host bridge shells out
+    to foodassistant-update (git pull, venv pip when requirements changed, then
+    a service restart). The bridge runs the work synchronously and returns
+    {ok, before, after, restarted, log}; a failed pull leaves the running
+    version untouched and reports the error. The pull plus a pip install can
+    take a couple of minutes on a Pi, so the proxy timeout is generous.
+    """
+    if not settings.is_satellite():
+        return JSONResponse(
+            {"ok": False, "error": "Updates are only available on Pi Remote devices."})
+    try:
+        async with httpx.AsyncClient(timeout=620.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/update")
+        return r.json()
+    except Exception as e:
+        return JSONResponse({"ok": False, "error": str(e)})
+
+
 @router.get("/streamdeck/config")
 async def streamdeck_config_get():
     """Proxy GET config from host bridge."""

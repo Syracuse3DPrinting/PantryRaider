@@ -847,6 +847,16 @@
           </div>
 
           <div class="section-card">
+            <div class="section-title"><i class="bi bi-download text-info"></i> Software updates</div>
+            <p class="text-secondary small">This device runs from a local checkout. Check for updates to pull the latest FoodAssistant source, refresh dependencies if they changed, and restart the app. A failed pull leaves the running version untouched.</p>
+            <button class="btn btn-outline-primary btn-sm" id="update-btn" onclick="checkForUpdates()">
+              <i class="bi bi-arrow-repeat me-1"></i>Check for updates
+            </button>
+            <div class="test-result" id="update-result"></div>
+            <pre class="small text-secondary mt-2 d-none" id="update-log" style="white-space:pre-wrap; max-height:220px; overflow:auto;"></pre>
+          </div>
+
+          <div class="section-card">
             <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About satellite mode</div>
             <p class="text-secondary small">Backend settings and expiry defaults are managed on the main server and mirrored here read-only. Edit them there, then Sync. This device keeps its own display, Stream Deck, and security settings.</p>
           </div>
@@ -2884,6 +2894,42 @@ async function syncFromUpstream() {
     for (const el of [out, now]) {
       if (el) { el.className = 'test-result text-danger'; el.textContent = String(e); }
     }
+  }
+}
+
+// Satellite: pull the latest source and restart the app via the host bridge.
+// The request can take a couple of minutes when dependencies change, so disable
+// the button and show progress. The result includes a short before/after commit
+// summary and the full update log.
+async function checkForUpdates() {
+  const out = document.getElementById('update-result');
+  const logEl = document.getElementById('update-log');
+  const btn = document.getElementById('update-btn');
+  if (out) { out.className = 'test-result text-secondary'; out.textContent = 'Checking for updates… this can take a minute.'; }
+  if (logEl) { logEl.classList.add('d-none'); logEl.textContent = ''; }
+  if (btn) { btn.disabled = true; }
+  try {
+    const r = await fetch('setup/update', { method: 'POST' });
+    const d = await r.json();
+    if (out) {
+      out.className = 'test-result ' + (d.ok ? 'text-success' : 'text-danger');
+      if (d.ok) {
+        if (d.before && d.after && d.before === d.after) {
+          out.textContent = 'Already up to date (' + d.after + ').';
+        } else if (d.restarted) {
+          out.textContent = 'Updated ' + (d.before || '?') + ' → ' + (d.after || '?') + ' and restarted.';
+        } else {
+          out.textContent = 'Updated' + (d.after ? ' to ' + d.after : '') + '.';
+        }
+      } else {
+        out.textContent = d.error || 'Update failed.';
+      }
+    }
+    if (logEl && d.log) { logEl.textContent = d.log; logEl.classList.remove('d-none'); }
+  } catch (e) {
+    if (out) { out.className = 'test-result text-danger'; out.textContent = String(e); }
+  } finally {
+    if (btn) { btn.disabled = false; }
   }
 }
 
