@@ -63,12 +63,13 @@ def satellite_config(
     doubles as a heartbeat: we record the device and hand back any command queued
     for it (drained as it is returned).
     """
-    if not settings.api_key:
+    valid = settings.valid_api_keys()
+    if not valid:
         raise HTTPException(
             status_code=503,
             detail="This server has no API key set; set one to enable satellites.",
         )
-    if not secrets.compare_digest(x_api_key, settings.api_key):
+    if not x_api_key or not any(secrets.compare_digest(x_api_key, k) for k in valid):
         raise HTTPException(status_code=401, detail="Invalid API key.")
 
     ip = x_device_ip or (request.client.host if request.client else None)
