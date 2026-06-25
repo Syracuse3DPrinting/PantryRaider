@@ -1024,7 +1024,6 @@ def test_keypad_xl_phone_block():
 
 
 def test_ha_run_action_calls_service():
-    import json
     calls = []
 
     class FakeResp:
@@ -1069,7 +1068,7 @@ def test_ha_run_action_calls_service():
             ha_token="tok",
             ha_entity_refresh=fake_ha_refresh,
         )
-        msg = asyncio.run(actions.run_action(actions.ACTIONS["ha_1"], ctx))
+        asyncio.run(actions.run_action(actions.ACTIONS["ha_1"], ctx))
 
     actions.ACTIONS["ha_1"] = original_spec
     assert calls, "should have POSTed to HA"

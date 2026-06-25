@@ -330,7 +330,7 @@ class GrocyClient:
         cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).strftime("%Y-%m-%d")
 
         log_rows = await self._get(
-            f"/objects/stock_log?order=row_created_timestamp%3Adesc&limit=500"
+            "/objects/stock_log?order=row_created_timestamp%3Adesc&limit=500"
         )
         products = {str(p["id"]): p["name"] for p in await self.get_products()}
         stock = {str(e.get("product_id")): float(e.get("amount") or 0)

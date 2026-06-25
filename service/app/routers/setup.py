@@ -1,7 +1,6 @@
 import asyncio
 import json
 import re
-import socket
 from pathlib import Path
 import httpx
 from fastapi import APIRouter, Request
@@ -1040,7 +1039,7 @@ async def _evtest_sse(device: str):
         yield f"data: {json.dumps({'type': 'error', 'msg': 'evtest not found'})}\n\n"
         return
 
-    code_x = code_y = None
+    code_x = None
     ranges: dict = {}
     ranges_sent = False
     x = y = None

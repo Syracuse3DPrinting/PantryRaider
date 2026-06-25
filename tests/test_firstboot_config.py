@@ -567,9 +567,7 @@ def test_read_minmax_ignores_pressure_axis():
         "      Max      255\n",
         "Testing ... (interrupt to abort)\n",
     ]
-    import io
     import subprocess as sp
-    import types, re
 
     # Patch subprocess.Popen to feed our banner lines
     class _FakeProc:

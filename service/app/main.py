@@ -10,7 +10,7 @@ from contextlib import asynccontextmanager
 from .config import settings, APP_VERSION
 from .database import engine, get_db, Base
 from .ingress import ingress_redirect
-from .models import db_models  # noqa: F401: registers models with Base
+from .models import db_models  # noqa: F401 - registers models with Base
 from .services.defaults import seed_defaults
 from .routers import analyze, defaults, inventory, expiring, ui, setup, pending, mealie, admin, qr, tunnel, grocy, satellite, proxy, devices
 

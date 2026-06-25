@@ -183,7 +183,8 @@ def test_satellite_config_records_heartbeat(monkeypatch):
     stack; it proves the router wires identity headers to the registry and
     includes the returned command in the JSON body.
     """
-    import os, tempfile
+    import os
+    import tempfile
     os.environ["DATA_DIR"] = tempfile.mkdtemp()
 
     from app.main import app

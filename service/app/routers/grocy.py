@@ -1,8 +1,7 @@
 """Grocy-backed endpoints that don't belong in the inventory/expiring routers."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Body, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, HTTPException
 
 from ..services.grocy import GrocyClient, GrocyError
 

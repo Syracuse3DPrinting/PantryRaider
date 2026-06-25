@@ -249,7 +249,6 @@ def render_key(
         # Icon on top, label bottom-aligned beneath it.
         box = draw.textbbox((0, 0), glyph, font=icon_font)
         gw = box[2] - box[0]
-        gh = box[3] - box[1]
         gx = (width - gw) / 2 - box[0]
         gy = height * 0.12 - box[1]
         draw.text((gx, gy), glyph, font=icon_font, fill=(235, 235, 235))
