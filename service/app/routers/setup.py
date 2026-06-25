@@ -41,6 +41,31 @@ _CLEAR = "__CLEAR__"
 _KEEP_PREFIX = "__KEEP__:"
 
 
+def _merge_satellite_keys(submitted) -> list[str] | None:
+    """Resolve submitted satellite extra-key rows against stored keys.
+
+    Returns a clean list of keys, or None when nothing was submitted (caller
+    leaves stored extras untouched). __KEEP__:<index> placeholders are resolved
+    to the stored key at that position; blanks and duplicates are dropped.
+    """
+    if not isinstance(submitted, list):
+        return None
+    prev = [k for k in (settings.extra_api_keys if isinstance(settings.extra_api_keys, list) else []) if k]
+    clean: list[str] = []
+    for row in submitted:
+        if not isinstance(row, str):
+            continue
+        val = row.strip()
+        if val.startswith(_KEEP_PREFIX):
+            try:
+                val = prev[int(val[len(_KEEP_PREFIX):])]
+            except (ValueError, IndexError):
+                continue
+        if val and val not in clean:
+            clean.append(val)
+    return clean
+
+
 def _merge_extra_keys(submitted) -> dict | None:
     """Resolve the submitted extra-key map against what is already stored.
 
@@ -132,6 +157,7 @@ class SetupPayload(BaseModel):
     auth_required: bool = True
     auth_password: str = ""
     api_key: str = ""
+    extra_api_keys: list[str] | None = None
     rclone_remote: str = ""
     rclone_schedule_hours: int = 0
 
@@ -319,6 +345,8 @@ async def setup_page(request: Request):
             p: len([k for k in (settings.ai_extra_keys.get(p, []) if isinstance(settings.ai_extra_keys, dict) else []) if k])
             for p in ("gemini", "openai", "anthropic")
         },
+        # count of stored satellite extra keys (values never sent to the page)
+        "extra_api_key_count": len([k for k in (settings.extra_api_keys if isinstance(settings.extra_api_keys, list) else []) if k]),
         "tabs": all_tabs(),
         "version": APP_VERSION,
         "custom_categories": custom_categories(),
@@ -393,6 +421,11 @@ async def save_setup(payload: SetupPayload):
     data["ai_extra_keys"] = _merge_extra_keys(data.get("ai_extra_keys"))
     if data["ai_extra_keys"] is None:
         data.pop("ai_extra_keys", None)   # absent = keep stored extras
+    merged_sat = _merge_satellite_keys(data.get("extra_api_keys"))
+    if merged_sat is None:
+        data.pop("extra_api_keys", None)  # absent = keep stored extras
+    else:
+        data["extra_api_keys"] = merged_sat
     if data.get("display_rotation") not in DISPLAY_ROTATIONS:
         data["display_rotation"] = _DEFAULT_DISPLAY_ROTATION
     # Drop an unknown display type rather than persisting a broken value; an

@@ -110,7 +110,7 @@ _SAVEABLE = [
     "display_idle_timeout", "streamdeck_idle_timeout", "streamdeck_key_overrides",
     "deployment_mode", "remote_server_url", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
-    "secret_key", "auth_password", "totp_secret", "api_key", "auth_required",
+    "secret_key", "auth_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
 ]
@@ -140,7 +140,7 @@ SECRET_SETTING_KEYS = [
     "gemini_api_key", "openai_api_key", "anthropic_api_key", "ai_extra_keys",
     "grocy_api_key", "mealie_api_key",
     "themealdb_api_key", "spoonacular_api_key",
-    "auth_password", "totp_secret", "api_key", "secret_key", "kiosk_pin",
+    "auth_password", "totp_secret", "api_key", "extra_api_keys", "secret_key", "kiosk_pin",
 ]
 
 _DEFAULT_GROCY_URL = "http://grocy:80"
@@ -492,6 +492,7 @@ class Settings(BaseSettings):
     auth_password: str = ""
     totp_secret: str = ""   # base32 secret; empty = TOTP disabled
     api_key: str = ""
+    extra_api_keys: list[str] = []   # additional keys; each satellite can use its own
     rclone_remote: str = ""          # e.g. "s3:mybucket/foodassistant"
     rclone_schedule_hours: int = 0   # 0 = disabled; 24 = daily
 
@@ -525,6 +526,21 @@ class Settings(BaseSettings):
     def _extra_keys(self, provider: str) -> list[str]:
         raw = self.ai_extra_keys.get(provider, []) if isinstance(self.ai_extra_keys, dict) else []
         return [k for k in raw if isinstance(k, str)]
+
+    def valid_api_keys(self) -> list[str]:
+        """All currently accepted satellite/headless-client API keys.
+
+        The primary api_key is listed first for backward compatibility.
+        Extra keys let each satellite use its own key so one can be rotated
+        or removed without touching the others.
+        """
+        keys: list[str] = []
+        if self.api_key:
+            keys.append(self.api_key)
+        for k in (self.extra_api_keys if isinstance(self.extra_api_keys, list) else []):
+            if k and k not in keys:
+                keys.append(k)
+        return keys
 
     def ai_configured(self) -> bool:
         """True when a vision provider key is present and usable."""

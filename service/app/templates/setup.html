@@ -117,6 +117,31 @@
 </div>
 {%- endmacro %}
 
+{% macro satellite_keys() -%}
+<div class="mb-3" id="satellite-extra-keys-section">
+  <label class="form-label">Additional satellite keys
+    <span class="text-secondary small">(one per connected satellite or client)</span></label>
+  <div class="satellite-extra-keys">
+    {% for i in range(extra_api_key_count) %}
+    <div class="input-group mb-2 satellite-key-row">
+      <input type="text" class="form-control font-monospace satellite-key-input"
+             value="__KEEP__:{{ i }}" data-keep="1" readonly
+             placeholder="•••• saved satellite key">
+      <button class="btn btn-outline-danger" type="button"
+              onclick="this.closest('.satellite-key-row').remove()" title="Remove this key">
+        <i class="bi bi-trash3"></i>
+      </button>
+    </div>
+    {% endfor %}
+  </div>
+  <button class="btn btn-outline-secondary btn-sm" type="button"
+          onclick="addSatelliteKey()">
+    <i class="bi bi-plus-lg me-1"></i>Add satellite key
+  </button>
+  <div class="form-text">Each satellite or headless client can have its own key. Removing a key disconnects only that client.</div>
+</div>
+{%- endmacro %}
+
 
 {# FIRST-TIME WIZARD  (shown when configured=False) #}
 {% if not configured %}
@@ -1329,12 +1354,13 @@
                 <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generateApiKey()">
                   <i class="bi bi-arrow-repeat me-1"></i>Generate
                 </button>
-                <span class="form-text mb-0">Click Generate, then Save Settings and copy this key to any satellite devices.</span>
+                <span class="form-text mb-0">Primary key — regenerating this disconnects all existing satellites.</span>
               </div>
             </div>
             {% if not features.satellite %}
+            {{ satellite_keys() }}
             <div class="alert alert-secondary py-2 small mb-0">
-              <i class="bi bi-broadcast me-1"></i><strong>Satellite devices</strong> enter this key in their setup wizard under "Main Server." Regenerating a new key invalidates existing satellite connections until they re-sync.
+              <i class="bi bi-broadcast me-1"></i>Satellites enter one of these keys in their setup wizard under "Main Server." Use <strong>Add satellite key</strong> to give each satellite its own key so you can rotate or remove it without touching the others.
             </div>
             {% endif %}
           </div>
@@ -1905,6 +1931,28 @@ function addExtraKey(provider) {
   box.appendChild(row);
 }
 
+// Generate a new satellite key and add it as a plaintext row so the user can
+// immediately copy it before saving.
+function addSatelliteKey() {
+  const arr = new Uint8Array(24);
+  crypto.getRandomValues(arr);
+  const hex = Array.from(arr, b => b.toString(16).padStart(2, '0')).join('');
+  const box = document.querySelector('.satellite-extra-keys');
+  if (!box) return;
+  const row = document.createElement('div');
+  row.className = 'input-group mb-2 satellite-key-row';
+  row.innerHTML =
+    '<input type="text" class="form-control font-monospace satellite-key-input" value="' + hex + '">' +
+    '<button class="btn btn-outline-danger" type="button" title="Remove this key" ' +
+    'onclick="this.closest(\'.satellite-key-row\').remove()"><i class="bi bi-trash3"></i></button>';
+  box.appendChild(row);
+}
+
+function collectSatelliteKeys() {
+  return [...document.querySelectorAll('.satellite-key-input')]
+    .map(i => i.value.trim()).filter(Boolean);
+}
+
 // Build {provider: [keys]} from the additional-key rows. Untouched saved rows
 // keep their __KEEP__:<index> placeholder so secrets are never echoed.
 function collectExtraKeys() {
@@ -2411,6 +2459,7 @@ function buildPayload() {
     // Only sent from the settings form (the wizard has no extra-key rows), so
     // first-time setup leaves stored extras untouched.
     ai_extra_keys: document.querySelector('.extra-keys') ? collectExtraKeys() : undefined,
+    extra_api_keys: document.querySelector('.satellite-extra-keys') ? collectSatelliteKeys() : undefined,
     scanner_type:       val('scanner_type') || '',
     barcode_enrichment: val('barcode_enrichment') || 'llm',
     barcode_llm_fallback: document.getElementById('barcode_llm_fallback')?.checked || false,

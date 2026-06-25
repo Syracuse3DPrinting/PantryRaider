@@ -33,10 +33,11 @@ def _auth_error(request: Request):
     The proxy enforces its own X-API-Key check so it stays safe even when the
     server runs with authentication disabled (an outer layer gating the UI).
     """
-    if not settings.api_key:
+    valid = settings.valid_api_keys()
+    if not valid:
         return JSONResponse({"detail": "Server API key not set"}, status_code=503)
     sent = request.headers.get("X-API-Key", "")
-    if not secrets.compare_digest(sent, settings.api_key):
+    if not sent or not any(secrets.compare_digest(sent, k) for k in valid):
         return JSONResponse({"detail": "Unauthorized"}, status_code=401)
     return None
 

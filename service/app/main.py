@@ -124,8 +124,11 @@ async def require_auth(request: Request, call_next):
 
     # totp_pending means password was accepted but TOTP not yet verified: not authed
     session_ok = request.session.get("authed", False) and not request.session.get("totp_pending")
-    key_ok = bool(settings.api_key) and secrets.compare_digest(
-        request.headers.get("X-API-Key", ""), settings.api_key)
+    sent = request.headers.get("X-API-Key", "")
+    valid = settings.valid_api_keys()
+    key_ok = bool(sent) and bool(valid) and any(
+        secrets.compare_digest(sent, k) for k in valid
+    )
     if session_ok or key_ok:
         return await call_next(request)
 
