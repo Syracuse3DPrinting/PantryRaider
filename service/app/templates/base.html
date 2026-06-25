@@ -49,13 +49,23 @@
     .urgency-3d      { color: #ffd43b; }
     .urgency-ok      { color: #69db7c; }
     .flash { position: fixed; top: 70px; right: 1rem; z-index: 9999; min-width: 280px; }
+    /* When the navbar is collapsed (small/landscape panels like the 800x480
+       Pi touchscreen), the open menu overlays the page. Cap its height to the
+       viewport and let it scroll so a long tab list never runs off a short
+       screen or hides behind page content. */
+    @media (max-width: 991.98px) {
+      .navbar-collapse {
+        max-height: calc(100vh - 60px);
+        overflow-y: auto;
+      }
+    }
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-expand-md bg-body-tertiary border-bottom fixed-top">
+  <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom fixed-top">
     <div class="container-fluid">
       <a class="navbar-brand" href="ui/"><i class="bi bi-fridge me-2"></i>FoodAssistant</a>
-      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav">
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav" aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">
         <span class="navbar-toggler-icon"></span>
       </button>
       <div class="collapse navbar-collapse" id="nav">
@@ -70,14 +80,14 @@
             </a>
           </li>
           {% endfor %}
-          <li class="nav-item">
+          <li class="nav-item kiosk-hide">
             <a class="nav-link" href="docs" target="_blank">
               <i class="bi bi-code-square me-1"></i>API
             </a>
           </li>
         </ul>
         <ul class="navbar-nav">
-          <li class="nav-item">
+          <li class="nav-item kiosk-hide">
             <a class="nav-link" href="#" title="Keyboard shortcuts (press ?)"
                onclick="if(window.__kbdNavHelp){window.__kbdNavHelp();}return false;">
               <i class="bi bi-keyboard"></i>
