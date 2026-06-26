@@ -772,6 +772,120 @@ def test_timer_long_press_via_action_context():
     assert pressed.get("long") is True
 
 
+# -- recipe timer key specs (FoodAssistant-sbu3) ---------------------------
+
+
+def test_clean_timer_label_collapses_and_trims():
+    assert actions.clean_timer_label("  Boil   Pasta\nNow  ", max_len=20) == "Boil Pasta Now"
+    assert actions.clean_timer_label("Sauce") == "Sauce"
+    # Empty / whitespace-only yields "" so the caller can fall back to a default.
+    assert actions.clean_timer_label("") == ""
+    assert actions.clean_timer_label("   \n  ") == ""
+
+
+def test_clean_timer_label_truncates_with_ellipsis():
+    long = "Simmer the marinara sauce gently"
+    out = actions.clean_timer_label(long, max_len=10)
+    assert len(out) <= 10
+    assert out.endswith("…")
+    # A label exactly at the limit is left untouched (no ellipsis).
+    exact = "ExactlyTen"  # 10 chars
+    assert actions.clean_timer_label(exact, max_len=10) == "ExactlyTen"
+
+
+def test_recipe_timer_specs_empty_yields_unchanged_defaults():
+    defaults = ["Timer 1", "Timer 2", "Timer 3"]
+    specs = actions.recipe_timer_key_specs([], 3, defaults)
+    assert [s["label"] for s in specs] == defaults
+    # No suggestion means no preset duration, so the key stays a manual timer.
+    assert all(s["seconds"] is None for s in specs)
+    assert all(s["step_index"] is None for s in specs)
+
+
+def test_recipe_timer_specs_fewer_suggestions_than_slots():
+    suggestions = [{"label": "Pasta", "seconds": 600, "step_index": 1}]
+    defaults = ["Timer 1", "Timer 2", "Timer 3"]
+    specs = actions.recipe_timer_key_specs(suggestions, 3, defaults)
+    assert specs[0] == {"label": "Pasta", "seconds": 600, "step_index": 1}
+    # The unfilled slots fall back to their stock label and manual behaviour.
+    assert specs[1]["label"] == "Timer 2" and specs[1]["seconds"] is None
+    assert specs[2]["label"] == "Timer 3" and specs[2]["seconds"] is None
+
+
+def test_recipe_timer_specs_equal_count_maps_one_to_one():
+    suggestions = [
+        {"label": "Pasta", "seconds": 600, "step_index": 1},
+        {"label": "Sauce", "seconds": 300, "step_index": 2},
+    ]
+    specs = actions.recipe_timer_key_specs(suggestions, 2, ["Timer 1", "Timer 2"])
+    assert [s["label"] for s in specs] == ["Pasta", "Sauce"]
+    assert [s["seconds"] for s in specs] == [600, 300]
+    assert [s["step_index"] for s in specs] == [1, 2]
+
+
+def test_recipe_timer_specs_more_suggestions_than_slots_truncates():
+    suggestions = [
+        {"label": "Pasta", "seconds": 600, "step_index": 1},
+        {"label": "Sauce", "seconds": 300, "step_index": 2},
+        {"label": "Garlic", "seconds": 120, "step_index": 3},
+    ]
+    specs = actions.recipe_timer_key_specs(suggestions, 2, ["Timer 1", "Timer 2"])
+    assert len(specs) == 2
+    assert [s["label"] for s in specs] == ["Pasta", "Sauce"]
+
+
+def test_recipe_timer_specs_cleans_and_falls_back_on_blank_label():
+    suggestions = [
+        {"label": "  Boil   pasta water  ", "seconds": 600, "step_index": 1},
+        {"label": "   ", "seconds": 300, "step_index": 2},
+    ]
+    specs = actions.recipe_timer_key_specs(suggestions, 2, ["Timer 1", "Timer 2"])
+    # Whitespace collapsed and length capped to the deck-safe maximum.
+    assert len(specs[0]["label"]) <= actions.RECIPE_TIMER_LABEL_MAX
+    # A blank suggestion label falls back to the stock default for that slot.
+    assert specs[1]["label"] == "Timer 2"
+    assert specs[1]["seconds"] == 300
+
+
+def test_recipe_timer_specs_default_label_generic_when_list_short():
+    # With no default labels supplied, fallback slots use a generic "Timer".
+    specs = actions.recipe_timer_key_specs([], 2)
+    assert [s["label"] for s in specs] == ["Timer", "Timer"]
+
+
+def test_fetch_timer_suggestions_returns_list():
+    client = _FakeClient(
+        get_map={
+            "/current-recipe/timer-suggestions": _Resp(
+                200, {"suggestions": [{"label": "Pasta", "seconds": 600, "step_index": 1}]}
+            )
+        }
+    )
+    out = asyncio.run(actions.fetch_timer_suggestions(client, "http://x"))
+    assert out == [{"label": "Pasta", "seconds": 600, "step_index": 1}]
+
+
+def test_fetch_timer_suggestions_tolerates_errors_and_no_recipe():
+    # A 404 (no endpoint) or any error collapses to an empty list.
+    out = asyncio.run(actions.fetch_timer_suggestions(_FakeClient(), "http://x"))
+    assert out == []
+
+
+def test_start_recipe_timer_posts_and_reports_success():
+    client = _FakeClient(post_map={"/current-recipe/timers/start": _Resp(200, {"timer": {}})})
+    ok = asyncio.run(
+        actions.start_recipe_timer(client, "http://x", step_index=1, label="Pasta", seconds=600)
+    )
+    assert ok is True
+    assert client.calls == [("POST", "http://x/current-recipe/timers/start")]
+
+
+def test_start_recipe_timer_tolerates_failure():
+    client = _FakeClient(post_map={"/current-recipe/timers/start": _Resp(404, {})})
+    ok = asyncio.run(actions.start_recipe_timer(client, "http://x", step_index=9))
+    assert ok is False
+
+
 # -- weather widget ---------------------------------------------------------
 
 

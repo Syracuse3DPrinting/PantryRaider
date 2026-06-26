@@ -91,6 +91,12 @@ class Controller:
         self.pin_status: str = ""
         self.status: dict[str, int] = {"expiring": 0, "pending": 0}
         self.timers: dict[str, TimerState] = {}  # action name -> timer state
+        # Active-recipe timer suggestions mapped onto the timer keys. Keyed by
+        # the timer action name (timer_1/2/3 and any timer-override slot name),
+        # each value is a {label, seconds, step_index} descriptor. Empty when no
+        # recipe is active, in which case the timer keys behave exactly as the
+        # stock manual countdowns. Populated by the poll loop (sbu3).
+        self.recipe_timer_specs: dict[str, dict] = {}
         # Toggles each poll tick while a timer alert is active so the key blinks
         # bright/dim until the alert is dismissed.
         self._blink_phase: int = 0
@@ -291,7 +297,11 @@ class Controller:
                     count = None
                 elif spec.kind == "timer":
                     t = self.timers.get(spec.name)
-                    label = t.label(spec.label) if t else spec.label
+                    # When a recipe is active its suggestion relabels the key
+                    # (e.g. "Pasta"); a running/alerting TimerState still wins so
+                    # the countdown and Done! states render as before.
+                    base_label = self._recipe_timer_label(spec.name, spec.label)
+                    label = t.label(base_label) if t else base_label
                     color = (
                         t.color(base_color, self._blink_phase) if t else base_color
                     )
@@ -471,19 +481,103 @@ class Controller:
         if name not in self.timers:
             self.timers[name] = TimerState()
         timer = self.timers[name]
-        # A timer-override key with a preset duration loads its whole preset on
-        # a fresh short press (when idle and not alerting), so one tap starts an
-        # N-minute countdown rather than counting up a minute at a time.
+        # When a recipe is active and this key carries a suggestion, a fresh
+        # short press starts the suggested duration locally AND fires a shared
+        # server timer so other surfaces (web UI, satellites) see the same
+        # countdown. Otherwise fall back to a timer-override preset, then to the
+        # stock count-up behaviour.
+        recipe_spec = self.recipe_timer_specs.get(name)
+        recipe_seconds = recipe_spec.get("seconds") if recipe_spec else None
         preset = self._override_timer_minutes(name)
+        starting_fresh = not timer.is_running() and not timer.alert_active()
         if long_press:
             timer.long_press()
-        elif preset > 0 and not timer.is_running() and not timer.alert_active():
+        elif recipe_seconds and starting_fresh:
+            # Drive the local countdown from the suggestion (the existing
+            # rendering keeps working) and start the shared server timer too.
+            timer.set_minutes(round(float(recipe_seconds) / 60))
+            self._start_recipe_server_timer(recipe_spec)
+        elif preset > 0 and starting_fresh:
             timer.set_minutes(preset)
         else:
             timer.short_press()
         # Reset the blink phase so a fresh alert starts on its bright frame.
         self._blink_phase = 0
         self._draw_page()
+
+    def _start_recipe_server_timer(self, recipe_spec: dict) -> None:
+        """Fire-and-forget POST that starts the shared server timer for a recipe
+        suggestion, so surfaces beyond this deck reflect it too. Best-effort and
+        only when the event loop is live (skipped in unit tests with no loop)."""
+        if self.client is None or self.loop is None or not self.loop.is_running():
+            return
+        asyncio.run_coroutine_threadsafe(
+            actions.start_recipe_timer(
+                self.client,
+                self.config.base_url,
+                step_index=recipe_spec.get("step_index"),
+                label=recipe_spec.get("label", ""),
+                seconds=recipe_spec.get("seconds"),
+            ),
+            self.loop,
+        )
+
+    def _timer_key_names(self) -> list[str]:
+        """Timer action names in page order, deduplicated, first occurrence wins.
+
+        Drawn from the live page layout so timer-override slots are included
+        alongside the stock timer_1/2/3 keys. The order is what the recipe
+        suggestions are assigned against (first timer key gets the first
+        suggestion), so it mirrors what the user sees left-to-right, top-to-bottom.
+        """
+        names: list[str] = []
+        for page in self.pages:
+            for spec in page:
+                if spec is not None and spec.kind == "timer" and spec.name not in names:
+                    names.append(spec.name)
+        return names
+
+    async def _refresh_recipe_timers(self) -> None:
+        """Fetch the active recipe's timer suggestions and map them onto the
+        timer keys. Best-effort: failures clear nothing destructively, they just
+        leave the keys on their last state. An empty result (no active recipe)
+        clears the mapping so the keys return to their stock manual labels."""
+        if self.client is None:
+            return
+        names = self._timer_key_names()
+        if not names:
+            return
+        suggestions = await actions.fetch_timer_suggestions(
+            self.client, self.config.base_url
+        )
+        defaults = [self._timer_default_label(n) for n in names]
+        specs = actions.recipe_timer_key_specs(suggestions, len(names), defaults)
+        new_map: dict[str, dict] = {}
+        for name, spec in zip(names, specs):
+            # Only record slots that carry a real suggestion; a None duration is a
+            # fallback slot that should keep behaving like a manual timer key.
+            if spec.get("seconds") is not None:
+                new_map[name] = spec
+        if new_map != self.recipe_timer_specs:
+            self.recipe_timer_specs = new_map
+            self._draw_page()
+
+    def _timer_default_label(self, name: str) -> str:
+        """The stock label a timer key shows with no recipe suggestion."""
+        spec = actions.ACTIONS.get(name)
+        if spec is not None:
+            return spec.label
+        for ov in self.key_overrides.values():
+            if ov.name == name:
+                return ov.label
+        return "Timer"
+
+    def _recipe_timer_label(self, name: str, base_label: str) -> str:
+        """Label for a timer key, preferring the active recipe's suggestion."""
+        spec = self.recipe_timer_specs.get(name)
+        if spec is not None:
+            return spec.get("label") or base_label
+        return base_label
 
     def _override_timer_minutes(self, name: str) -> int:
         """Preset minutes for a timer-override key, or 0 for a stock timer."""
@@ -778,6 +872,10 @@ class Controller:
         self.status = await actions.poll_status(
             self.client, self.config.base_url, self.config.soon_days
         )
+        # Refresh the active-recipe timer labels on the same cadence as the
+        # status counts (sbu3). Defensive inside, so a failure never disturbs the
+        # status poll above.
+        await self._refresh_recipe_timers()
 
     def _tick_timers(self) -> bool:
         """Advance all active timers. Returns True if any expired this tick."""

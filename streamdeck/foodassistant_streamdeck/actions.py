@@ -111,6 +111,69 @@ class TimerState:
         return False
 
 
+# How many characters of a recipe-derived label fit comfortably on a timer key
+# face before the render layer would have to shrink or wrap it past readability.
+# A short cap keeps the labels glanceable ("Pasta", "Sauce") and matches the
+# stock timer labels in length.
+RECIPE_TIMER_LABEL_MAX: int = 12
+
+
+def clean_timer_label(label: str, max_len: int = RECIPE_TIMER_LABEL_MAX) -> str:
+    """Reduce a recipe step label to a deck-safe short string.
+
+    Collapses internal whitespace (including newlines) to single spaces, trims
+    the ends, and truncates overly long labels with a trailing ellipsis so they
+    still fit a key face. An empty or whitespace-only label returns "" so the
+    caller can fall back to the stock default.
+    """
+    cleaned = " ".join(str(label or "").split())
+    if not cleaned:
+        return ""
+    max_len = max(1, int(max_len))
+    if len(cleaned) <= max_len:
+        return cleaned
+    if max_len == 1:
+        return cleaned[:1]
+    return cleaned[: max_len - 1].rstrip() + "…"
+
+
+def recipe_timer_key_specs(
+    suggestions: list[dict],
+    slots: int,
+    default_labels: Optional[list[str]] = None,
+) -> list[dict]:
+    """Map recipe timer suggestions onto up to ``slots`` timer-key descriptors.
+
+    Returns a list of exactly ``slots`` dicts, one per timer key, each shaped
+    ``{"label": str, "seconds": Optional[float], "step_index": Optional[int]}``.
+    The first N slots (N == len(suggestions), truncated to ``slots``) carry a
+    cleaned, face-safe label and the suggestion's duration; any remaining slots
+    fall back to their stock label with ``seconds`` None so they behave exactly
+    like a manual timer key.
+
+    ``default_labels`` supplies the stock per-slot label (e.g. "Timer 1"); a
+    missing or short list falls back to a generic "Timer". The function is pure:
+    no clock, no I/O, so it is fully unit-testable. An empty suggestion list (no
+    active recipe) yields the unchanged defaults for every slot.
+    """
+    slots = max(0, int(slots))
+    default_labels = list(default_labels or [])
+    specs: list[dict] = []
+    for i in range(slots):
+        fallback = default_labels[i] if i < len(default_labels) else "Timer"
+        if i < len(suggestions):
+            suggestion = suggestions[i] or {}
+            label = clean_timer_label(suggestion.get("label", "")) or fallback
+            specs.append({
+                "label": label,
+                "seconds": suggestion.get("seconds"),
+                "step_index": suggestion.get("step_index"),
+            })
+        else:
+            specs.append({"label": fallback, "seconds": None, "step_index": None})
+    return specs
+
+
 # Largest PIN the buffer will hold. Generous enough for any reasonable unlock
 # code; extra presses past this are ignored rather than silently truncating a
 # longer code into a different one.
@@ -930,6 +993,51 @@ async def poll_status(client: Any, base_url: str, soon_days: int = 7) -> dict[st
     except Exception:
         pass
     return out
+
+
+async def fetch_timer_suggestions(client: Any, base_url: str) -> list[dict]:
+    """Fetch the active recipe's timer suggestions, or [] on any failure.
+
+    Each entry is ``{label, seconds, step_index}``. An absent recipe answers an
+    empty list; a network or service error collapses to [] so the timer keys
+    quietly fall back to their manual behaviour rather than crashing the loop.
+    """
+    base = base_url.rstrip("/")
+    try:
+        r = await client.get(f"{base}/current-recipe/timer-suggestions")
+        if r.status_code == 200:
+            data = r.json()
+            out = data.get("suggestions", [])
+            return out if isinstance(out, list) else []
+    except Exception:  # noqa: BLE001 - surface as no suggestions, never crash
+        pass
+    return []
+
+
+async def start_recipe_timer(
+    client: Any, base_url: str, step_index: Any = None,
+    label: str = "", seconds: Any = None,
+) -> bool:
+    """Start a shared server timer from a recipe suggestion. Returns True on 200.
+
+    Posts to /current-recipe/timers/start so every surface (web UI, satellites)
+    sees the same countdown. Identify the suggestion by step_index or label;
+    seconds, when given, is passed through. Best-effort: any failure returns
+    False so a press still drives the local TimerState for the deck's own face.
+    """
+    base = base_url.rstrip("/")
+    payload: dict[str, Any] = {}
+    if step_index is not None:
+        payload["step_index"] = step_index
+    if label:
+        payload["label"] = label
+    if seconds is not None:
+        payload["seconds"] = seconds
+    try:
+        r = await client.post(f"{base}/current-recipe/timers/start", json=payload)
+        return r.status_code == 200
+    except Exception:  # noqa: BLE001 - shared timer is best-effort
+        return False
 
 
 @dataclass
