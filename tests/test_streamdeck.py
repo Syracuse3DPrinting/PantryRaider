@@ -1398,6 +1398,43 @@ def test_theme_every_palette_covers_every_role():
         assert not missing, f"{name} palette missing roles: {missing}"
 
 
+def test_text_color_dark_on_light_background():
+    # A light key wants near-black text for contrast.
+    assert theme.text_color_for("#ffffff") == theme._DARK_TEXT
+    assert theme.text_color_for("#e0e0e0") == theme._DARK_TEXT
+
+
+def test_text_color_light_on_dark_background():
+    # A dark key wants near-white text.
+    assert theme.text_color_for("#000000") == theme._LIGHT_TEXT
+    assert theme.text_color_for("#1a1a1a") == theme._LIGHT_TEXT
+    assert theme.text_color_for("#375a7f") == theme._LIGHT_TEXT  # darkly primary
+
+
+def test_text_color_light_green_commit_is_readable():
+    # The reported bug: white label text on a light green Commit (success) key.
+    # The synthwave theme's success green is genuinely light, so the contrast
+    # helper must now flip its label text to dark instead of the old white.
+    light_green_commit = theme.themed_color("commit", "#000000", "synthwave")
+    assert theme.text_color_for(light_green_commit) == theme._DARK_TEXT
+    # A plain pale green is likewise treated as a light background.
+    assert theme.text_color_for("#90ee90") == theme._DARK_TEXT
+
+
+def test_text_color_handles_malformed_hex():
+    # A bad colour must not raise; it falls back to a mid grey -> light text.
+    assert theme.text_color_for("not-a-color") == theme._LIGHT_TEXT
+    assert theme.text_color_for("#xyzxyz") == theme._LIGHT_TEXT
+
+
+def test_relative_luminance_monotonic():
+    # Black is darkest, white is brightest, and grey sits between.
+    assert theme.relative_luminance("#000000") == 0.0
+    assert theme.relative_luminance("#ffffff") == pytest.approx(1.0)
+    mid = theme.relative_luminance("#808080")
+    assert 0.0 < mid < 1.0
+
+
 def test_config_loads_theme(tmp_path):
     p = tmp_path / "config.toml"
     p.write_text('theme = "cyborg"\n')

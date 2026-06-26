@@ -74,6 +74,53 @@ THEME_PALETTES: dict[str, dict[str, str]] = {
 }
 
 
+# Near-black and near-white label colours. Not pure black/white so the text
+# keeps a hint of softness against a flat key background.
+_DARK_TEXT = "#1a1a1a"
+_LIGHT_TEXT = "#ebebeb"
+
+
+def _hex_to_rgb(value: str) -> tuple[int, int, int]:
+    """Parse a ``#rrggbb`` colour to an (r, g, b) tuple of 0..255 ints.
+
+    Falls back to a mid grey when the value is not a six-digit hex string, so
+    the contrast helper never raises on a malformed colour.
+    """
+    v = value.lstrip("#")
+    if len(v) != 6:
+        return (60, 60, 60)
+    try:
+        return tuple(int(v[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+    except ValueError:
+        return (60, 60, 60)
+
+
+def relative_luminance(bg_hex: str) -> float:
+    """Standard sRGB relative luminance of a colour, in 0.0..1.0.
+
+    Linearises each channel per the WCAG definition, then weights them by human
+    sensitivity (green most, blue least). Used to decide whether a key wants
+    dark or light label text.
+    """
+    def _channel(c: int) -> float:
+        s = c / 255.0
+        return s / 12.92 if s <= 0.03928 else ((s + 0.055) / 1.055) ** 2.4
+
+    r, g, b = (_channel(c) for c in _hex_to_rgb(bg_hex))
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b
+
+
+def text_color_for(bg_hex: str) -> str:
+    """Pick a readable label colour for a key painted ``bg_hex``.
+
+    Returns near-black on light backgrounds and near-white on dark ones, using a
+    WCAG-style luminance threshold so contrast stays adequate across every theme
+    and role (for example, white text on a light green Commit key was the bug
+    this fixes).
+    """
+    return _DARK_TEXT if relative_luminance(bg_hex) > 0.5 else _LIGHT_TEXT
+
+
 def role_of(action_name: str) -> str | None:
     """Semantic role for an action name, or None if it has no themed role."""
     if action_name in ROLE_BY_ACTION:

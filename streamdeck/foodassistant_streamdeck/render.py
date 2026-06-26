@@ -13,6 +13,8 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
+from .theme import text_color_for
+
 _FONT_CANDIDATES = (
     "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf",
     "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
@@ -111,6 +113,10 @@ def _hex_to_rgb(value: str) -> tuple[int, int, int]:
     if len(v) != 6:
         return (60, 60, 60)
     return tuple(int(v[i : i + 2], 16) for i in (0, 2, 4))  # type: ignore[return-value]
+
+
+def _rgb_to_hex(rgb: tuple[int, int, int]) -> str:
+    return "#%02x%02x%02x" % rgb
 
 
 def _text_width(draw: ImageDraw.ImageDraw, text: str, font) -> int:
@@ -215,6 +221,10 @@ def render_key(
     img = Image.new("RGB", (width, height), bg)
     draw = ImageDraw.Draw(img)
 
+    # Text (label, count, and icon) colour adapts to the resolved key background
+    # luminance, so a light key gets dark text and a dark key gets light text.
+    text_fill = _hex_to_rgb(text_color_for(_rgb_to_hex(bg)))
+
     density = _density_factor(min(width, height), reference_px)
     max_label_width = int(width * _FIT_FRACTION)
 
@@ -231,13 +241,13 @@ def render_key(
             ((width - nw) / 2, height * 0.04),
             num,
             font=num_font,
-            fill=(255, 255, 255),
+            fill=text_fill,
         )
         label_y = height * 0.60
         label_px = _font_px(
             height, _STATUS_LABEL_FRACTION, density=density, floor=_MIN_FONT_PX
         )
-        _draw_label(draw, label, label_px, width, height, label_y, max_label_width)
+        _draw_label(draw, label, label_px, width, height, label_y, max_label_width, text_fill)
         return img
 
     glyph = _icon_char(icon)
@@ -251,12 +261,12 @@ def render_key(
         gw = box[2] - box[0]
         gx = (width - gw) / 2 - box[0]
         gy = height * 0.12 - box[1]
-        draw.text((gx, gy), glyph, font=icon_font, fill=(235, 235, 235))
+        draw.text((gx, gy), glyph, font=icon_font, fill=text_fill)
         label_px = _font_px(
             height, _STATUS_LABEL_FRACTION, density=density, floor=_MIN_FONT_PX
         )
         label_y = height * 0.66
-        _draw_label(draw, label, label_px, width, height, label_y, max_label_width)
+        _draw_label(draw, label, label_px, width, height, label_y, max_label_width, text_fill)
         return img
 
     # No icon (or font/glyph missing): centred text-only label, as before.
@@ -264,7 +274,7 @@ def render_key(
         height, _LABEL_FRACTION, density=density, floor=_MIN_FONT_PX
     )
     label_y = (height - label_px) / 2
-    _draw_label(draw, label, label_px, width, height, label_y, max_label_width)
+    _draw_label(draw, label, label_px, width, height, label_y, max_label_width, text_fill)
     return img
 
 
@@ -276,12 +286,14 @@ def _draw_label(
     height: int,
     label_y: float,
     max_width: int,
+    fill: tuple[int, int, int] = (235, 235, 235),
 ) -> None:
     """Draw a label, shrinking to fit and wrapping a single word as a fallback.
 
     First shrink the font until the label fits ~90% of the key width. If a
     single long word still overflows at the floor size, wrap it across lines and
-    centre the block vertically around ``label_y``.
+    centre the block vertically around ``label_y``. ``fill`` is the text colour,
+    chosen by the caller for contrast against the key background.
     """
     font = _fit_font(draw, label, start_px, max_width, floor=_MIN_FONT_PX)
     if _text_width(draw, label, font) <= max_width or " " in label:
@@ -290,7 +302,7 @@ def _draw_label(
             ((width - lw) / 2, label_y),
             label,
             font=font,
-            fill=(235, 235, 235),
+            fill=fill,
         )
         return
 
@@ -302,7 +314,7 @@ def _draw_label(
     y = label_y - (block_h - line_h) / 2
     for line in lines:
         lw = _text_width(draw, line, font)
-        draw.text(((width - lw) / 2, y), line, font=font, fill=(235, 235, 235))
+        draw.text(((width - lw) / 2, y), line, font=font, fill=fill)
         y += line_h
 
 
