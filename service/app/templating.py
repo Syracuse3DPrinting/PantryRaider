@@ -34,6 +34,9 @@ def theme_context(request: Request) -> dict:
         "features": settings.features(),
         "deployment_mode": settings.deployment_mode,
         "barcode_global_capture": settings.barcode_global_capture,
+        # Global has-LLM flag (FoodAssistant-9vgx): true when a vision/LLM
+        # provider is configured. Templates hide AI-only affordances when false.
+        "ai_configured": settings.ai_configured(),
         "pin_readonly": getattr(request.state, "pin_readonly", False),
         # On-screen floating navigation menu (FoodAssistant-bzuu).
         "floating_nav_position": settings.floating_nav_position,

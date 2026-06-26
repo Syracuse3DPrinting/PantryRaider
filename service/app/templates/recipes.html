@@ -20,9 +20,11 @@
       <button class="btn btn-sm btn-primary" data-bs-toggle="modal" data-bs-target="#importUrlModal">
         <i class="bi bi-link-45deg me-1"></i>From URL
       </button>
+      {% if ai_configured %}
       <button class="btn btn-sm btn-primary" onclick="document.getElementById('photo-input').click()">
         <i class="bi bi-camera me-1"></i>From Photo
       </button>
+      {% endif %}
       <button class="btn btn-sm btn-outline-primary" onclick="openEditor()">
         <i class="bi bi-pencil me-1"></i>Manual
       </button>
@@ -44,10 +46,12 @@
     <div class="input-group mb-2">
       <input type="search" class="form-control" id="recipe-filter"
              placeholder="Search recipes…" autocomplete="off">
+      {% if ai_configured %}
       <button class="btn btn-outline-secondary d-none" id="btn-generate-ai"
               onclick="generateFromSearch()" title="Ask AI to write this recipe">
         <i class="bi bi-stars me-1"></i>Generate with AI
       </button>
+      {% endif %}
     </div>
     <div class="d-flex gap-3 mb-3">
       <div class="form-check form-check-inline mb-0">
@@ -183,7 +187,8 @@ const MEALIE_URL = {{ mealie_url | tojson }};
 let filterTimer = null;
 document.getElementById('recipe-filter').addEventListener('input', e => {
   const q = e.target.value.trim();
-  document.getElementById('btn-generate-ai').classList.toggle('d-none', !q);
+  const genBtn = document.getElementById('btn-generate-ai');
+  if (genBtn) genBtn.classList.toggle('d-none', !q);  // absent when no AI is configured
   clearTimeout(filterTimer);
   filterTimer = setTimeout(() => loadRecipes(q), 300);
 });

@@ -314,6 +314,31 @@ def test_floating_nav_orientation_persists_and_validates(client):
     assert settings.floating_nav_orientation == "horizontal"
 
 
+def test_ai_options_hidden_when_no_ai(client):
+    """AI-only affordances disappear across feature pages when no AI provider is
+    configured, and reappear when one is (FoodAssistant-9vgx)."""
+    from app.config import settings
+
+    saved = (settings.vision_provider, settings.gemini_api_key)
+    try:
+        settings.vision_provider = "gemini"
+        settings.gemini_api_key = ""  # no key -> ai_configured() is False
+        assert settings.ai_configured() is False
+        # add.html and recipes.html gate these purely on ai_configured (cook's
+        # Ask AI is additionally gated by Mealie, so it is not asserted here).
+        recipes = client.get("/ui/recipes").text
+        assert "From Photo" not in recipes
+        assert "Generate with AI" not in recipes
+        assert "Photo / Receipt" not in client.get("/ui/add").text
+
+        settings.gemini_api_key = "back-on"  # ai_configured() True again
+        assert settings.ai_configured() is True
+        assert "Photo / Receipt" in client.get("/ui/add").text
+        assert "From Photo" in client.get("/ui/recipes").text
+    finally:
+        settings.vision_provider, settings.gemini_api_key = saved
+
+
 def test_floating_nav_renders_on_page(client):
     """The floating nav container renders with its data attributes so the JS
     can place it."""
