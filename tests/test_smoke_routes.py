@@ -173,3 +173,62 @@ def test_setup_save_persists_streamdeck_fields(client):
     assert settings.streamdeck_key_overrides == [
         {"slot": 0, "type": "weather", "location": "Portland"}
     ]
+
+
+def test_streamdeck_profiles_crud(client):
+    """Profile save/list/delete roundtrip (FoodAssistant-aqa)."""
+    # Clear any profiles left by other tests sharing this DB
+    from app.database import SessionLocal
+    from app.models.db_models import StreamDeckProfile
+    db = SessionLocal()
+    try:
+        db.query(StreamDeckProfile).delete()
+        db.commit()
+    finally:
+        db.close()
+
+    r = client.get("/setup/streamdeck/profiles")
+    assert r.status_code == 200
+    assert r.json()["profiles"] == []
+
+    # Save a profile
+    payload = {"name": "kitchen", "deck_size": 15, "key_overrides": [{"slot": 0, "type": "expiring"}]}
+    r = client.post("/setup/streamdeck/profiles", json=payload)
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+    assert r.json()["profile"]["name"] == "kitchen"
+
+    # List shows it
+    r = client.get("/setup/streamdeck/profiles")
+    assert r.status_code == 200
+    profiles = r.json()["profiles"]
+    assert len(profiles) == 1
+    assert profiles[0]["name"] == "kitchen"
+    assert profiles[0]["deck_size"] == 15
+
+    # Update (same name)
+    payload2 = {"name": "kitchen", "deck_size": 15, "key_overrides": []}
+    r = client.post("/setup/streamdeck/profiles", json=payload2)
+    assert r.status_code == 200
+    assert r.json()["profile"]["key_overrides"] == []
+
+    # Delete
+    r = client.delete("/setup/streamdeck/profiles/kitchen")
+    assert r.status_code == 200
+    assert r.json()["ok"] is True
+
+    # Gone
+    r = client.get("/setup/streamdeck/profiles")
+    assert r.json()["profiles"] == []
+
+
+def test_streamdeck_profiles_validation(client):
+    """Profile endpoint rejects invalid deck_size and blank names."""
+    r = client.post("/setup/streamdeck/profiles", json={"name": "", "deck_size": 15, "key_overrides": []})
+    assert r.status_code == 400
+
+    r = client.post("/setup/streamdeck/profiles", json={"name": "bad", "deck_size": 7, "key_overrides": []})
+    assert r.status_code == 400
+
+    r = client.delete("/setup/streamdeck/profiles/nonexistent")
+    assert r.status_code == 404

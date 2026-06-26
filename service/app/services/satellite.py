@@ -156,6 +156,34 @@ def _apply_defaults(rows: list[dict]) -> int:
         db.close()
 
 
+def _apply_profiles(rows: list[dict]) -> int:
+    """Replace the local Stream Deck profiles table with the server's copy.
+
+    Deferred imports keep this module importable without a DB in tests.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+    from ..database import SessionLocal
+    from ..models.db_models import StreamDeckProfile
+
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    db = SessionLocal()
+    try:
+        db.query(StreamDeckProfile).delete()
+        for r in rows:
+            db.add(StreamDeckProfile(
+                name=r.get("name", ""),
+                deck_size=int(r.get("deck_size", 0)),
+                key_overrides=_json.dumps(r.get("key_overrides", [])),
+                created_at=r.get("updated_at", now),
+                updated_at=r.get("updated_at", now),
+            ))
+        db.commit()
+        return len(rows)
+    finally:
+        db.close()
+
+
 def sync_from_upstream(timeout: float = 8.0) -> dict:
     """Pull backend config + defaults from the main server and apply them.
 
@@ -213,6 +241,10 @@ def _do_sync_from_upstream(timeout: float = 8.0) -> dict:
         defaults_n = _apply_defaults(data.get("expiry_defaults", []))
     except Exception as exc:  # DB not ready or bad row: config still applied
         logger.warning("satellite sync: applied config but defaults failed: %s", exc)
+    try:
+        _apply_profiles(data.get("streamdeck_profiles", []))
+    except Exception as exc:
+        logger.warning("satellite sync: could not mirror Stream Deck profiles: %s", exc)
 
     # Pulling new provider keys/models must invalidate the cached provider.
     try:

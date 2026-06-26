@@ -16,12 +16,32 @@ import secrets
 from fastapi import APIRouter, Header, HTTPException, Request
 from sqlalchemy.orm import Session
 
+import json
+
 from ..config import settings, SATELLITE_PULL_FIELDS
 from ..database import SessionLocal
-from ..models.db_models import ExpiryDefault
+from ..models.db_models import ExpiryDefault, StreamDeckProfile
 from ..services import devices
 
 router = APIRouter(prefix="/api/config", tags=["satellite"])
+
+
+def _profiles_payload() -> list[dict]:
+    """All saved Stream Deck profiles, serialized for a satellite to mirror."""
+    db: Session = SessionLocal()
+    try:
+        rows = db.query(StreamDeckProfile).order_by(StreamDeckProfile.name).all()
+        return [
+            {
+                "name": r.name,
+                "deck_size": r.deck_size,
+                "key_overrides": json.loads(r.key_overrides or "[]"),
+                "updated_at": r.updated_at,
+            }
+            for r in rows
+        ]
+    finally:
+        db.close()
 
 
 def _defaults_payload() -> list[dict]:
@@ -86,5 +106,6 @@ def satellite_config(
         "ok": True,
         "config": config,
         "expiry_defaults": _defaults_payload(),
+        "streamdeck_profiles": _profiles_payload(),
         "command": command,
     }

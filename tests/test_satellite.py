@@ -408,3 +408,80 @@ def test_sync_pushes_weather_when_pulled(satellite_mode, monkeypatch):
     assert settings.streamdeck_weather_location == "Seattle"
     assert settings.streamdeck_weather_units == "c"
     assert pushes == [True]
+
+
+# -- Stream Deck profile sync (FoodAssistant-aqa) ----------------------------
+
+def test_apply_profiles_mirrors_server_profiles(tmp_path, monkeypatch):
+    """_apply_profiles replaces the local profiles table with the server copy."""
+    from app.services.satellite import _apply_profiles
+    from app.database import SessionLocal
+    from app.models.db_models import StreamDeckProfile
+
+    rows = [
+        {"name": "kitchen", "deck_size": 15, "key_overrides": [{"slot": 0, "type": "expiring"}], "updated_at": "2026-01-01T00:00:00+00:00"},
+        {"name": "office", "deck_size": 6, "key_overrides": [], "updated_at": "2026-01-01T00:00:00+00:00"},
+    ]
+    count = _apply_profiles(rows)
+    assert count == 2
+    db = SessionLocal()
+    try:
+        names = [r.name for r in db.query(StreamDeckProfile).order_by(StreamDeckProfile.name).all()]
+    finally:
+        db.close()
+    assert names == ["kitchen", "office"]
+
+
+def test_apply_profiles_replaces_on_resync(tmp_path):
+    """Calling _apply_profiles twice replaces the previous set."""
+    from app.services.satellite import _apply_profiles
+    from app.database import SessionLocal
+    from app.models.db_models import StreamDeckProfile
+
+    _apply_profiles([
+        {"name": "old", "deck_size": 15, "key_overrides": [], "updated_at": "2026-01-01T00:00:00+00:00"},
+    ])
+    _apply_profiles([
+        {"name": "new", "deck_size": 32, "key_overrides": [], "updated_at": "2026-01-02T00:00:00+00:00"},
+    ])
+    db = SessionLocal()
+    try:
+        names = [r.name for r in db.query(StreamDeckProfile).all()]
+    finally:
+        db.close()
+    assert names == ["new"]
+    assert "old" not in names
+
+
+def test_sync_mirrors_profiles(satellite_mode, monkeypatch):
+    """A successful satellite pull mirrors the profiles list to the local DB."""
+    from app.services import satellite as sat
+
+    payload = {
+        "ok": True,
+        "config": {},
+        "expiry_defaults": [],
+        "streamdeck_profiles": [
+            {"name": "demo", "deck_size": 15, "key_overrides": [], "updated_at": "2026-01-01T00:00:00+00:00"},
+        ],
+        "command": None,
+    }
+    with patch.object(sat.httpx, "get", return_value=_FakeResponse(200, payload)), \
+            patch.object(sat, "_apply_defaults", return_value=0), \
+            patch.object(sat, "_apply_profiles", return_value=1) as mock_ap, \
+            patch("app.dependencies.reset_providers"):
+        out = sat.sync_from_upstream()
+
+    assert out["ok"] is True
+    mock_ap.assert_called_once_with(payload["streamdeck_profiles"])
+
+
+def test_satellite_config_endpoint_includes_profiles(client, monkeypatch):
+    """The /api/config/satellite response includes a streamdeck_profiles list."""
+    monkeypatch.setattr(settings, "api_key", "secret-key")
+    monkeypatch.setattr(settings, "auth_password", "")
+    r = client.get("/api/config/satellite", headers={"X-API-Key": "secret-key"})
+    assert r.status_code == 200
+    body = r.json()
+    assert "streamdeck_profiles" in body
+    assert isinstance(body["streamdeck_profiles"], list)

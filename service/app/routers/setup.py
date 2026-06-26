@@ -17,8 +17,10 @@ from ..config import (
     AI_MODELS,
     browser_host, device_hostname,
 )
+from ..database import SessionLocal
 from ..dependencies import reset_providers
 from ..hardware import is_raspberry_pi, board_model
+from ..models.db_models import StreamDeckProfile
 from ..navigation import all_tabs
 from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
@@ -1088,6 +1090,85 @@ async def streamdeck_install():
         return r.json()
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
+
+
+class ProfileSavePayload(BaseModel):
+    name: str
+    deck_size: int
+    key_overrides: list = []
+
+
+def _profile_to_dict(p: StreamDeckProfile) -> dict:
+    try:
+        overrides = json.loads(p.key_overrides or "[]")
+    except Exception:
+        overrides = []
+    return {
+        "name": p.name,
+        "deck_size": p.deck_size,
+        "key_overrides": overrides,
+        "created_at": p.created_at,
+        "updated_at": p.updated_at,
+    }
+
+
+@router.get("/streamdeck/profiles")
+async def streamdeck_profiles_list():
+    """List saved Stream Deck profiles."""
+    db = SessionLocal()
+    try:
+        rows = db.query(StreamDeckProfile).order_by(StreamDeckProfile.name).all()
+        return {"ok": True, "profiles": [_profile_to_dict(r) for r in rows]}
+    finally:
+        db.close()
+
+
+@router.post("/streamdeck/profiles")
+async def streamdeck_profiles_save(payload: ProfileSavePayload):
+    """Save or replace a named Stream Deck profile."""
+    from datetime import datetime, timezone
+    name = (payload.name or "").strip()
+    if not name:
+        return JSONResponse({"ok": False, "error": "Profile name required."}, status_code=400)
+    if payload.deck_size not in (6, 15, 32):
+        return JSONResponse({"ok": False, "error": "deck_size must be 6, 15, or 32."}, status_code=400)
+    overrides_json = json.dumps(payload.key_overrides)
+    now = datetime.now(timezone.utc).isoformat(timespec="seconds")
+    db = SessionLocal()
+    try:
+        row = db.query(StreamDeckProfile).filter(StreamDeckProfile.name == name).first()
+        if row:
+            row.deck_size = payload.deck_size
+            row.key_overrides = overrides_json
+            row.updated_at = now
+        else:
+            row = StreamDeckProfile(
+                name=name,
+                deck_size=payload.deck_size,
+                key_overrides=overrides_json,
+                created_at=now,
+                updated_at=now,
+            )
+            db.add(row)
+        db.commit()
+        return {"ok": True, "profile": _profile_to_dict(row)}
+    finally:
+        db.close()
+
+
+@router.delete("/streamdeck/profiles/{name}")
+async def streamdeck_profiles_delete(name: str):
+    """Delete a named Stream Deck profile."""
+    db = SessionLocal()
+    try:
+        row = db.query(StreamDeckProfile).filter(StreamDeckProfile.name == name).first()
+        if not row:
+            return JSONResponse({"ok": False, "error": "Profile not found."}, status_code=404)
+        db.delete(row)
+        db.commit()
+        return {"ok": True}
+    finally:
+        db.close()
 
 
 @router.get("/ap/status")

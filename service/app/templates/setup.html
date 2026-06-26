@@ -812,7 +812,7 @@
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-display" type="button" onclick="loadDisplayStatus(); loadHardwareStatus()">
             <i class="bi bi-display me-2"></i>Display
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-streamdeck" type="button" onclick="loadHardwareStatus(); loadHardwareDetect()">
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-streamdeck" type="button" onclick="loadHardwareStatus(); loadHardwareDetect(); _sdLoadProfiles()">
             <i class="bi bi-grid-3x3-gap me-2"></i>Stream Deck
           </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-network" type="button" onclick="loadNetworkStatus()">
@@ -1750,7 +1750,7 @@ docker compose up -d</code></pre>
             <div id="streamdeck-opts" class="{{ '' if s.has_streamdeck else 'd-none' }}">
               <div class="mb-3">
                 <label class="form-label">Model (key count)</label>
-                <select class="form-select form-select-sm" id="streamdeck_key_count" style="max-width:280px" onchange="_sdRenderGrid()">
+                <select class="form-select form-select-sm" id="streamdeck_key_count" style="max-width:280px" onchange="_sdRenderGrid(); _sdPopulateProfileSelect()">
                   <option value="6" {{ 'selected' if s.streamdeck_key_count == 6 else '' }}>6 keys (Stream Deck Mini)</option>
                   <option value="15" {{ 'selected' if (s.streamdeck_key_count == 15 or not s.streamdeck_key_count) else '' }}>15 keys (Stream Deck MK.2 / Classic)</option>
                   <option value="32" {{ 'selected' if s.streamdeck_key_count == 32 else '' }}>32 keys (Stream Deck XL)</option>
@@ -1802,6 +1802,29 @@ docker compose up -d</code></pre>
                        id="streamdeck_idle_timeout" min="0" max="120" step="5"
                        value="{{ s.streamdeck_idle_timeout }}">
                 <div class="form-text">Sets all keys to black after inactivity. Any key press restores the display.</div>
+              </div>
+
+              <div class="mb-3">
+                <label class="form-label">Saved Profiles</label>
+                <div class="form-text mb-1">Save the current key layout as a named profile. Profiles are stored on the main server and available on all devices with a matching deck size.</div>
+                <div class="d-flex align-items-center gap-2 flex-wrap mb-2">
+                  <select class="form-select form-select-sm" id="sd-profile-select" style="max-width:240px" onchange="_sdProfileSelectionChanged()">
+                    <option value="">(no profile selected)</option>
+                  </select>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" id="btn-sd-profile-load" disabled onclick="_sdLoadProfile()">
+                    <i class="bi bi-box-arrow-in-down me-1"></i>Load
+                  </button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" id="btn-sd-profile-delete" disabled onclick="_sdDeleteProfile()">
+                    <i class="bi bi-trash me-1"></i>Delete
+                  </button>
+                </div>
+                <div class="d-flex align-items-center gap-2 flex-wrap">
+                  <input type="text" class="form-control form-control-sm" id="sd-profile-name-input" placeholder="Profile name" style="max-width:200px">
+                  <button type="button" class="btn btn-outline-info btn-sm" onclick="_sdSaveProfile()">
+                    <i class="bi bi-floppy me-1"></i>Save as profile
+                  </button>
+                </div>
+                <div class="test-result mt-1" id="sd-profile-result"></div>
               </div>
 
               <div class="mb-3">
@@ -3924,6 +3947,116 @@ async function restartStreamDeck() {
     if (el) el.innerHTML = d.ok
       ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Stream Deck service restarted.</span>'
       : `<span class="text-danger">${d.error}</span>`;
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  }
+}
+
+// Stream Deck profile management (FoodAssistant-aqa)
+let _sdProfiles = [];
+
+async function _sdLoadProfiles() {
+  try {
+    const d = await fetch('setup/streamdeck/profiles').then(r => r.json());
+    _sdProfiles = (d.profiles || []);
+    _sdPopulateProfileSelect();
+  } catch (e) {
+    // profile list unavailable: leave select empty
+  }
+}
+
+function _sdPopulateProfileSelect() {
+  const sel = document.getElementById('sd-profile-select');
+  if (!sel) return;
+  const cur = sel.value;
+  const keyCount = parseInt(document.getElementById('streamdeck_key_count')?.value || '15', 10);
+  sel.innerHTML = '<option value="">(no profile selected)</option>';
+  for (const p of _sdProfiles) {
+    if (p.deck_size !== keyCount) continue;
+    const opt = document.createElement('option');
+    opt.value = p.name;
+    opt.textContent = p.name;
+    if (p.name === cur) opt.selected = true;
+    sel.appendChild(opt);
+  }
+  _sdProfileSelectionChanged();
+}
+
+function _sdProfileSelectionChanged() {
+  const sel = document.getElementById('sd-profile-select');
+  const hasVal = sel && sel.value !== '';
+  const loadBtn = document.getElementById('btn-sd-profile-load');
+  const delBtn = document.getElementById('btn-sd-profile-delete');
+  if (loadBtn) loadBtn.disabled = !hasVal;
+  if (delBtn) delBtn.disabled = !hasVal;
+}
+
+async function _sdSaveProfile() {
+  const el = document.getElementById('sd-profile-result');
+  const name = (document.getElementById('sd-profile-name-input')?.value || '').trim();
+  if (!name) {
+    if (el) el.innerHTML = '<span class="text-warning">Enter a profile name first.</span>';
+    return;
+  }
+  const keyCount = parseInt(document.getElementById('streamdeck_key_count')?.value || '15', 10);
+  const key_overrides = _sdCollectOverrides();
+  if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
+  try {
+    const r = await fetch('setup/streamdeck/profiles', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({name, deck_size: keyCount, key_overrides}),
+    });
+    const d = await r.json();
+    if (d.ok) {
+      if (el) el.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Profile "${name}" saved.</span>`;
+      await _sdLoadProfiles();
+      const sel = document.getElementById('sd-profile-select');
+      if (sel) sel.value = name;
+      _sdProfileSelectionChanged();
+    } else {
+      if (el) el.innerHTML = `<span class="text-danger">${d.error || 'Save failed.'}</span>`;
+    }
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  }
+}
+
+async function _sdLoadProfile() {
+  const el = document.getElementById('sd-profile-result');
+  const sel = document.getElementById('sd-profile-select');
+  const name = sel?.value || '';
+  if (!name) return;
+  const profile = _sdProfiles.find(p => p.name === name);
+  if (!profile) {
+    if (el) el.innerHTML = '<span class="text-warning">Profile not found.</span>';
+    return;
+  }
+  if (el) el.innerHTML = '<span class="text-secondary">Loading...</span>';
+  // Apply profile key_overrides into the override rows
+  const container = document.getElementById('streamdeck-overrides');
+  if (container) {
+    container.innerHTML = '';
+    for (const o of (profile.key_overrides || [])) _sdAddOverrideRow(o);
+  }
+  if (el) el.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Profile "${name}" applied. Save Stream Deck settings to commit.</span>`;
+}
+
+async function _sdDeleteProfile() {
+  const el = document.getElementById('sd-profile-result');
+  const sel = document.getElementById('sd-profile-select');
+  const name = sel?.value || '';
+  if (!name) return;
+  if (!confirm(`Delete profile "${name}"?`)) return;
+  if (el) el.innerHTML = '<span class="text-secondary">Deleting...</span>';
+  try {
+    const r = await fetch(`setup/streamdeck/profiles/${encodeURIComponent(name)}`, {method: 'DELETE'});
+    const d = await r.json();
+    if (d.ok) {
+      if (el) el.innerHTML = `<span class="text-success">Profile "${name}" deleted.</span>`;
+      await _sdLoadProfiles();
+    } else {
+      if (el) el.innerHTML = `<span class="text-danger">${d.error || 'Delete failed.'}</span>`;
+    }
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
   }

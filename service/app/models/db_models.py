@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Float
+from sqlalchemy import Column, Integer, String, Float, Text
 from datetime import datetime, timezone
 from ..database import Base
 
@@ -38,6 +38,28 @@ class SatelliteDevice(Base):
         String, default=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
     last_seen = Column(
+        String, default=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
+
+
+class StreamDeckProfile(Base):
+    """A named Stream Deck key layout saved by the user.
+
+    Profiles are stored on the main server and mirrored to satellites via the
+    satellite config sync. Each profile targets a specific deck size (6, 15, or
+    32 keys) so a device can filter to profiles that match its hardware.
+    key_overrides is a JSON array of per-slot override dicts (same format as
+    settings.streamdeck_key_overrides)."""
+    __tablename__ = "streamdeck_profiles"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False, unique=True, index=True)
+    deck_size = Column(Integer, nullable=False)  # 6, 15, or 32
+    key_overrides = Column(Text, default="[]")   # JSON array
+    created_at = Column(
+        String, default=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
+    )
+    updated_at = Column(
         String, default=lambda: datetime.now(timezone.utc).isoformat(timespec="seconds")
     )
 
