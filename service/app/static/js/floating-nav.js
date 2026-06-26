@@ -40,6 +40,18 @@
     try { storedOrient = localStorage.getItem(ORIENT_KEY) || ''; } catch (e) { }
     var orient = ORIENTATIONS.indexOf(storedOrient) !== -1 ? storedOrient : serverOrient;
 
+    // On a touch kiosk the floating nav is the primary way to get around (the
+    // top tabs collapse behind the hamburger), so default it on when nothing is
+    // set. An explicit stored 'off' on this device still wins. Default to a
+    // horizontal row along the bottom: a tall column of tabs would run most of
+    // the height of a short panel.
+    var kiosk = false;
+    try { kiosk = localStorage.getItem('kioskMode') === 'true'; } catch (e) { }
+    if (kiosk && pos === 'off' && stored !== 'off') {
+      pos = 'bottom-right';
+      if (ORIENTATIONS.indexOf(storedOrient) === -1) orient = 'horizontal';
+    }
+
     if (pos === 'off' || (autohide && hasDeck)) {
       nav.classList.add('d-none');
       clearPadding();

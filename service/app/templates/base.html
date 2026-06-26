@@ -126,7 +126,9 @@
       #pageContent { padding-left: 0.75rem !important; padding-right: 0.75rem !important; }
       #pageContent .row > [class*="col-"] { flex: 0 0 100%; max-width: 100%; }
       #pageContent .card { margin-bottom: 0.5rem; }
-      .float-nav { display: none !important; }
+      /* The floating nav is the best touch-navigation surface on a small panel
+         (fixed, large targets, no hamburger), so it is NOT hidden here. It is
+         auto-enabled in kiosk mode by floating-nav.js. */
     }
     /* On-screen floating navigation menu (FoodAssistant-bzuu). A compact column
        of icon buttons docked to a screen corner, draggable by its handle. */

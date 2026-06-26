@@ -154,6 +154,41 @@ textarea {
 #pageContent .card {
   margin-bottom: 0.5rem;
 }
+
+/* ── Reclaim vertical space + smooth touch scrolling ────────────────────────
+ * A wall panel is short (often 480px tall), so the fixed top bar is costly.
+ * Slim it and shrink the body offset to give content more room, and turn on
+ * momentum scrolling so a flick scrolls the page on a capacitive screen. */
+html, body {
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-y: contain;
+}
+body {
+  padding-top: 50px;   /* matches the slimmer navbar below (was 60px) */
+}
+.navbar.fixed-top {
+  padding-top: 4px;
+  padding-bottom: 4px;
+  min-height: 50px;
+}
+.navbar-brand {
+  font-size: 1.05rem;
+}
+
+/* ── Floating nav as the primary touch navigation ───────────────────────────
+ * floating-nav.js auto-enables it in kiosk mode so navigation is one tap away
+ * without opening the hamburger. Make its targets comfortably tappable. */
 .float-nav {
-  display: none !important;
+  gap: 0.4rem;
+  padding: 0.45rem;
+  opacity: 0.97;
+}
+.float-nav-link {
+  width: 3.25rem;
+  height: 3.25rem;
+  font-size: 1.5rem;
+}
+.float-nav-handle {
+  padding: 0.25rem 0;
+  font-size: 1.15rem;
 }
