@@ -10,22 +10,23 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-06-26
+
+This is the first version under the project's pre-1.0 scheme. Earlier `1.x`
+tags were retired: everything to date is pre-launch, and `1.0.0` is reserved
+for the public release. See the note at the bottom of this file.
+
 ### Added
 - **On-device Pi installer.** A new `install.sh` (run on the device over SSH: `curl -fsSL .../install.sh | bash`) replaces the old "edit config on your PC and copy a payload onto the boot partition" flow. Flash a stock Raspberry Pi OS Lite card with Imager, boot, SSH in, and run one line. The installer detects the board and attached hardware, asks only for the deployment mode (Pi Hosted or Pi Remote), then hands off to the web setup wizard for all further configuration. Pi Remote installs nothing heavy. Supports unattended use with `NONINTERACTIVE=1` plus env vars.
 - **Web-based appliance configuration.** After the one-line SSH install, the terminal prints the `http://foodassistant.local:9284/setup` URL and exits. All remaining setup (password, Grocy API key, AI provider, display orientation, Stream Deck, Mealie, etc.) happens in the browser. This makes pre-ship configuration possible: configure before shipping, customer plugs in and opens the URL.
 - **Appliance settings panes (Pi only).** Three new sections appear in Settings when running on a Raspberry Pi: **Display** (kiosk scale, CSS rotation, and KMS framebuffer rotation with optional immediate reboot), **Stream Deck** (enable/disable, model selection, service restart), and **Network** (current Wi-Fi SSID, connect to a new network, change hostname). All accessible at any time after first setup.
 - **Host bridge service.** A small Python helper (`foodassistant-host-bridge`, installed by `firstboot.sh` at `/usr/local/bin/`) runs on the Pi host at `127.0.0.1:9299`. It lets the Docker container call host-level operations (Wi-Fi via `nmcli`, hostname via `hostnamectl`, KMS rotation via `foodassistant-set-rotation`, Stream Deck service restart via `systemctl`) without running privileged inside Docker. Reachable from the container because `docker-compose.appliance.yml` uses `network_mode: host`.
-
-### Changed
-- **SD-card guide rewritten** around the SSH installer; nothing to edit on your PC and no repo clone on your PC. The pre-built turnkey image remains documented as an advanced no-SSH alternative.
-- **Installer is now minimal at the terminal.** `install.sh` asks one question (deployment mode) and auto-detects kiosk/Stream Deck from attached hardware. Display rotation, Mealie, Ollama, and other add-ons are configured via the web UI after the install completes, not in the terminal.
-
-### Removed
-- `scripts/image-build/prepare-image.ps1` and the documented boot-partition payload flow it implemented. Use the on-device installer instead. The pre-built image pipeline (`prepare-image.sh --image`, used by CI) is unchanged.
-
-## [1.6.0]
-
-### Added
+- **Hardware settings pane.** Barcode scanner configuration moved out of the Inventory and Interface panes into a dedicated Hardware section, visible on all devices, with a global-capture switch and Waveshare scanner setup link.
+- **Navbar health warnings (Pi).** The navbar surfaces a warning icon when the Pi reports undervoltage, throttling, high temperature, or low disk, read from the host bridge. The tooltip lists the active warnings.
+- **Stream Deck size auto-detect.** Setup detects the attached deck (6/15/32 keys) and prefills the model, with a hint when it was filled from the hardware.
+- **Stream Deck weather sync.** A satellite's deck mirrors the main server's weather location and units automatically, so the widget matches without separate local setup.
+- **Stream Deck themed keys.** Key colors follow the active web UI theme (light, darkly, cyborg, flatly, synthwave); the default dark theme keeps the existing per-action colors.
+- **Named Stream Deck profiles.** Save key layouts as named profiles on the main server, each targeting a deck size (6/15/32). A profile picker in the Stream Deck settings filters to the current deck, and satellites mirror the profile list on sync.
 - **Deployment modes in setup.** The first setup step now asks how the device is used. On a Raspberry Pi you choose **Pi Hosted** (everything runs on the Pi, with or without a screen) or **Pi Remote** (a thin control surface that drives a Stream Deck and/or kiosk pointed at a FoodAssistant server already running elsewhere); on other hardware it stays **Server hosted**. Pi Remote installs no local Grocy or Docker, so it runs on a Pi 3, and the wizard skips the Grocy and AI steps for it. The choice is detected and offered automatically based on the board.
 - **Shopping list without Mealie.** The Shopping tab is now always visible. When Mealie is not configured it is backed by Grocy's built-in shopping list: add, check off, and delete items. Multi-list selector appears when more than one list exists. A "Clear checked" button removes done items. When Mealie is configured the existing Mealie-backed view is unchanged.
 - **Stock journal.** A new Stock Journal page (link in the Inventory header) shows the last 50/100/200 stock transactions from Grocy: date, product name, transaction type (Added, Consumed, Moved, Corrected), quantity, and note. A live text filter narrows by product name.
@@ -36,12 +37,20 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 - **Stream Deck timers.** Three independent countdown timer keys (`timer_1`, `timer_2`, `timer_3`). Press to cycle through 5, 10, 15, 30, and 60 minute presets; press again to cancel. The key shows MM:SS while counting down, turns amber under 1 minute, and flashes red with "Done!" when the timer expires. Press once more to dismiss.
 - **Targeted provisioner re-runs.** `STEPS=rotation,kiosk bash firstboot.sh` re-runs only the named steps, bypassing the done-marker check. Valid step names: `hostname`, `timezone`, `mdns`, `docker`, `stack`, `rotation`, `kiosk`, `streamdeck`.
 
+### Changed
+- **SD-card guide rewritten** around the SSH installer; nothing to edit on your PC and no repo clone on your PC. The pre-built turnkey image remains documented as an advanced no-SSH alternative.
+- **Installer is now minimal at the terminal.** `install.sh` asks one question (deployment mode) and auto-detects kiosk/Stream Deck from attached hardware. Display rotation, Mealie, Ollama, and other add-ons are configured via the web UI after the install completes, not in the terminal.
+- **Kiosk mode auto-hides reference pages** (phone QR, Defaults, About, AI Declarations, API docs, keyboard shortcuts) from the navbar so the touchscreen surface stays focused.
+
+### Removed
+- `scripts/image-build/prepare-image.ps1` and the documented boot-partition payload flow it implemented. Use the on-device installer instead. The pre-built image pipeline (`prepare-image.sh --image`, used by CI) is unchanged.
+
 ### Fixed
 - QR modal now closes reliably on dark themes (modal was nested inside the collapsible navbar, causing backdrop conflicts).
 - Grocy URL in the setup wizard now uses the browser's host instead of `localhost` when viewed from a different machine on the network.
 - Navigation unlock hints show all tab names for a locked service, not just the last one.
 
-## [1.5.0]
+## [0.5.0]
 
 ### Added
 - **Ready-to-flash appliance image.** A prebuilt Raspberry Pi OS Lite image with the FoodAssistant provisioner baked in is published to the Releases page. Flash it with Raspberry Pi Imager, set wifi in the Imager GUI, and boot: no config files, no terminal. The device auto-detects an attached display (launches the kiosk) and a plugged-in Stream Deck, and takes its timezone from the OS.
@@ -60,7 +69,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 - QR code is now scannable on dark themes (white background), and the QR modal closes reliably.
 - The appliance first boot no longer clobbers Raspberry Pi Imager's wifi/SSH/user setup (our provisioner script was renamed to avoid the collision).
 
-## [1.4.0]
+## [0.4.0]
 
 ### Added
 - **Remote Access**: expose your FoodAssistant to the internet without port-forwarding. In **Settings → Remote Access**, choose Cloudflare Tunnel (free, bring your own token) or FoodAssistant Cloud (managed subscription, coming soon). The tunnel runs as a sidecar container; your public URL appears in the UI once the connection is established.
@@ -76,7 +85,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ### Fixed
 - TheMealDB dietary post-filter now correctly blocks compound ingredient names (e.g. "parmesan cheese" catches the vegan exclusion for "cheese").
 
-## [1.3.1]
+## [0.3.1]
 
 ### Added
 - **Synthwave theme**: a new neon-on-dark theme (hot pink, electric cyan, purple) with glow accents, in **Settings → Interface**.
@@ -84,7 +93,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ### Fixed
 - Corrected badge text contrast in the Cyborg and Darkly themes, where status labels (Today, Refrigerated, etc.) could be hard to read.
 
-## [1.3.0]
+## [0.3.0]
 
 ### Added
 - Theme switcher in **Settings → Interface**: choose between Dark and Light (and extra built-in themes), applied across the whole app.
@@ -96,7 +105,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ### Fixed
 - Corrected a Settings toggle that could fail to update its hint text.
 
-## [1.2.0]
+## [0.2.0]
 
 ### Added
 - **Grocy public URL**: set a separate external address for Grocy so the in-app links work through a reverse proxy while internal API calls stay on the local network.
@@ -106,7 +115,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 - The app no longer fails to start when its data directory is read-only on first launch.
 - Corrected a Home Assistant automation sensor reference so the "expiring in 3 days" alert fires reliably.
 
-## [1.1.0]
+## [0.1.0]
 
 ### Added
 - **Custom storage locations**: define your own storage buckets beyond the four built-ins (Refrigerated, Frozen, Room Temp, Pantry), such as Wine Cellar or Garage Fridge.
@@ -115,9 +124,9 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ### Changed
 - Pinned the bundled Grocy, Mealie, and Ollama images to specific versions so an unattended update can't move you onto a breaking release. Documented how to upgrade them safely.
 
-## [1.0.0]
+## [0.0.1]
 
-First public release.
+First working build (the original pre-launch baseline).
 
 ### Added
 - **Inventory dashboard** with storage panels, drag-and-drop moves, inline edits, and expiry badges, backed by Grocy.
@@ -134,3 +143,14 @@ First public release.
 - **Backups**: download your data as a zip, with optional scheduled off-box backup via rclone.
 - Optional fully-local operation using Ollama for vision and text.
 - Docker, Docker Compose, and Home Assistant add-on installation paths.
+
+---
+
+## A note on versioning
+
+This project was briefly tagged `1.0.0` through `1.5.0` during early
+development before it had any real users. Those tags were retired and the
+history re-anchored under a pre-1.0 scheme: the versions above are all
+pre-launch milestones, and `1.0.0` is reserved for the first public release.
+The mapping from the old tags was a straight subtract-one-major (old `1.6.0`
+became `0.6.0`), with the genesis release floored to `0.0.1`.
