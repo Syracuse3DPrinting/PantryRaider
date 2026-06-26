@@ -217,6 +217,41 @@ def test_sync_happy_path_applies_fields_and_invalidates_providers(satellite_mode
     mock_reset.assert_called_once()
 
 
+def test_sync_picks_up_mealie_started_after_setup(satellite_mode):
+    """Regression for FoodAssistant-1jbq: a satellite set up while Mealie was
+    not yet running must flip to Mealie-available on a later sync, with no
+    restart. mealie_configured() is a stateless check of the pulled fields, and
+    the periodic sync re-pulls them, so applying a config that now includes
+    Mealie is enough."""
+    from app.services import satellite as sat
+
+    # Satellite starts with Mealie unconfigured (fixture leaves these blank-ish;
+    # force the blank state explicitly so the assertion is unambiguous).
+    object.__setattr__(settings, "mealie_base_url", "")
+    object.__setattr__(settings, "mealie_api_key", "")
+    assert settings.mealie_configured() is False
+
+    # The server has since had Mealie added, so the next pull carries it.
+    payload = {
+        "ok": True,
+        "config": {
+            "mealie_base_url": "http://server:9285",
+            "mealie_api_key": "mealie-key",
+        },
+        "expiry_defaults": [],
+        "command": None,
+    }
+    with patch.object(sat.httpx, "get", return_value=_FakeResponse(200, payload)), \
+            patch.object(sat, "_apply_defaults", return_value=0), \
+            patch("app.dependencies.reset_providers"):
+        out = sat.sync_from_upstream()
+
+    assert out["ok"] is True
+    assert set(out["applied"]) >= {"mealie_base_url", "mealie_api_key"}
+    # Without any restart, Mealie now reads as available.
+    assert settings.mealie_configured() is True
+
+
 def test_sync_unreachable_server_keeps_existing_config(satellite_mode):
     from app.services import satellite as sat
 
