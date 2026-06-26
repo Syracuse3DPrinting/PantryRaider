@@ -326,37 +326,22 @@ def test_display_blank_wake_off_pi(client):
 
 
 def test_floating_nav_settings_persist_and_validate(client):
-    """Floating nav position + autohide round-trip; bad position is rejected
-    (FoodAssistant-bzuu)."""
+    """Docked nav edge + autohide round-trip; a bad edge is rejected
+    (FoodAssistant-bzuu, -i181)."""
     from app.config import settings
 
     r = client.post("/setup/save", json={
-        "floating_nav_position": "bottom-right",
+        "floating_nav_position": "bottom",
         "floating_nav_autohide_streamdeck": True,
     })
     assert r.status_code == 200
-    assert settings.floating_nav_position == "bottom-right"
+    assert settings.floating_nav_position == "bottom"
     assert settings.floating_nav_autohide_streamdeck is True
 
-    # An invalid position is dropped, leaving the stored value untouched.
+    # An invalid edge is dropped, leaving the stored value untouched.
     r = client.post("/setup/save", json={"floating_nav_position": "middle"})
     assert r.status_code == 200
-    assert settings.floating_nav_position == "bottom-right"
-
-
-def test_floating_nav_orientation_persists_and_validates(client):
-    """Floating nav orientation round-trips; a bad value is rejected
-    (FoodAssistant-76mw)."""
-    from app.config import settings
-
-    r = client.post("/setup/save", json={"floating_nav_orientation": "horizontal"})
-    assert r.status_code == 200
-    assert settings.floating_nav_orientation == "horizontal"
-
-    # An invalid orientation is dropped, leaving the stored value untouched.
-    r = client.post("/setup/save", json={"floating_nav_orientation": "diagonal"})
-    assert r.status_code == 200
-    assert settings.floating_nav_orientation == "horizontal"
+    assert settings.floating_nav_position == "bottom"
 
 
 def test_ai_options_hidden_when_no_ai(client):
@@ -384,11 +369,11 @@ def test_floating_nav_renders_on_page(client):
     """The floating nav container renders with its data attributes so the JS
     can place it."""
     from app.config import settings
-    settings.floating_nav_position = "top-right"
+    settings.floating_nav_position = "right"
     r = client.get("/ui/")
     assert r.status_code == 200
     assert 'id="floatNav"' in r.text
-    assert 'data-position="top-right"' in r.text
+    assert 'data-position="right"' in r.text
 
 
 def test_small_screen_nav_markup_present(client):

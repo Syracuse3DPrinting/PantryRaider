@@ -132,51 +132,51 @@
          (fixed, large targets, no hamburger), so it is NOT hidden here. It is
          auto-enabled in kiosk mode by floating-nav.js. */
     }
-    /* On-screen floating navigation menu (FoodAssistant-bzuu). A compact column
-       of icon buttons docked to a screen corner, draggable by its handle. */
+    /* On-screen navigation bar (FoodAssistant-bzuu, -i181). A FIXED bar docked
+       to a screen edge. Unlike the old draggable overlay, it reserves layout
+       space (floating-nav.js pads the body on the docked side), so it never sits
+       on top of content. The handle is gone (it is fixed, not dragged). */
     .float-nav {
       position: fixed;
       z-index: 1030;
       display: flex;
-      flex-direction: column;
-      gap: 0.25rem;
-      padding: 0.35rem;
-      border-radius: 0.6rem;
-      background: var(--bs-tertiary-bg, rgba(33, 37, 41, 0.92));
-      border: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
-      box-shadow: 0 0.4rem 1rem rgba(0, 0, 0, 0.35);
-      opacity: 0.92;
+      gap: 0.4rem;
+      padding: 0.4rem;
+      background: var(--bs-tertiary-bg, rgba(33, 37, 41, 0.96));
+      box-shadow: 0 0 1rem rgba(0, 0, 0, 0.4);
       user-select: none;
     }
-    .float-nav.dragging { opacity: 0.75; transition: none; }
-    /* Horizontal orientation lays the icons out in a row instead of a column
-       (FoodAssistant-76mw), for wide displays where a tall column wastes space. */
-    .float-nav-horizontal { flex-direction: row; align-items: center; }
-    .float-nav-horizontal .float-nav-handle { padding: 0 0.1rem; }
-    .float-nav-pos-top-left     { top: 70px;  left: 0.75rem; }
-    .float-nav-pos-top-right    { top: 70px;  right: 0.75rem; }
-    .float-nav-pos-bottom-left  { bottom: 0.75rem; left: 0.75rem; }
-    .float-nav-pos-bottom-right { bottom: 0.75rem; right: 0.75rem; }
-    .float-nav-handle {
-      text-align: center;
-      cursor: grab;
-      color: var(--bs-secondary-color, #adb5bd);
-      padding: 0.1rem 0;
-      line-height: 1;
-      /* Only the handle locks gestures (for dragging); the rest of the bar lets
-         a flick scroll the page through it, so the menu never traps scrolling. */
-      touch-action: none;
+    /* The grip handle from the draggable version is hidden in docked mode. */
+    .float-nav-handle { display: none; }
+    /* Bottom dock: a full-width horizontal bar that scrolls if it overflows. */
+    .float-nav-dock-bottom {
+      left: 0; right: 0; bottom: 0;
+      flex-direction: row;
+      justify-content: center;
+      align-items: center;
+      overflow-x: auto;
+      border-top: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15));
     }
-    .float-nav-handle:active { cursor: grabbing; }
+    /* Left/right docks: a full-height vertical bar below the top navbar that
+       scrolls if the icons exceed the screen height. */
+    .float-nav-dock-left, .float-nav-dock-right {
+      top: 56px; bottom: 0;
+      flex-direction: column;
+      align-items: center;
+      overflow-y: auto;
+    }
+    .float-nav-dock-left  { left: 0;  border-right: 1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15)); }
+    .float-nav-dock-right { right: 0; border-left:  1px solid var(--bs-border-color, rgba(255, 255, 255, 0.15)); }
     .float-nav-link {
+      flex: 0 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      width: 2.5rem;
-      height: 2.5rem;
-      border-radius: 0.5rem;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 0.6rem;
       color: var(--bs-body-color, #dee2e6);
-      font-size: 1.15rem;
+      font-size: 1.35rem;
       text-decoration: none;
     }
     .float-nav-link:hover { background: var(--bs-secondary-bg, rgba(255, 255, 255, 0.1)); }
@@ -339,17 +339,15 @@
     </div>
   </nav>
 
-  <!-- On-screen floating navigation menu (FoodAssistant-bzuu). Hidden until
-       floating-nav.js places it from the saved position (server default or a
-       per-device localStorage override). Drag the handle to move it; it snaps
-       to the nearest corner. Auto-hides when a Stream Deck is connected if the
+  <!-- On-screen navigation bar (FoodAssistant-bzuu, -i181). A FIXED bar docked
+       to a screen edge, placed by floating-nav.js from the saved position
+       (server default or per-device override). It reserves layout space so it
+       never overlaps content. Auto-hides when a Stream Deck is connected if the
        option is set. -->
   <div id="floatNav" class="float-nav d-none"
        data-position="{{ floating_nav_position }}"
-       data-orientation="{{ floating_nav_orientation }}"
        data-autohide-streamdeck="{{ '1' if floating_nav_autohide_streamdeck else '0' }}"
        data-has-streamdeck="{{ '1' if has_streamdeck else '0' }}">
-    <div class="float-nav-handle" title="Drag to move"><i class="bi bi-grip-vertical"></i></div>
     {% for tab in nav_tabs() if tab.key not in ['about', 'defaults'] %}
     <a class="float-nav-link {% if active == tab.key %}active{% endif %}" href="{{ tab.href }}"
        title="{{ tab.label }}">
