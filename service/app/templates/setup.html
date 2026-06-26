@@ -4126,8 +4126,11 @@ function deviceRowHtml(d) {
   const online = d.online
     ? '<span class="badge bg-success">Online</span>'
     : '<span class="badge bg-secondary">Offline</span>';
+  // A pi_remote satellite serves the app on port 80; a server or pi_hosted box
+  // serves on 9284. Build the link to match so it does not 404 on the wrong port.
+  const devPort = d.deployment_mode === 'pi_remote' ? '' : ':9284';
   const ip = d.ip
-    ? `<a href="http://${escapeHtml(d.ip)}:9284/" target="_blank" rel="noopener">${escapeHtml(d.ip)}</a>`
+    ? `<a href="http://${escapeHtml(d.ip)}${devPort}/" target="_blank" rel="noopener">${escapeHtml(d.ip)}</a>`
     : '<span class="text-secondary">--</span>';
   const mode = d.deployment_mode ? escapeHtml(d.deployment_mode) : '--';
   const version = d.version ? escapeHtml(d.version) : '--';
