@@ -398,7 +398,7 @@ class ActionSpec:
 # the action buttons in the page templates:
 #   nav tabs (navigation.py): inventory=grid, expiring=clock-history,
 #     add=plus-circle, pending=hourglass-split, recipes=journal-richtext,
-#     cook=lightbulb, mealplan=calendar-week, shopping=cart, defaults=table.
+#     cook=fire, mealplan=calendar-week, shopping=cart, defaults=table.
 #   commit button (pending.html): cloud-upload.
 # The remaining keys are deck-only widgets with no web equivalent; they use the
 # closest standard Bootstrap glyph (timers=stopwatch, weather=cloud-sun,
@@ -410,7 +410,7 @@ ACTION_ICONS: dict[str, str] = {
     "commit": "cloud-upload",
     "add": "plus-circle",
     "inventory": "grid",
-    "cook": "lightbulb",
+    "cook": "fire",
     "recipes": "journal-richtext",
     "mealplan": "calendar-week",
     "shopping": "cart",

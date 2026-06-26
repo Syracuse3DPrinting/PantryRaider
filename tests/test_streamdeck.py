@@ -387,7 +387,7 @@ def test_known_action_icons_match_web_ui():
     assert actions.icon_for("expiring") == "clock-history"
     assert actions.icon_for("add") == "plus-circle"
     assert actions.icon_for("pending") == "hourglass-split"
-    assert actions.icon_for("cook") == "lightbulb"
+    assert actions.icon_for("cook") == "fire"
     assert actions.icon_for("commit") == "cloud-upload"
     assert actions.icon_for("shopping") == "cart"
     assert actions.icon_for("defaults") == "table"

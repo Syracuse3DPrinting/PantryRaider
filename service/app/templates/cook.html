@@ -5,14 +5,14 @@
 
 {% if not mealie_configured %}
 <div class="alert alert-info mt-3">
-  <i class="bi bi-lightbulb me-2"></i>
+  <i class="bi bi-fire me-2"></i>
   Recipe suggestions are powered by <a href="https://mealie.io" target="_blank">Mealie</a>.
   Add your Mealie URL and API token in <a href="setup">Settings</a> to enable this page.
 </div>
 {% else %}
 
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-1">
-  <h4 class="mb-0"><i class="bi bi-lightbulb me-2"></i>What Can I Cook?</h4>
+  <h4 class="mb-0"><i class="bi bi-fire me-2"></i>What Can I Cook?</h4>
   <div class="d-flex gap-2">
     <button class="btn btn-outline-secondary" id="btn-ask-ai" onclick="loadAiSuggestions()">
       <i class="bi bi-stars me-1"></i>Ask AI
