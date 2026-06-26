@@ -11,6 +11,7 @@ from ..dependencies import get_enrich_provider
 from ..services.grocy import GrocyClient
 from ..services.mealie import MealieClient, MealieError, classify_recipes
 from ..services import recipes_external
+from ..services.recipes_import import parse_recipe_file
 
 router = APIRouter(prefix="/mealie", tags=["mealie"])
 
@@ -210,6 +211,32 @@ async def extract_recipe_photo(file: UploadFile = File(...)):
     if not recipe or not recipe.get("name"):
         raise HTTPException(422, "Could not read a recipe from that photo: try a clearer shot.")
     return {"ok": True, "recipe": recipe}
+
+
+@router.post("/recipes/import-file")
+async def import_recipe_file(file: UploadFile = File(...)):
+    """Import a recipe from an uploaded file and save it straight into Mealie.
+
+    Accepts generic recipe JSON, schema.org Recipe JSON-LD (object, array,
+    @graph, or a <script type="application/ld+json"> block), and Mealie export
+    JSON. The file is normalized to the create_recipe shape, so it's saved
+    without an AI round-trip. Mirrors import-external's response shape.
+    """
+    m = _client()
+    raw = await file.read()
+    try:
+        recipe = parse_recipe_file(file.filename or "", raw)
+    except ValueError as e:
+        raise HTTPException(422, str(e))
+
+    try:
+        slug = await m.create_recipe(recipe)
+    except MealieError as e:
+        raise HTTPException(502, str(e))
+
+    return {"ok": True, "slug": slug, "name": recipe["name"],
+            "mealie_url": settings.mealie_link_url(),
+            "message": f"\"{recipe['name']}\" imported from file into Mealie."}
 
 
 class CreateRecipePayload(BaseModel):

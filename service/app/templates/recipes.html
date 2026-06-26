@@ -25,6 +25,9 @@
         <i class="bi bi-camera me-1"></i>From Photo
       </button>
       {% endif %}
+      <button class="btn btn-sm btn-primary" onclick="document.getElementById('file-input').click()">
+        <i class="bi bi-filetype-json me-1"></i>From File
+      </button>
       <button class="btn btn-sm btn-outline-primary" onclick="openEditor()">
         <i class="bi bi-pencil me-1"></i>Manual
       </button>
@@ -34,10 +37,17 @@
 
 <input type="file" id="photo-input" accept="image/*" capture="environment" class="d-none"
        onchange="extractPhoto(this)">
+<input type="file" id="file-input" accept=".json,.txt" class="d-none"
+       onchange="importFile(this)">
 
 <!-- Photo extraction progress -->
 <div class="alert alert-info d-none" id="photo-progress">
   <span class="spinner-border spinner-border-sm me-2"></span>Reading recipe from photo…
+</div>
+
+<!-- File import progress -->
+<div class="alert alert-info d-none" id="file-progress">
+  <span class="spinner-border spinner-border-sm me-2"></span>Importing recipe from file…
 </div>
 
 <!-- Browse -->
@@ -420,6 +430,37 @@ async function extractPhoto(input) {
     return;
   }
   progress.classList.add('d-none');
+}
+
+// File import (generic JSON / schema.org JSON-LD / Mealie export)
+async function importFile(input) {
+  const file = input.files[0];
+  input.value = '';
+  if (!file) return;
+  const progress = document.getElementById('file-progress');
+  progress.classList.remove('d-none');
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const r = await fetch('mealie/recipes/import-file', {method: 'POST', body: fd});
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.detail || r.statusText);
+    progress.innerHTML = `<i class="bi bi-check-circle me-1"></i>${d.message}
+      <a href="${d.mealie_url}/g/home/r/${d.slug}" target="_blank">View recipe</a>`;
+    progress.classList.remove('alert-info');
+    progress.classList.add('alert-success');
+    loadRecipes();
+    setTimeout(() => {
+      progress.classList.add('d-none');
+      progress.classList.remove('alert-success');
+      progress.classList.add('alert-info');
+      progress.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing recipe from file…';
+    }, 5000);
+    return;
+  } catch (e) {
+    progress.classList.add('d-none');
+    alert('File import failed: ' + e.message);
+  }
 }
 
 // Editor (shared by photo / URL-fallback / manual)
