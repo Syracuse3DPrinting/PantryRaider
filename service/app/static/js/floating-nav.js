@@ -38,11 +38,13 @@
     var raw = stored || serverPos;
     var edge = normalizeEdge(raw);
 
-    // On a touch kiosk, dock to the bottom by default when nothing is set, so
-    // navigation is always one tap away. An explicit 'off' on this device wins.
+    // On a touch kiosk, dock to the bottom whenever no edge is in effect, so
+    // navigation is always one tap away. Only an explicit per-device 'off'
+    // suppresses it: the server default is 'off' for ordinary browsers, but a
+    // kiosk still needs on-screen navigation, so that default does not block it.
     var kiosk = false;
     try { kiosk = localStorage.getItem('kioskMode') === 'true'; } catch (e) { }
-    if (kiosk && !edge && raw !== 'off' && stored !== 'off') {
+    if (kiosk && !edge && stored !== 'off') {
       edge = 'bottom';
     }
 
