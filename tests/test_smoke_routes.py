@@ -455,3 +455,54 @@ def test_settings_menu_has_logical_groups(client):
     assert 'data-bs-target="#pane-ai"' in r.text
     # Satellite-only Main Server pill is not shown on a normal server.
     assert 'data-bs-target="#pane-upstream"' not in r.text
+
+
+def test_generate_recipe_threads_custom_prompt(client, monkeypatch):
+    """The Cook custom prompt reaches the provider's generate_recipe as an extra
+    instruction (FoodAssistant-2mh9)."""
+    import app.routers.mealie as mealie_router
+
+    captured = {}
+
+    class FakeProvider:
+        async def generate_recipe(self, name, extra_instructions=""):
+            captured["name"] = name
+            captured["extra"] = extra_instructions
+            return {"name": name, "ingredients": [], "instructions": []}
+
+    monkeypatch.setattr(mealie_router, "get_enrich_provider", lambda: FakeProvider())
+    r = client.post("/mealie/recipes/generate",
+                    json={"name": "Chili", "custom_prompt": "extra spicy, no beans"})
+    assert r.status_code == 200
+    assert captured["name"] == "Chili"
+    assert captured["extra"] == "extra spicy, no beans"
+
+    # Omitting the custom prompt yields an empty instruction (default prompt).
+    r = client.post("/mealie/recipes/generate", json={"name": "Soup"})
+    assert r.status_code == 200
+    assert captured["extra"] == ""
+
+
+def test_suggest_llm_folds_in_custom_prompt(client, monkeypatch):
+    """The custom prompt is folded into the suggestion preferences (2mh9)."""
+    import app.routers.mealie as mealie_router
+    from app.services.grocy import GrocyClient
+
+    async def _stock(self):
+        return [{"name": "rice", "days_remaining": 3}]
+
+    monkeypatch.setattr(GrocyClient, "get_full_stock", _stock)
+
+    captured = {}
+
+    class FakeProvider:
+        async def suggest_from_inventory(self, items, limit=8, preferences=""):
+            captured["preferences"] = preferences
+            return [{"name": "Rice Bowl", "uses": ["rice"]}]
+
+    monkeypatch.setattr(mealie_router, "get_enrich_provider", lambda: FakeProvider())
+    r = client.post("/mealie/suggest/llm",
+                    json={"preferences": "quick", "custom_prompt": "no onions"})
+    assert r.status_code == 200
+    assert "quick" in captured["preferences"]
+    assert "no onions" in captured["preferences"]

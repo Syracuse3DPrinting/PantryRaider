@@ -35,9 +35,12 @@ class VisionProvider(ABC):
         """
         return None
 
-    async def generate_recipe(self, name: str) -> dict | None:
+    async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         """Generate a full recipe from a dish name. Returns the same schema as
-        extract_recipe, or None if the provider doesn't support text generation."""
+        extract_recipe, or None if the provider doesn't support text generation.
+
+        extra_instructions is an optional free-text steer from the user (the Cook
+        page custom prompt box); empty means use the default prompt unchanged."""
         return None
 
     async def suggest_from_inventory(self, items: list[str], limit: int = 8,

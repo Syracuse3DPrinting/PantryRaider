@@ -29,6 +29,22 @@
 </div>
 <p class="text-secondary small mb-3" id="cook-meta">Matching recipes against your inventory…</p>
 
+{% if ai_configured %}
+<!-- Optional custom prompt for the AI recipe path (FoodAssistant-2mh9). Hidden
+     behind a click-to-expand control; empty means use the default prompt. -->
+<div class="mb-3">
+  <a class="small text-decoration-none" data-bs-toggle="collapse" href="#aiCustomPromptBox"
+     role="button" aria-expanded="false" aria-controls="aiCustomPromptBox">
+    <i class="bi bi-chat-left-text me-1"></i>Custom AI prompt <span class="text-secondary">(optional)</span>
+  </a>
+  <div class="collapse" id="aiCustomPromptBox">
+    <textarea class="form-control form-control-sm mt-2" id="ai-custom-prompt" rows="2"
+              placeholder="Extra instructions for AI suggestions and generated recipes, e.g. 'lean high-protein, no dairy, sheet-pan only'"></textarea>
+    <div class="form-text">Applies to the AI path (Ask AI and Generate full recipe), not the stock-based suggestions.</div>
+  </div>
+</div>
+{% endif %}
+
 <!-- Preference tuning panel -->
 <div class="cook-prefs-bar mb-3" id="cook-prefs-bar">
   <button class="cook-prefs-toggle" onclick="togglePrefs()">
@@ -798,7 +814,7 @@ async function loadAiSuggestions() {
     const r = await fetch('mealie/suggest/llm', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({preferences: buildPrefsString()}),
+      body: JSON.stringify({preferences: buildPrefsString(), custom_prompt: aiCustomPrompt()}),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
@@ -835,6 +851,12 @@ function escHtml(s) {
   return (s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// The optional custom AI prompt (FoodAssistant-2mh9). Absent element (no AI
+// configured) yields an empty string, so the default prompt is used.
+function aiCustomPrompt() {
+  return (document.getElementById('ai-custom-prompt')?.value || '').trim();
+}
+
 async function openAiPreview(name) {
   aiGeneratedRecipe = null;
   const modal = new bootstrap.Modal(document.getElementById('aiPreviewModal'));
@@ -847,7 +869,7 @@ async function openAiPreview(name) {
   try {
     const r = await fetch('mealie/recipes/generate', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({name}),
+      body: JSON.stringify({name, custom_prompt: aiCustomPrompt()}),
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);

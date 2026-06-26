@@ -102,8 +102,10 @@ class OpenAIProvider(VisionProvider):
             raw = await self._generate(f"{prompt}\n\n--- PAGE TEXT ---\n{page_text}", max_tokens=4096)
         return parse_json_response(raw)
 
-    async def generate_recipe(self, name: str) -> dict | None:
+    async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         prompt = _GENERATE_RECIPE_PROMPT.format(name=name)
+        if extra_instructions.strip():
+            prompt += "\n\nAdditional instructions from the user (follow these):\n" + extra_instructions.strip() + "\n"
         raw = await self._generate(prompt, max_tokens=4096)
         return parse_json_response(raw)
 

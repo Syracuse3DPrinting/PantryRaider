@@ -17,7 +17,7 @@ class NoOpProvider(VisionProvider):
     async def enrich_product(self, info: dict) -> dict | None:
         return None
 
-    async def generate_recipe(self, name: str) -> dict | None:
+    async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         raise NotImplementedError(_MSG)
 
     async def suggest_from_inventory(self, items: list[str], limit: int = 8,

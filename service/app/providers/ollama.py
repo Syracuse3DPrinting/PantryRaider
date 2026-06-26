@@ -88,8 +88,11 @@ class OllamaProvider(VisionProvider):
             response.raise_for_status()
             return json.loads(response.json()["response"])
 
-    async def generate_recipe(self, name: str) -> dict | None:
-        raw = await self._generate_text(_GENERATE_RECIPE_PROMPT.format(name=name))
+    async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
+        prompt = _GENERATE_RECIPE_PROMPT.format(name=name)
+        if extra_instructions.strip():
+            prompt += "\n\nAdditional instructions from the user (follow these):\n" + extra_instructions.strip() + "\n"
+        raw = await self._generate_text(prompt)
         return json.loads(raw)
 
     async def suggest_from_inventory(self, items: list[str], limit: int = 8,

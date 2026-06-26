@@ -324,16 +324,24 @@ async def external_recipe_detail(external_id: str, source: str = "themealdb"):
     return recipe
 
 
+class GenerateRecipePayload(BaseModel):
+    name: str
+    # Optional free-text steer from the Cook page custom prompt box (2mh9).
+    custom_prompt: str = ""
+
+
 @router.post("/recipes/generate")
-async def generate_recipe(name: str = Body(..., embed=True)):
+async def generate_recipe(payload: GenerateRecipePayload):
     """Ask the configured LLM to write a full recipe for the given dish name.
     Returns the same normalized shape as external recipes so the same preview
-    modal and save flow can be reused."""
+    modal and save flow can be reused. An optional custom_prompt is passed to the
+    provider as an extra instruction."""
+    name = payload.name
     if not name.strip():
         raise HTTPException(400, "Dish name is required.")
     provider = get_enrich_provider()
     try:
-        recipe = await provider.generate_recipe(name.strip())
+        recipe = await provider.generate_recipe(name.strip(), extra_instructions=payload.custom_prompt)
     except NotImplementedError:
         raise HTTPException(503, {"detail": "AI provider not configured", "setup_url": "/setup"})
     except Exception as e:
@@ -352,6 +360,8 @@ async def generate_recipe(name: str = Body(..., embed=True)):
 
 class SuggestLLMPayload(BaseModel):
     preferences: str = ""
+    # Optional free-text steer from the Cook page custom prompt box (2mh9).
+    custom_prompt: str = ""
 
 
 @router.post("/suggest/llm")
@@ -370,7 +380,8 @@ async def suggest_llm(payload: SuggestLLMPayload = Body(default_factory=SuggestL
     ordered = sorted(stock, key=lambda s: (s.get("days_remaining") is None,
                                            s.get("days_remaining") or 999))
     item_names = [s["name"] for s in ordered]
-    combined_prefs = ". ".join(p for p in (settings.cook_ai_context, payload.preferences) if p)
+    combined_prefs = ". ".join(
+        p for p in (settings.cook_ai_context, payload.preferences, payload.custom_prompt) if p)
     provider = get_enrich_provider()
     try:
         suggestions = await provider.suggest_from_inventory(

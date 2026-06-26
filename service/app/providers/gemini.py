@@ -173,8 +173,10 @@ class GeminiProvider(VisionProvider):
         response = await self.model.generate_content_async(parts)
         return json.loads(response.text)
 
-    async def generate_recipe(self, name: str) -> dict | None:
+    async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         prompt = _GENERATE_RECIPE_PROMPT.format(name=name)
+        if extra_instructions.strip():
+            prompt += "\n\nAdditional instructions from the user (follow these):\n" + extra_instructions.strip() + "\n"
         response = await self.model.generate_content_async([prompt])
         return json.loads(response.text)
 
