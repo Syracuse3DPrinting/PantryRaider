@@ -1,7 +1,9 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+import httpx
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -14,6 +16,52 @@ from ..services.defaults import apply_defaults
 from ..services.grocy import GrocyClient
 
 router = APIRouter(prefix="/pending", tags=["pending"])
+
+# Forwarding client for the satellite -> main server case (see _forward).
+_fwd_client = httpx.AsyncClient(timeout=20.0)
+
+
+def _upstream() -> Optional[str]:
+    """The main server's base URL if this device is a satellite, else None.
+
+    Pending scans are the inventory owner's data, so they always live on the
+    main server. A satellite keeps no pending rows of its own: it forwards every
+    pending call to the server and shows what the server returns. That way a scan
+    taken on a Pi Remote is immediately visible in the server UI and on every
+    other satellite, and a single Pending list stays the source of truth.
+    """
+    if settings.is_satellite() and settings.remote_server_url and settings.upstream_api_key:
+        return settings.remote_server_url.rstrip("/")
+    return None
+
+
+async def _forward(request: Request, subpath: str) -> Response:
+    """Proxy this pending request to the main server, preserving method/body.
+
+    Authenticated with the satellite's upstream API key, the same key the Grocy/
+    Mealie proxy uses. Returns the server's response verbatim so the browser sees
+    exactly what it would talk to the server directly.
+    """
+    base = _upstream()
+    headers = {"X-API-Key": settings.upstream_api_key}
+    ct = request.headers.get("content-type")
+    if ct:
+        headers["Content-Type"] = ct
+    body = await request.body()
+    try:
+        up = await _fwd_client.request(
+            request.method,
+            f"{base}/pending{subpath}",
+            headers=headers,
+            params=dict(request.query_params),
+            content=body or None,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"detail": f"could not reach the main server: {exc}"}, status_code=502
+        )
+    media = up.headers.get("content-type", "application/json")
+    return Response(content=up.content, status_code=up.status_code, media_type=media)
 
 
 async def _autocheck_shopping(item_name: str) -> None:
@@ -75,12 +123,17 @@ def _row_dict(row: PendingItem) -> dict:
 
 
 @router.post("/scan")
-async def scan_barcode(body: ScanRequest, db: Session = Depends(get_db)):
+async def scan_barcode(body: ScanRequest, request: Request, db: Session = Depends(get_db)):
     """Headless scanner entry point: look up the barcode and queue it as pending.
 
     Unknown barcodes are still queued (lookup_failed=true) so a scan never
     silently disappears: the name can be fixed on the Pending page.
+
+    On a satellite this forwards to the main server, which owns the pending list.
     """
+    if _upstream():
+        return await _forward(request, "/scan")
+
     barcode = body.barcode.strip()
     if not barcode:
         raise HTTPException(400, "Barcode is required")
@@ -122,18 +175,24 @@ async def scan_barcode(body: ScanRequest, db: Session = Depends(get_db)):
 
 
 @router.get("/")
-def list_pending(db: Session = Depends(get_db)):
+async def list_pending(request: Request, db: Session = Depends(get_db)):
+    if _upstream():
+        return await _forward(request, "/")
     rows = db.query(PendingItem).order_by(PendingItem.created_at.desc()).all()
     return {"items": [_row_dict(r) for r in rows]}
 
 
 @router.get("/count")
-def pending_count(db: Session = Depends(get_db)):
+async def pending_count(request: Request, db: Session = Depends(get_db)):
+    if _upstream():
+        return await _forward(request, "/count")
     return {"count": db.query(PendingItem).count()}
 
 
 @router.patch("/{item_id}")
-def update_pending(item_id: int, body: PendingUpdate, db: Session = Depends(get_db)):
+async def update_pending(item_id: int, body: PendingUpdate, request: Request, db: Session = Depends(get_db)):
+    if _upstream():
+        return await _forward(request, f"/{item_id}")
     row = db.query(PendingItem).filter(PendingItem.id == item_id).first()
     if not row:
         raise HTTPException(404, "Pending item not found")
@@ -149,7 +208,9 @@ def update_pending(item_id: int, body: PendingUpdate, db: Session = Depends(get_
 
 
 @router.delete("/{item_id}")
-def delete_pending(item_id: int, db: Session = Depends(get_db)):
+async def delete_pending(item_id: int, request: Request, db: Session = Depends(get_db)):
+    if _upstream():
+        return await _forward(request, f"/{item_id}")
     row = db.query(PendingItem).filter(PendingItem.id == item_id).first()
     if not row:
         raise HTTPException(404, "Pending item not found")
@@ -159,8 +220,14 @@ def delete_pending(item_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/commit")
-async def commit_pending(body: CommitRequest, db: Session = Depends(get_db)):
-    """Import pending items into Grocy; successfully imported rows are removed."""
+async def commit_pending(body: CommitRequest, request: Request, db: Session = Depends(get_db)):
+    """Import pending items into Grocy; successfully imported rows are removed.
+
+    On a satellite this forwards to the main server, which holds the pending rows
+    and imports them into its own Grocy directly (no double proxy hop).
+    """
+    if _upstream():
+        return await _forward(request, "/commit")
     q = db.query(PendingItem)
     if body.ids:
         q = q.filter(PendingItem.id.in_(body.ids))
