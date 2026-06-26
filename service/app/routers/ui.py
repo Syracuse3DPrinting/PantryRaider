@@ -134,6 +134,16 @@ async def cook_page(request: Request):
     })
 
 
+@router.get("/current-recipe", response_class=HTMLResponse)
+async def current_recipe_page(request: Request):
+    return templates.TemplateResponse(request, "current-recipe.html", {
+        "request": request,
+        "active": "current_recipe",
+        "mealie_configured": settings.mealie_configured(),
+        "mealie_url": settings.mealie_link_url(),
+    })
+
+
 @router.get("/mealplan", response_class=HTMLResponse)
 async def mealplan_page(request: Request):
     return templates.TemplateResponse(request, "mealplan.html", {

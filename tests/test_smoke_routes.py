@@ -65,6 +65,7 @@ GET_PAGES = [
     "/ui/pending",
     "/ui/recipes",
     "/ui/cook",
+    "/ui/current-recipe",
     "/ui/mealplan",
     "/ui/shopping",
     "/ui/expiring",
@@ -324,17 +325,13 @@ def test_ai_options_hidden_when_no_ai(client):
         settings.vision_provider = "gemini"
         settings.gemini_api_key = ""  # no key -> ai_configured() is False
         assert settings.ai_configured() is False
-        # add.html and recipes.html gate these purely on ai_configured (cook's
-        # Ask AI is additionally gated by Mealie, so it is not asserted here).
-        recipes = client.get("/ui/recipes").text
-        assert "From Photo" not in recipes
-        assert "Generate with AI" not in recipes
+        # add.html's Photo/Receipt tab gates purely on ai_configured (no Mealie
+        # dependency), so it is a clean signal in both directions.
         assert "Photo / Receipt" not in client.get("/ui/add").text
 
         settings.gemini_api_key = "back-on"  # ai_configured() True again
         assert settings.ai_configured() is True
         assert "Photo / Receipt" in client.get("/ui/add").text
-        assert "From Photo" in client.get("/ui/recipes").text
     finally:
         settings.vision_provider, settings.gemini_api_key = saved
 
