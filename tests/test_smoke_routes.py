@@ -325,6 +325,58 @@ def test_floating_nav_renders_on_page(client):
     assert 'data-position="top-right"' in r.text
 
 
+def test_current_recipe_endpoints(client):
+    """Set / get / scale / clear the active recipe over HTTP (FoodAssistant-879b)."""
+    # Empty to start (other tests may have left state, so clear first).
+    client.delete("/current-recipe")
+    r = client.get("/current-recipe")
+    assert r.status_code == 200
+    assert r.json()["recipe"] is None
+
+    r = client.post("/current-recipe", json={
+        "title": "Stew", "source": "ai", "servings": 4,
+        "ingredients": [{"name": "Carrot", "quantity": 3, "unit": "ea"}],
+        "steps": ["Chop", "Simmer"],
+    })
+    assert r.status_code == 200
+    assert r.json()["recipe"]["title"] == "Stew"
+
+    r = client.post("/current-recipe/scale", json={"factor": 2})
+    assert r.status_code == 200
+    body = r.json()["recipe"]
+    assert body["servings_scale"] == 2
+    assert body["ingredients"][0]["scaled_quantity"] == 6.0
+
+    r = client.delete("/current-recipe")
+    assert r.status_code == 200
+    assert client.get("/current-recipe").json()["recipe"] is None
+
+    # Scaling with nothing loaded is a 404.
+    assert client.post("/current-recipe/scale", json={"factor": 2}).status_code == 404
+
+
+def test_timer_endpoints(client):
+    """Create / list / get / cancel timers over HTTP (FoodAssistant-y0vh)."""
+    r = client.post("/timers", json={"label": "Pasta", "seconds": 600})
+    assert r.status_code == 200
+    tid = r.json()["timer"]["id"]
+    assert r.json()["timer"]["running"] is True
+
+    r = client.get("/timers")
+    assert r.status_code == 200
+    assert any(t["id"] == tid for t in r.json()["timers"])
+
+    r = client.get(f"/timers/{tid}")
+    assert r.status_code == 200
+    assert r.json()["timer"]["label"] == "Pasta"
+
+    assert client.delete(f"/timers/{tid}").status_code == 200
+    assert client.get(f"/timers/{tid}").status_code == 404
+
+    # A non-positive duration is rejected.
+    assert client.post("/timers", json={"label": "x", "seconds": 0}).status_code == 400
+
+
 def test_settings_menu_has_logical_groups(client):
     """The revamped settings menu renders its section headers and the default
     non-satellite Services pills (FoodAssistant-y9nd)."""
