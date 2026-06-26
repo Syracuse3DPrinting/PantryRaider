@@ -767,6 +767,13 @@
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
         {% set rem_ok = s.remote_server_url and s.upstream_api_key %}
         <div class="nav flex-column nav-pills gap-1" role="tablist">
+          {# Group header style, reused below so the menu reads as logical sections. #}
+          {% macro menu_header(label) %}
+          <div class="nav-link text-secondary px-2 mt-2 mb-0" style="font-size:0.7rem;letter-spacing:.06em;text-transform:uppercase;">{{ label }}</div>
+          {% endmacro %}
+
+          {# --- Services: the backends this device talks to --------------- #}
+          {{ menu_header('Services') }}
           {% if features.satellite %}
           <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-upstream" type="button">
             <i class="bi bi-hdd-network me-2"></i>Main Server
@@ -786,6 +793,9 @@
             <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if rec_ok else 'Optional' }}"></i>
           </button>
           {% endif %}
+
+          {# --- App: how the interface looks and who can reach it --------- #}
+          {{ menu_header('App') }}
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
             <i class="bi bi-layout-sidebar me-2"></i>Interface
           </button>
@@ -793,22 +803,21 @@
             <i class="bi bi-shield-lock me-2"></i>Security
             <i class="bi bi-{{ 'check-circle-fill text-success' if sec_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if sec_ok else 'Password required' }}"></i>
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-data" type="button">
-            <i class="bi bi-cloud-arrow-down me-2"></i>Backup &amp; Updates
-          </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-tunnel" type="button">
             <i class="bi bi-globe me-2"></i>Remote Access
+          </button>
+
+          {# --- Devices & hardware: scanners, satellites, the appliance --- #}
+          {{ menu_header('Devices & Hardware') }}
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-hardware" type="button">
+            <i class="bi bi-upc-scan me-2"></i>Hardware
           </button>
           {% if not features.satellite %}
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-devices" type="button" onclick="loadDevices()">
             <i class="bi bi-hdd-stack me-2"></i>Satellite Devices
           </button>
           {% endif %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-hardware" type="button">
-            <i class="bi bi-upc-scan me-2"></i>Hardware
-          </button>
           {% if is_pi %}
-          <div class="nav-link text-secondary px-2 mt-2 mb-0" style="font-size:0.7rem;letter-spacing:.06em;text-transform:uppercase;">Appliance</div>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-display" type="button" onclick="loadDisplayStatus(); loadHardwareStatus()">
             <i class="bi bi-display me-2"></i>Display
           </button>
@@ -819,6 +828,12 @@
             <i class="bi bi-wifi me-2"></i>Network
           </button>
           {% endif %}
+
+          {# --- System: maintenance that is not day-to-day config --------- #}
+          {{ menu_header('System') }}
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-data" type="button">
+            <i class="bi bi-cloud-arrow-down me-2"></i>Backup &amp; Updates
+          </button>
         </div>
         <button class="btn btn-primary w-100 mt-3" onclick="saveAll()" id="saveBtn">
           <i class="bi bi-check-lg me-1"></i>Save All

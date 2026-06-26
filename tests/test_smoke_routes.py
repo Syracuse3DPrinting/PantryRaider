@@ -285,3 +285,17 @@ def test_floating_nav_renders_on_page(client):
     assert r.status_code == 200
     assert 'id="floatNav"' in r.text
     assert 'data-position="top-right"' in r.text
+
+
+def test_settings_menu_has_logical_groups(client):
+    """The revamped settings menu renders its section headers and the default
+    non-satellite Services pills (FoodAssistant-y9nd)."""
+    r = client.get("/setup")
+    assert r.status_code == 200
+    for header in ("Services", "App", "Devices &amp; Hardware", "System"):
+        assert header in r.text, f"missing menu group: {header}"
+    # Non-satellite: the backend service pills are present.
+    assert 'data-bs-target="#pane-inventory"' in r.text
+    assert 'data-bs-target="#pane-ai"' in r.text
+    # Satellite-only Main Server pill is not shown on a normal server.
+    assert 'data-bs-target="#pane-upstream"' not in r.text
