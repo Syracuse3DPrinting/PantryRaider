@@ -71,6 +71,21 @@ THEME_PALETTES: dict[str, dict[str, str]] = {
         "danger": "#fe4450", "info": "#03edf9", "accent": "#b893ce",
         "timer": "#36f9c7", "muted": "#241b2f",
     },
+    "solarized": {
+        "primary": "#268bd2", "success": "#859900", "warn": "#b58900",
+        "danger": "#dc322f", "info": "#6c71c4", "accent": "#2aa198",
+        "timer": "#2aa198", "muted": "#93a1a1",
+    },
+    "midnight": {
+        "primary": "#4f9dff", "success": "#34d399", "warn": "#fbbf24",
+        "danger": "#f87171", "info": "#a78bfa", "accent": "#38bdf8",
+        "timer": "#34d399", "muted": "#1f2937",
+    },
+    "forest": {
+        "primary": "#5fb872", "success": "#9ccc5a", "warn": "#e0a93b",
+        "danger": "#c2502e", "info": "#6fae9b", "accent": "#8fbf9f",
+        "timer": "#9ccc5a", "muted": "#2a4533",
+    },
 }
 
 
