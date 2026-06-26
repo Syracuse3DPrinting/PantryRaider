@@ -1,0 +1,100 @@
+"""Map the active web UI theme onto Stream Deck key colours.
+
+The deck should look like the app it drives (FoodAssistant-gxl). Each action
+has a semantic role (a status count, a trigger, a nav key, a timer, and so on);
+each UI theme defines a small palette keyed by those roles. ``themed_color``
+looks up an action's role in the active theme's palette and returns a colour,
+falling back to the action's own default when the theme or role is unknown.
+
+The default ``dark`` theme is intentionally absent from ``THEME_PALETTES`` so it
+keeps the hand-tuned per-action colours shipped in actions.py; only the other
+themes recolour the deck to match their accent family. Kept free of any
+hardware or Pillow import so it is cheap to unit-test.
+"""
+from __future__ import annotations
+
+# Semantic role for each built-in action. Dynamic action names that carry a
+# numeric suffix (ha_1..ha_5, timer_1..timer_3, keypad_*) are matched by prefix
+# in role_of(), so only the base names need listing here.
+ROLE_BY_ACTION: dict[str, str] = {
+    "expiring": "warn",
+    "pending": "primary",
+    "commit": "success",
+    "add": "accent",
+    "inventory": "accent",
+    "cook": "accent",
+    "recipes": "accent",
+    "mealplan": "accent",
+    "shopping": "accent",
+    "defaults": "accent",
+    "brightness": "muted",
+    "page_next": "muted",
+    "page_prev": "muted",
+    "pin": "primary",
+    "weather": "info",
+    "forecast": "info",
+}
+
+# Prefix -> role for the suffixed action families.
+_ROLE_BY_PREFIX: tuple[tuple[str, str], ...] = (
+    ("timer_", "timer"),
+    ("ha_", "accent"),
+    ("keypad_", "muted"),
+)
+
+# Accent palettes echoing each vendored Bootswatch (or native) theme. Keys are
+# the roles in ROLE_BY_ACTION. "dark" is omitted on purpose so it keeps the
+# default deck colours; everything else recolours to match the web theme.
+THEME_PALETTES: dict[str, dict[str, str]] = {
+    "light": {
+        "primary": "#0d6efd", "success": "#198754", "warn": "#fd7e14",
+        "danger": "#dc3545", "info": "#0dcaf0", "accent": "#6f42c1",
+        "timer": "#20c997", "muted": "#6c757d",
+    },
+    "darkly": {
+        "primary": "#375a7f", "success": "#00bc8c", "warn": "#f39c12",
+        "danger": "#e74c3c", "info": "#3498db", "accent": "#2c3e50",
+        "timer": "#00bc8c", "muted": "#444444",
+    },
+    "cyborg": {
+        "primary": "#2a9fd6", "success": "#77b300", "warn": "#ff8800",
+        "danger": "#cc0000", "info": "#9933cc", "accent": "#2a9fd6",
+        "timer": "#77b300", "muted": "#282828",
+    },
+    "flatly": {
+        "primary": "#2c3e50", "success": "#18bc9c", "warn": "#f39c12",
+        "danger": "#e74c3c", "info": "#3498db", "accent": "#18bc9c",
+        "timer": "#18bc9c", "muted": "#95a5a6",
+    },
+    "synthwave": {
+        "primary": "#f92aad", "success": "#36f9c7", "warn": "#ff8b39",
+        "danger": "#fe4450", "info": "#03edf9", "accent": "#b893ce",
+        "timer": "#36f9c7", "muted": "#241b2f",
+    },
+}
+
+
+def role_of(action_name: str) -> str | None:
+    """Semantic role for an action name, or None if it has no themed role."""
+    if action_name in ROLE_BY_ACTION:
+        return ROLE_BY_ACTION[action_name]
+    for prefix, role in _ROLE_BY_PREFIX:
+        if action_name.startswith(prefix):
+            return role
+    return None
+
+
+def themed_color(action_name: str, fallback: str, theme: str) -> str:
+    """Colour for ``action_name`` under ``theme``, or ``fallback``.
+
+    Falls back to the action's own colour when the theme is the default/unknown
+    or the action has no themed role, so callers can pass ``spec.color`` and get
+    the existing behaviour whenever theming does not apply.
+    """
+    palette = THEME_PALETTES.get(theme)
+    if not palette:
+        return fallback
+    role = role_of(action_name)
+    if role is None:
+        return fallback
+    return palette.get(role, fallback)

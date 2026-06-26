@@ -13,7 +13,7 @@ import asyncio
 
 import pytest
 
-from foodassistant_streamdeck import actions, config, layout, render
+from foodassistant_streamdeck import actions, config, layout, render, theme
 
 
 # -- config ----------------------------------------------------------------
@@ -1365,3 +1365,41 @@ def test_watchdog_retries_until_deck_replugged():
     assert ctrl._deck_live is True
     assert deck.open_calls >= 2
     loop.close()
+
+
+# -- theme palette (FoodAssistant-gxl) ------------------------------------
+
+def test_theme_default_keeps_action_colors():
+    for name, spec in actions.ACTIONS.items():
+        assert theme.themed_color(name, spec.color, "dark") == spec.color
+
+
+def test_theme_unknown_falls_back():
+    assert theme.themed_color("pending", "#123456", "no-such-theme") == "#123456"
+
+
+def test_theme_recolors_by_role():
+    c = theme.themed_color("commit", "#000000", "synthwave")
+    assert c == theme.THEME_PALETTES["synthwave"]["success"]
+    assert theme.themed_color("pending", "#000000", "darkly") == theme.THEME_PALETTES["darkly"]["primary"]
+
+
+def test_theme_role_of_suffixed_actions():
+    assert theme.role_of("timer_2") == "timer"
+    assert theme.role_of("ha_3") == "accent"
+    assert theme.role_of("keypad_5") == "muted"
+    assert theme.role_of("nonexistent") is None
+
+
+def test_theme_every_palette_covers_every_role():
+    roles = set(theme.ROLE_BY_ACTION.values()) | {"timer", "accent", "muted"}
+    for name, palette in theme.THEME_PALETTES.items():
+        missing = roles - set(palette)
+        assert not missing, f"{name} palette missing roles: {missing}"
+
+
+def test_config_loads_theme(tmp_path):
+    p = tmp_path / "config.toml"
+    p.write_text('theme = "cyborg"\n')
+    cfg = config.load(p)
+    assert cfg.theme == "cyborg"

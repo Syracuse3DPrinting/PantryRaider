@@ -424,6 +424,12 @@ class ThemePayload(BaseModel):
 @router.post("/theme")
 async def save_theme(payload: ThemePayload):
     settings.save({"ui_theme": payload.ui_theme})
+    # Recolour an attached Stream Deck to match the new theme (gxl). Best-effort
+    # and Pi-only: pushes the theme into the controller config.toml via the
+    # bridge so the running deck updates without a manual Stream Deck save.
+    if is_raspberry_pi() and settings.has_streamdeck:
+        from ..services.satellite import _push_streamdeck_settings
+        _push_streamdeck_settings()
     return {"ok": True}
 
 
@@ -1044,9 +1050,12 @@ async def streamdeck_config_set(request: Request):
     if _HOST_BRIDGE:
         try:
             payload = await request.json()
-            if settings.is_satellite() and isinstance(payload.get("config"), dict):
-                payload["config"]["weather_location"] = settings.streamdeck_weather_location
-                payload["config"]["weather_units"] = settings.streamdeck_weather_units
+            if isinstance(payload.get("config"), dict):
+                # Stamp the active web UI theme so the deck follows it (gxl).
+                payload["config"]["theme"] = settings.ui_theme
+                if settings.is_satellite():
+                    payload["config"]["weather_location"] = settings.streamdeck_weather_location
+                    payload["config"]["weather_units"] = settings.streamdeck_weather_units
             async with httpx.AsyncClient(timeout=3.0) as c:
                 r = await c.post(f"{_HOST_BRIDGE}/streamdeck/config", json=payload)
                 return JSONResponse(status_code=r.status_code, content=r.json())

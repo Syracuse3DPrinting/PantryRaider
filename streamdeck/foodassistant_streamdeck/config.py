@@ -39,6 +39,10 @@ class Config:
     # values in ALLOWED_ROTATIONS are accepted; anything else falls back to 0.
     rotation: int = 0
     keys: list[str] = field(default_factory=lambda: list(DEFAULT_ORDER))
+    # Active web UI theme name (FoodAssistant-gxl). Recolours the key faces to
+    # match the app theme; empty or "dark" keeps the default per-action colours.
+    # Stamped into config.toml by the app, so the deck follows the server theme.
+    theme: str = "dark"
     # Weather widget. Uses wttr.in (no API key needed).
     # location: city name, zip, or "lat,lon". Empty = auto-detect from device IP.
     # units: "f" (Fahrenheit) or "c" (Celsius).
@@ -133,7 +137,7 @@ def load(path: str | os.PathLike | None = None) -> Config:
 
 def _apply(cfg: Config, data: dict) -> None:
     for name in ("base_url", "api_key", "kiosk_cdp_url", "weather_location", "weather_units",
-                 "ha_base_url", "ha_token"):
+                 "theme", "ha_base_url", "ha_token"):
         if isinstance(data.get(name), str):
             setattr(cfg, name, data[name])
     for name in ("brightness", "poll_seconds", "soon_days", "rotation",

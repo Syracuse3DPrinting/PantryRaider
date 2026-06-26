@@ -18,7 +18,7 @@ from typing import Optional
 
 import httpx
 
-from . import actions, layout, render
+from . import actions, layout, render, theme
 from . import config as config_mod
 from .actions import (
     KEYPAD_CANCEL,
@@ -267,6 +267,10 @@ class Controller:
             if spec is None:
                 image = render.blank_key(*self._key_size())
             else:
+                # Recolour the key's base to match the active web UI theme; the
+                # dynamic state colours (timer running, HA on/off) are computed
+                # from this base, so theming flows through them (gxl).
+                base_color = theme.themed_color(spec.name, spec.color, self.config.theme)
                 if spec.kind == "keypad":
                     label, color = self._keypad_face(spec)
                     alert = False
@@ -275,25 +279,25 @@ class Controller:
                     t = self.timers.get(spec.name)
                     label = t.label(spec.label) if t else spec.label
                     color = (
-                        t.color(spec.color, self._blink_phase) if t else spec.color
+                        t.color(base_color, self._blink_phase) if t else base_color
                     )
                     alert = t.alert_active() if t else False
                     count = None
                 elif spec.kind == "weather":
                     w = self.override_weather.get(spec.name, self.weather)
                     label = w.label(spec.label)
-                    color = w.color(spec.color)
+                    color = w.color(base_color)
                     alert = False
                     count = None
                 elif spec.kind == "forecast":
                     label = self.weather.forecast_label(spec.label)
-                    color = self.weather.forecast_color(spec.color)
+                    color = self.weather.forecast_color(base_color)
                     alert = False
                     count = None
                 elif spec.kind == "ha_entity":
                     ha = self.ha_entities.get(spec.name)
                     label = ha.label(spec.label) if ha else spec.label
-                    color = ha.color(spec.color) if ha else spec.color
+                    color = ha.color(base_color) if ha else base_color
                     alert = False
                     count = None
                 else:
@@ -303,7 +307,7 @@ class Controller:
                         else None
                     )
                     label = spec.label
-                    color = spec.color
+                    color = base_color
                     alert = bool(count)
                 image = render.render_key(
                     *self._key_size(),

@@ -327,21 +327,22 @@ def test_streamdeck_weather_fields_are_pulled():
     assert "streamdeck_weather_units" in SATELLITE_PULL_FIELDS
 
 
-def test_merge_streamdeck_weather_overlays_only_weather():
+def test_merge_streamdeck_settings_overlays_only_weather_and_theme():
     from app.services import satellite as sat
 
     base = {"rotation": 90, "brightness": 50, "keys": ["a", "b"],
-            "weather_location": "old", "weather_units": "c"}
-    merged = sat._merge_streamdeck_weather(base, "Boston", "f")
-    # Weather overlaid, everything else preserved, original not mutated.
+            "weather_location": "old", "weather_units": "c", "theme": "dark"}
+    merged = sat._merge_streamdeck_settings(base, "Boston", "f", "synthwave")
+    # Weather + theme overlaid, everything else preserved, original not mutated.
     assert merged["weather_location"] == "Boston"
     assert merged["weather_units"] == "f"
+    assert merged["theme"] == "synthwave"
     assert merged["rotation"] == 90
     assert merged["keys"] == ["a", "b"]
     assert base["weather_location"] == "old"
 
 
-def test_push_streamdeck_weather_skipped_off_pi(monkeypatch):
+def test_push_streamdeck_settings_skipped_off_pi(monkeypatch):
     from app.services import satellite as sat
 
     # Off a Pi (or with no deck) the push is a no-op and never touches the
@@ -355,8 +356,31 @@ def test_push_streamdeck_weather_skipped_off_pi(monkeypatch):
 
     monkeypatch.setattr(sat.httpx, "get", _should_not_run)
     monkeypatch.setattr(sat.httpx, "post", _should_not_run)
-    assert sat._push_streamdeck_weather() is False
+    assert sat._push_streamdeck_settings() is False
     assert called["hit"] is False
+
+
+def test_sync_pushes_streamdeck_when_theme_pulled(satellite_mode, monkeypatch):
+    """A pulled UI theme change triggers the controller config.toml push so the
+    deck recolours to match the server (gxl)."""
+    from app.services import satellite as sat
+
+    payload = {
+        "ok": True,
+        "config": {"ui_theme": "synthwave"},
+        "expiry_defaults": [],
+        "command": None,
+    }
+    pushes = []
+    monkeypatch.setattr(sat, "_push_streamdeck_settings", lambda *a, **k: pushes.append(True) or True)
+    with patch.object(sat.httpx, "get", return_value=_FakeResponse(200, payload)), \
+            patch.object(sat, "_apply_defaults", return_value=0), \
+            patch("app.dependencies.reset_providers"):
+        out = sat.sync_from_upstream()
+
+    assert out["ok"] is True
+    assert settings.ui_theme == "synthwave"
+    assert pushes == [True]
 
 
 def test_sync_pushes_weather_when_pulled(satellite_mode, monkeypatch):
@@ -374,7 +398,7 @@ def test_sync_pushes_weather_when_pulled(satellite_mode, monkeypatch):
         "command": None,
     }
     pushes = []
-    monkeypatch.setattr(sat, "_push_streamdeck_weather", lambda *a, **k: pushes.append(True) or True)
+    monkeypatch.setattr(sat, "_push_streamdeck_settings", lambda *a, **k: pushes.append(True) or True)
     with patch.object(sat.httpx, "get", return_value=_FakeResponse(200, payload)), \
             patch.object(sat, "_apply_defaults", return_value=0), \
             patch("app.dependencies.reset_providers"):
