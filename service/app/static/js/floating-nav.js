@@ -1,38 +1,74 @@
-// On-screen floating navigation menu (FoodAssistant-bzuu).
+// On-screen floating navigation menu (FoodAssistant-bzuu, FoodAssistant-76mw).
 //
-// Places a compact column of nav icons in a screen corner. The corner is the
+// Places a compact set of nav icons in a screen corner. The corner is the
 // server default (data-position) unless the user has dragged it on this device,
 // in which case a localStorage override wins (position is inherently per-device:
 // a wall kiosk and a phone want different placement). Dragging the handle moves
 // the menu; on release it snaps to the nearest corner and the choice is saved.
 //
+// Orientation (vertical column vs horizontal row) is also per-device: the server
+// default (data-orientation) is the baseline, and a per-device localStorage
+// override beats it so a tall phone and a wide display can differ.
+//
+// When the menu is shown it pads the page content on the docked edge so the
+// floating icons never sit on top of the page text.
+//
 // Auto-hides when a Stream Deck is connected if that option is set, since the
 // deck already provides navigation.
 (function () {
   var CORNERS = ['top-left', 'top-right', 'bottom-left', 'bottom-right'];
+  var ORIENTATIONS = ['vertical', 'horizontal'];
   var STORE_KEY = 'floatNavPosition';
+  var ORIENT_KEY = 'floatNavOrientation';
+  var GAP_PX = 12;  // breathing room between the menu and the content it pads
 
   function start() {
     var nav = document.getElementById('floatNav');
     if (!nav) return;
 
     var serverPos = nav.getAttribute('data-position') || 'off';
+    var serverOrient = nav.getAttribute('data-orientation') || 'vertical';
     var autohide = nav.getAttribute('data-autohide-streamdeck') === '1';
     var hasDeck = nav.getAttribute('data-has-streamdeck') === '1';
 
-    // Per-device override beats the server default.
+    // Per-device overrides beat the server defaults.
     var stored = '';
     try { stored = localStorage.getItem(STORE_KEY) || ''; } catch (e) { }
     var pos = CORNERS.indexOf(stored) !== -1 || stored === 'off' ? stored : serverPos;
 
+    var storedOrient = '';
+    try { storedOrient = localStorage.getItem(ORIENT_KEY) || ''; } catch (e) { }
+    var orient = ORIENTATIONS.indexOf(storedOrient) !== -1 ? storedOrient : serverOrient;
+
     if (pos === 'off' || (autohide && hasDeck)) {
       nav.classList.add('d-none');
+      clearPadding();
       return;
     }
-    applyCorner(nav, CORNERS.indexOf(pos) !== -1 ? pos : 'top-right');
+    applyOrientation(nav, orient);
+    var corner = CORNERS.indexOf(pos) !== -1 ? pos : 'top-right';
+    applyCorner(nav, corner);
     nav.classList.remove('d-none');
 
+    padContent(nav, corner, orient);
     wireDrag(nav);
+
+    // The menu shape changes the padding; recompute on resize.
+    window.addEventListener('resize', function () {
+      padContent(nav, currentCorner(nav) || corner, currentOrientation(nav));
+    });
+  }
+
+  function applyOrientation(nav, orient) {
+    if (orient === 'horizontal') {
+      nav.classList.add('float-nav-horizontal');
+    } else {
+      nav.classList.remove('float-nav-horizontal');
+    }
+  }
+
+  function currentOrientation(nav) {
+    return nav.classList.contains('float-nav-horizontal') ? 'horizontal' : 'vertical';
   }
 
   function applyCorner(nav, corner) {
@@ -42,6 +78,39 @@
     nav.classList.add('float-nav-pos-' + corner);
     // Clear any inline offsets left over from a drag.
     nav.style.top = nav.style.left = nav.style.right = nav.style.bottom = '';
+  }
+
+  function currentCorner(nav) {
+    for (var i = 0; i < CORNERS.length; i++) {
+      if (nav.classList.contains('float-nav-pos-' + CORNERS[i])) return CORNERS[i];
+    }
+    return null;
+  }
+
+  // Pad the page content so the docked menu does not overlap it. A vertical
+  // column hugs a left/right edge, so we pad that side by the menu width; a
+  // horizontal row hugs a top/bottom edge, so we pad that side by its height.
+  function padContent(nav, corner, orient) {
+    var content = document.getElementById('pageContent');
+    if (!content) return;
+    clearPadding();
+    var rect = nav.getBoundingClientRect();
+    if (orient === 'horizontal') {
+      var v = (corner.indexOf('top') === 0) ? 'paddingTop' : 'paddingBottom';
+      content.style[v] = Math.ceil(rect.height + GAP_PX) + 'px';
+    } else {
+      var h = (corner.indexOf('left') !== -1) ? 'paddingLeft' : 'paddingRight';
+      content.style[h] = Math.ceil(rect.width + GAP_PX) + 'px';
+    }
+  }
+
+  function clearPadding() {
+    var content = document.getElementById('pageContent');
+    if (!content) return;
+    content.style.paddingTop = '';
+    content.style.paddingBottom = '';
+    content.style.paddingLeft = '';
+    content.style.paddingRight = '';
   }
 
   function nearestCorner(cx, cy) {
@@ -85,6 +154,7 @@
       var corner = nearestCorner(rect.left + rect.width / 2, rect.top + rect.height / 2);
       applyCorner(nav, corner);
       try { localStorage.setItem(STORE_KEY, corner); } catch (err) { }
+      padContent(nav, corner, currentOrientation(nav));
     }
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', end);

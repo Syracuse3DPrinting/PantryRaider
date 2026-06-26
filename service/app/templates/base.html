@@ -81,6 +81,10 @@
       touch-action: none;
     }
     .float-nav.dragging { opacity: 0.75; transition: none; }
+    /* Horizontal orientation lays the icons out in a row instead of a column
+       (FoodAssistant-76mw), for wide displays where a tall column wastes space. */
+    .float-nav-horizontal { flex-direction: row; align-items: center; }
+    .float-nav-horizontal .float-nav-handle { padding: 0 0.1rem; }
     .float-nav-pos-top-left     { top: 70px;  left: 0.75rem; }
     .float-nav-pos-top-right    { top: 70px;  right: 0.75rem; }
     .float-nav-pos-bottom-left  { bottom: 0.75rem; left: 0.75rem; }
@@ -190,6 +194,7 @@
        option is set. -->
   <div id="floatNav" class="float-nav d-none"
        data-position="{{ floating_nav_position }}"
+       data-orientation="{{ floating_nav_orientation }}"
        data-autohide-streamdeck="{{ '1' if floating_nav_autohide_streamdeck else '0' }}"
        data-has-streamdeck="{{ '1' if has_streamdeck else '0' }}">
     <div class="float-nav-handle" title="Drag to move"><i class="bi bi-grip-vertical"></i></div>
@@ -237,7 +242,7 @@
     <button type="button" class="btn-close ms-auto" data-bs-dismiss="alert"></button>
   </div>
   {% endif %}
-  <div class="container-fluid px-4" {% if pin_readonly %}style="margin-top:3rem"{% endif %}>
+  <div class="container-fluid px-4" id="pageContent" {% if pin_readonly %}style="margin-top:3rem"{% endif %}>
     {% if message %}
     <div class="flash">
       <div class="alert alert-{{ message_type or 'success' }} alert-dismissible fade show" role="alert">

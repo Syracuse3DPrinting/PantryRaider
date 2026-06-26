@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.7"
+APP_VERSION = "0.6.8"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -71,6 +71,7 @@ _DEFAULT_DISPLAY_TYPE = "generic"
 # "off" hides it; the others dock it to a screen corner. A per-device drag
 # overrides this default via localStorage.
 FLOATING_NAV_POSITIONS = ("off", "top-left", "top-right", "bottom-left", "bottom-right")
+FLOATING_NAV_ORIENTATIONS = ("vertical", "horizontal")
 
 # Deployment modes chosen on the first wizard step. They steer the rest of
 # setup and (on a Pi) what the first-boot provisioner installs:
@@ -151,7 +152,7 @@ _SAVEABLE = [
     "has_streamdeck", "streamdeck_key_count", "display_touch",
     "display_idle_timeout", "streamdeck_idle_timeout", "streamdeck_key_overrides",
     "streamdeck_weather_location", "streamdeck_weather_units",
-    "floating_nav_position", "floating_nav_autohide_streamdeck",
+    "floating_nav_position", "floating_nav_orientation", "floating_nav_autohide_streamdeck",
     "deployment_mode", "remote_server_url", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
     "secret_key", "auth_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
@@ -471,9 +472,13 @@ class Settings(BaseSettings):
     # On-screen floating navigation menu (FoodAssistant-bzuu). position is the
     # server default ("off" hides it; otherwise a corner: top-left, top-right,
     # bottom-left, bottom-right). A drag on the device overrides it per-device
-    # via localStorage. floating_nav_autohide_streamdeck hides it when a Stream
-    # Deck is connected, since the deck already provides navigation.
+    # via localStorage. orientation is "vertical" (a column) or "horizontal" (a
+    # row) and is also overridable per-device (FoodAssistant-76mw), since a tall
+    # phone and a wide wall display want different shapes.
+    # floating_nav_autohide_streamdeck hides it when a Stream Deck is connected,
+    # since the deck already provides navigation.
     floating_nav_position: str = "off"
+    floating_nav_orientation: str = "vertical"
     floating_nav_autohide_streamdeck: bool = False
 
     # Stream Deck weather widget. Held at the app level (not just in the

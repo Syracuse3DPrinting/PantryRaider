@@ -1328,7 +1328,8 @@
             <div class="section-title"><i class="bi bi-grip-vertical text-success"></i> On-screen navigation menu</div>
             <p class="text-secondary small">An optional floating menu of nav icons docked to a screen corner, handy
               for touch screens. Drag its handle to reposition it; the spot you drop it on is remembered for that
-              device. The setting below is the default for devices that haven't been dragged.</p>
+              device. The settings below are the defaults for devices that haven't been customised. Orientation is
+              applied to this device right away and remembered here.</p>
             <div class="mb-3">
               <label class="form-label" for="floating_nav_position">Default position</label>
               <select class="form-select form-select-sm" id="floating_nav_position" style="max-width:260px">
@@ -1337,6 +1338,13 @@
                 <option value="top-right"    {{ 'selected' if s.floating_nav_position == 'top-right' else '' }}>Top right</option>
                 <option value="bottom-left"  {{ 'selected' if s.floating_nav_position == 'bottom-left' else '' }}>Bottom left</option>
                 <option value="bottom-right" {{ 'selected' if s.floating_nav_position == 'bottom-right' else '' }}>Bottom right</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="floating_nav_orientation">Orientation (this device)</label>
+              <select class="form-select form-select-sm" id="floating_nav_orientation" style="max-width:260px">
+                <option value="vertical"   {{ 'selected' if s.floating_nav_orientation == 'vertical' else '' }}>Vertical (column)</option>
+                <option value="horizontal" {{ 'selected' if s.floating_nav_orientation == 'horizontal' else '' }}>Horizontal (row)</option>
               </select>
             </div>
             <div class="form-check form-switch mb-3">
@@ -3581,14 +3589,17 @@ async function saveFloatingNav() {
   const el = document.getElementById('floating-nav-result');
   if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
   const floating_nav_position = document.getElementById('floating_nav_position')?.value || 'off';
+  const floating_nav_orientation = document.getElementById('floating_nav_orientation')?.value || 'vertical';
   const floating_nav_autohide_streamdeck = document.getElementById('floating_nav_autohide_streamdeck')?.checked || false;
   try {
     await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({floating_nav_position, floating_nav_autohide_streamdeck}),
+      body: JSON.stringify({floating_nav_position, floating_nav_orientation, floating_nav_autohide_streamdeck}),
     });
-    // Clear any per-device drag override so the new default takes effect here.
+    // Clear any per-device drag override so the new default position takes
+    // effect here, and pin the orientation per-device so it applies right away.
     try { localStorage.removeItem('floatNavPosition'); } catch (e) {}
+    try { localStorage.setItem('floatNavOrientation', floating_nav_orientation); } catch (e) {}
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Navigation menu saved.</span>';
     location.reload();
   } catch (e) {

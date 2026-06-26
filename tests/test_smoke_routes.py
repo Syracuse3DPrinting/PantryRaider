@@ -276,6 +276,21 @@ def test_floating_nav_settings_persist_and_validate(client):
     assert settings.floating_nav_position == "bottom-right"
 
 
+def test_floating_nav_orientation_persists_and_validates(client):
+    """Floating nav orientation round-trips; a bad value is rejected
+    (FoodAssistant-76mw)."""
+    from app.config import settings
+
+    r = client.post("/setup/save", json={"floating_nav_orientation": "horizontal"})
+    assert r.status_code == 200
+    assert settings.floating_nav_orientation == "horizontal"
+
+    # An invalid orientation is dropped, leaving the stored value untouched.
+    r = client.post("/setup/save", json={"floating_nav_orientation": "diagonal"})
+    assert r.status_code == 200
+    assert settings.floating_nav_orientation == "horizontal"
+
+
 def test_floating_nav_renders_on_page(client):
     """The floating nav container renders with its data attributes so the JS
     can place it."""

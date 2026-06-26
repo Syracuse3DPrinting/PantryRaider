@@ -37,6 +37,7 @@ def theme_context(request: Request) -> dict:
         "pin_readonly": getattr(request.state, "pin_readonly", False),
         # On-screen floating navigation menu (FoodAssistant-bzuu).
         "floating_nav_position": settings.floating_nav_position,
+        "floating_nav_orientation": settings.floating_nav_orientation,
         "floating_nav_autohide_streamdeck": settings.floating_nav_autohide_streamdeck,
         "has_streamdeck": settings.has_streamdeck,
     }
