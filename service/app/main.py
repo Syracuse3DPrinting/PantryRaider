@@ -102,7 +102,11 @@ async def redirect_if_unconfigured(request: Request, call_next):
     # by the setup-redirect (it has no browser session to redirect anyway).
     if (not settings.is_configured() and request.url.path not in _SETUP_BYPASS
             and not _is_static(request.url.path)
-            and not request.url.path.startswith("/api/proxy/")):
+            and not request.url.path.startswith("/api/proxy/")
+            # The satellite setup wizard scans the LAN for its main server before
+            # this device is configured. That call must return JSON, not an HTML
+            # setup redirect, or the wizard's JSON.parse fails.
+            and request.url.path != "/api/devices/scan"):
         return ingress_redirect(request, "/setup")
     return await call_next(request)
 
