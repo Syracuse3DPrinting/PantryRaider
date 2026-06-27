@@ -82,6 +82,49 @@ def test_weather_override_accepts_source_alias():
     assert spec.weather_location == "90210"
 
 
+def test_weather_override_carries_units_label_icon():
+    spec = actions.override_to_spec(
+        4, {"slot": 4, "type": "weather", "location": "Boston",
+            "units": "c", "label": "Home", "icon": "cloud-rain"}
+    )
+    assert spec is not None
+    assert spec.kind == "weather"
+    assert spec.weather_units == "c"
+    assert spec.label == "Home"
+    assert spec.icon == "cloud-rain"
+
+
+def test_weather_override_forecast_carries_units_label_icon():
+    spec = actions.override_to_spec(
+        5, {"type": "weather", "location": "Boston", "forecast": True,
+            "units": "f", "label": "Hi/Lo", "icon": "thermometer-sun"}
+    )
+    assert spec is not None
+    assert spec.kind == "forecast"
+    assert spec.weather_units == "f"
+    assert spec.label == "Hi/Lo"
+    assert spec.icon == "thermometer-sun"
+
+
+def test_weather_override_without_units_defaults_blank():
+    # Backward compatibility: an override without units/label/icon behaves as
+    # before, with blank units (so the controller uses the global default) and
+    # the stock label and glyph.
+    spec = actions.override_to_spec(4, {"type": "weather", "location": "NYC"})
+    assert spec is not None
+    assert spec.weather_units == ""
+    assert spec.label == "Weather"
+    assert spec.icon == "cloud-sun"
+
+
+def test_weather_override_bad_units_falls_back_to_blank():
+    spec = actions.override_to_spec(
+        4, {"type": "weather", "location": "NYC", "units": "kelvin"}
+    )
+    assert spec is not None
+    assert spec.weather_units == ""
+
+
 # -- ha_action colours + icon (FoodAssistant-8nn) --------------------------
 
 

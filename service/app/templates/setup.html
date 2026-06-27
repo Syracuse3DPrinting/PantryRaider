@@ -1959,6 +1959,46 @@ docker compose up -d</code></pre>
                 <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Weather comes from the main server and syncs automatically. Change it there.</div>
                 {% endif %}
               </div>
+
+              <div class="card bg-body-tertiary border-secondary mb-3">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="bi bi-house me-1"></i>Home Assistant keys</h6>
+                  <div class="form-text mb-2">Bind the five Home Assistant keys (ha_1 to ha_5) to entities on your Home Assistant instance. These settings live on this device's deck only. Create a long-lived access token in Home Assistant under your profile, Security, Long-lived access tokens, then paste it below.</div>
+                  <div class="row g-2 mb-2">
+                    <div class="col-md-6">
+                      <label class="form-label small mb-1" for="streamdeck_ha_base_url">Base URL</label>
+                      <input type="text" class="form-control form-control-sm" id="streamdeck_ha_base_url" placeholder="http://homeassistant.local:8123">
+                    </div>
+                    <div class="col-md-6">
+                      <label class="form-label small mb-1" for="streamdeck_ha_token">Long-lived access token</label>
+                      <input type="password" class="form-control form-control-sm" id="streamdeck_ha_token" placeholder="(token)" autocomplete="off">
+                    </div>
+                  </div>
+                  <div id="streamdeck-ha-slots" class="d-flex flex-column gap-2">
+                    {% for i in range(1, 6) %}
+                    <div class="row g-2 align-items-end sd-ha-slot">
+                      <div class="col-auto" style="max-width:70px">
+                        <label class="form-label small mb-1">Key</label>
+                        <input type="text" class="form-control form-control-sm" value="ha_{{ i }}" disabled>
+                      </div>
+                      <div class="col">
+                        <label class="form-label small mb-1">Entity ID</label>
+                        <input type="text" class="form-control form-control-sm sd-ha-entity" placeholder="light.kitchen">
+                      </div>
+                      <div class="col">
+                        <label class="form-label small mb-1">Service (optional)</label>
+                        <input type="text" class="form-control form-control-sm sd-ha-service" placeholder="light.toggle">
+                      </div>
+                      <div class="col">
+                        <label class="form-label small mb-1">Label (optional)</label>
+                        <input type="text" class="form-control form-control-sm sd-ha-label" placeholder="Kitchen">
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+
               <div class="mb-3">
                 <label class="form-label" for="streamdeck_idle_timeout">Blank deck after N minutes idle (0 = off)</label>
                 <input class="form-control form-control-sm" style="max-width:120px" type="number"
@@ -4393,6 +4433,18 @@ function _sdOverrideRow(o) {
         <label class="form-label small mb-1">Location</label>
         <input type="text" class="form-control form-control-sm sd-ov-location" placeholder="City, zip, or lat,lon (empty = auto)" value="${escapeHtml(o.location || '')}">
       </div>
+      <div class="col-auto" style="max-width:140px">
+        <label class="form-label small mb-1">Units</label>
+        <select class="form-select form-select-sm sd-ov-weather-units">
+          <option value=""${!o.units ? ' selected' : ''}>Global default</option>
+          <option value="f"${o.units === 'f' ? ' selected' : ''}>Fahrenheit (°F)</option>
+          <option value="c"${o.units === 'c' ? ' selected' : ''}>Celsius (°C)</option>
+        </select>
+      </div>
+      <div class="col">
+        <label class="form-label small mb-1">Icon (optional)</label>
+        <input type="text" class="form-control form-control-sm sd-ov-weather-icon" list="${iconListId}" placeholder="cloud-sun" value="${escapeHtml(o.icon || '')}">
+      </div>
       <div class="col-auto">
         <div class="form-check">
           <input class="form-check-input sd-ov-forecast" type="checkbox" id="${forecastId}"${o.forecast ? ' checked' : ''}>
@@ -4476,6 +4528,10 @@ function _sdCollectOverrides() {
     } else if (type === 'weather') {
       const location = row.querySelector('.sd-ov-location')?.value.trim() || '';
       if (location) entry.location = location;
+      const units = row.querySelector('.sd-ov-weather-units')?.value || '';
+      if (units) entry.units = units;
+      const wicon = row.querySelector('.sd-ov-weather-icon')?.value.trim() || '';
+      if (wicon) entry.icon = wicon;
       if (row.querySelector('.sd-ov-forecast')?.checked) entry.forecast = true;
     } else if (type === 'shopping_add') {
       const item = row.querySelector('.sd-ov-item')?.value.trim() || '';
@@ -4494,6 +4550,52 @@ function _sdCollectOverrides() {
   return out;
 }
 
+// Collect the five Home Assistant key slots (ha_1..ha_5) into an ordered list
+// of non-empty dicts. A row with no entity_id is dropped, but a leading empty
+// row still shifts the keys (the deck maps the list to ha_1.. in order), so an
+// empty entity row yields a placeholder dict to preserve later slots' positions
+// only when a populated row follows it. Simpler: keep order, skip fully-empty
+// rows; the deck assigns the remaining rows to ha_1, ha_2, ... in sequence.
+function _sdCollectHaSlots() {
+  const wrap = document.getElementById('streamdeck-ha-slots');
+  if (!wrap) return [];
+  const out = [];
+  for (const row of wrap.querySelectorAll('.sd-ha-slot')) {
+    const entity_id = row.querySelector('.sd-ha-entity')?.value.trim() || '';
+    const service = row.querySelector('.sd-ha-service')?.value.trim() || '';
+    const label = row.querySelector('.sd-ha-label')?.value.trim() || '';
+    if (!entity_id && !service && !label) continue;
+    const entry = {};
+    if (entity_id) entry.entity_id = entity_id;
+    if (service) entry.service = service;
+    if (label) entry.label = label;
+    out.push(entry);
+  }
+  return out;
+}
+
+// Pre-fill the HA base URL, token, and the five slot rows from a loaded config.
+function _sdLoadHaSettings(cfg) {
+  cfg = cfg || {};
+  const urlEl = document.getElementById('streamdeck_ha_base_url');
+  if (urlEl && cfg.ha_base_url !== undefined) urlEl.value = cfg.ha_base_url || '';
+  const tokEl = document.getElementById('streamdeck_ha_token');
+  if (tokEl && cfg.ha_token !== undefined) tokEl.value = cfg.ha_token || '';
+  const wrap = document.getElementById('streamdeck-ha-slots');
+  if (!wrap) return;
+  const slots = Array.isArray(cfg.ha_slots) ? cfg.ha_slots : [];
+  const rows = wrap.querySelectorAll('.sd-ha-slot');
+  rows.forEach((row, i) => {
+    const slot = slots[i] || {};
+    const e = row.querySelector('.sd-ha-entity');
+    const s = row.querySelector('.sd-ha-service');
+    const l = row.querySelector('.sd-ha-label');
+    if (e) e.value = slot.entity_id || '';
+    if (s) s.value = slot.service || '';
+    if (l) l.value = slot.label || '';
+  });
+}
+
 async function saveStreamDeckSettings() {
   const el = document.getElementById('streamdeck-save-result');
   if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
@@ -4508,6 +4610,9 @@ async function saveStreamDeckSettings() {
   const key_style = document.getElementById('streamdeck_key_style')?.value || 'rich';
   const icon_color = document.getElementById('streamdeck_icon_color')?.value || 'full';
   const key_overrides = _sdCollectOverrides();
+  const ha_base_url = document.getElementById('streamdeck_ha_base_url')?.value.trim() || '';
+  const ha_token = document.getElementById('streamdeck_ha_token')?.value.trim() || '';
+  const ha_slots = _sdCollectHaSlots();
 
   try {
     await fetch('setup/save', {
@@ -4521,18 +4626,33 @@ async function saveStreamDeckSettings() {
     });
 
     if (has_streamdeck) {
+      // Read-modify-write: start from the current on-disk config so keys we do
+      // not edit here (the host bridge rewrites the whole config.toml from this
+      // posted dict, it does not merge) survive the save. If the GET fails, fall
+      // back to posting just the edited fields, as the old behaviour did.
+      let base = {};
+      try {
+        const cur = await fetch('setup/streamdeck/config').then(x => x.json());
+        if (cur && cur.ok && cur.config && typeof cur.config === 'object') {
+          base = cur.config;
+        }
+      } catch (e) {
+        base = {};
+      }
+      const merged = Object.assign({}, base, {
+        rotation,
+        brightness,
+        keys: keys.length > 0 ? keys : undefined,
+        weather_location,
+        weather_units,
+        key_overrides,
+        ha_base_url,
+        ha_token,
+        ha_slots
+      });
       await fetch('setup/streamdeck/config', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          config: {
-            rotation,
-            brightness,
-            keys: keys.length > 0 ? keys : undefined,
-            weather_location,
-            weather_units,
-            key_overrides
-          }
-        }),
+        body: JSON.stringify({config: merged}),
       });
       // Automatically restart to apply config changes
       await fetch('setup/streamdeck/restart', {method: 'POST'});
@@ -4722,6 +4842,7 @@ async function loadHardwareStatus() {
           if (wuEl) wuEl.value = cfg.weather_units;
         }
         _sdRenderOverrides(cfg.key_overrides);
+        _sdLoadHaSettings(cfg);
       }
     } catch (e) {
       console.warn("Could not load streamdeck config:", e);

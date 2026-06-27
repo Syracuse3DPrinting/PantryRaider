@@ -635,6 +635,8 @@ class ActionSpec:
     keypad_key: str = ""     # for kind=="keypad": digit or clear/enter/cancel
     timer_minutes: int = 0   # for kind=="timer" overrides: preset minutes (0=cycle)
     weather_location: str = ""  # for kind=="weather" overrides: per-key location
+    weather_units: str = ""  # for kind=="weather" overrides: per-key units ("f"/
+                             # "c"); empty falls back to the global units.
     description: str = ""
     icon: str = ""           # Bootstrap Icons glyph name (without the "bi-"
                              # prefix) drawn above the label; see ACTION_ICONS.
@@ -1250,6 +1252,12 @@ def override_to_spec(slot: int, override: dict) -> Optional[ActionSpec]:
 
     if otype == "weather":
         location = str(override.get("location", override.get("source", ""))).strip()
+        # Optional per-key units ("f"/"c"); empty leaves it blank so the
+        # controller falls back to the global units when building the per-key
+        # WeatherState. A non-empty value is normalised to a lowercase letter.
+        units = str(override.get("units", "")).strip().lower()
+        if units not in ("f", "c"):
+            units = ""
         # A weather override can render either the current-conditions tile
         # (default) or a paired high/low forecast tile for the same location.
         # The forecast variant mirrors the global "forecast" key but draws from
@@ -1262,11 +1270,12 @@ def override_to_spec(slot: int, override: dict) -> Optional[ActionSpec]:
             fc_color = override.get("color") or "#0e7490"
             return ActionSpec(
                 name=name, label=label or "Forecast", color=fc_color,
-                kind="forecast", weather_location=location, icon=fc_icon,
+                kind="forecast", weather_location=location,
+                weather_units=units, icon=fc_icon,
             )
         return ActionSpec(
             name=name, label=label or "Weather", color=color, kind="weather",
-            weather_location=location, icon=icon,
+            weather_location=location, weather_units=units, icon=icon,
         )
 
     if otype == "shopping_add":
