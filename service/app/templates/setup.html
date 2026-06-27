@@ -1423,6 +1423,49 @@
             </button>
             <div class="test-result mt-2" id="floating-nav-result"></div>
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-camera-video text-success"></i> Cameras</div>
+            <p class="text-secondary small">Camera feeds shown on the on-screen <a href="ui/camera" target="_blank">Camera page</a>
+              and, when a Stream Deck is connected, as a snapshot key or the full-deck overlay. Stream URL is the live feed
+              (an .m3u8 HLS stream or an MJPEG URL); Snapshot URL is a still image. The "From Home Assistant" button fills both
+              from a camera entity using the Home Assistant URL and token set on the Stream Deck pane.</p>
+            <div id="streamdeck-cameras" class="d-flex flex-column gap-2 mb-2">
+              {% for cam in s.streamdeck_cameras %}
+              <div class="row g-2 align-items-end sd-camera-row">
+                <div class="col-md-2">
+                  <label class="form-label small mb-1">Name</label>
+                  <input type="text" class="form-control form-control-sm sd-cam-name" placeholder="Front door" value="{{ cam.name or '' }}">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Stream URL</label>
+                  <input type="text" class="form-control form-control-sm sd-cam-stream" placeholder="http://.../stream.m3u8" value="{{ cam.stream_url or '' }}">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">Snapshot URL</label>
+                  <input type="text" class="form-control form-control-sm sd-cam-snapshot" placeholder="http://.../snapshot.jpg" value="{{ cam.snapshot_url or '' }}">
+                </div>
+                <div class="col-md-3">
+                  <label class="form-label small mb-1">HA entity</label>
+                  <input type="text" class="form-control form-control-sm sd-cam-entity" placeholder="camera.front_door">
+                </div>
+                <div class="col-md-1 d-flex gap-1">
+                  <button type="button" class="btn btn-outline-secondary btn-sm" title="From Home Assistant" onclick="_sdCameraFromHa(this)"><i class="bi bi-house"></i></button>
+                  <button type="button" class="btn btn-outline-danger btn-sm" title="Remove" onclick="this.closest('.sd-camera-row').remove()"><i class="bi bi-trash"></i></button>
+                </div>
+              </div>
+              {% endfor %}
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdAddCameraRow()">
+                <i class="bi bi-plus-lg me-1"></i>Add camera
+              </button>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneCameras(this)">
+                <i class="bi bi-check-lg me-1"></i>Save cameras
+              </button>
+            </div>
+            <div class="test-result mt-2" id="cameras-result"></div>
+          </div>
         </div>
 
         <!-- Security -->
@@ -1999,41 +2042,8 @@ docker compose up -d</code></pre>
                 </div>
               </div>
 
-              <div class="card bg-body-tertiary border-secondary mb-3">
-                <div class="card-body">
-                  <h6 class="card-title"><i class="bi bi-camera-video me-1"></i>Cameras</h6>
-                  <div class="form-text mb-2">Cameras shown on the kiosk Camera page and pushed to the Stream Deck. Stream URL is the live feed (an .m3u8 HLS stream or an MJPEG URL); Snapshot URL is a still image the deck can show. The From Home Assistant control fills both URLs from a camera entity using the Base URL and token entered above.</div>
-                  <div id="streamdeck-cameras" class="d-flex flex-column gap-2 mb-2">
-                    {% for cam in s.streamdeck_cameras %}
-                    <div class="row g-2 align-items-end sd-camera-row">
-                      <div class="col-md-2">
-                        <label class="form-label small mb-1">Name</label>
-                        <input type="text" class="form-control form-control-sm sd-cam-name" placeholder="Front door" value="{{ cam.name or '' }}">
-                      </div>
-                      <div class="col-md-3">
-                        <label class="form-label small mb-1">Stream URL</label>
-                        <input type="text" class="form-control form-control-sm sd-cam-stream" placeholder="http://.../stream.m3u8" value="{{ cam.stream_url or '' }}">
-                      </div>
-                      <div class="col-md-3">
-                        <label class="form-label small mb-1">Snapshot URL</label>
-                        <input type="text" class="form-control form-control-sm sd-cam-snapshot" placeholder="http://.../snapshot.jpg" value="{{ cam.snapshot_url or '' }}">
-                      </div>
-                      <div class="col-md-3">
-                        <label class="form-label small mb-1">Entity ID</label>
-                        <input type="text" class="form-control form-control-sm sd-cam-entity" placeholder="camera.front_door">
-                      </div>
-                      <div class="col-md-1 d-flex gap-1">
-                        <button type="button" class="btn btn-outline-secondary btn-sm" title="From Home Assistant" onclick="_sdCameraFromHa(this)"><i class="bi bi-house"></i></button>
-                        <button type="button" class="btn btn-outline-danger btn-sm" title="Remove" onclick="this.closest('.sd-camera-row').remove()"><i class="bi bi-trash"></i></button>
-                      </div>
-                    </div>
-                    {% endfor %}
-                  </div>
-                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdAddCameraRow()">
-                    <i class="bi bi-plus-lg me-1"></i>Add camera
-                  </button>
-                </div>
-              </div>
+              <div class="form-text mb-3"><i class="bi bi-camera-video me-1"></i>Camera feeds are configured under
+                <strong>Interface &gt; Cameras</strong> (they also power the on-screen Camera page), and are pushed to the deck from there.</div>
 
               <div class="mb-3">
                 <label class="form-label" for="streamdeck_idle_timeout">Blank deck after N minutes idle (0 = off)</label>
@@ -4772,6 +4782,42 @@ async function saveStreamDeckSettings() {
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Stream Deck settings saved.</span>';
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  }
+}
+
+// Save the camera feeds from the Interface pane. Persists to app settings (which
+// power the on-screen Camera page on any device) and, when a deck/bridge is
+// reachable, pushes the snapshot URLs into the deck config too. The deck push is
+// best-effort: a non-Pi browser just saves the app settings.
+async function savePaneCameras(btn) {
+  const el = document.getElementById('cameras-result');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...'; }
+  if (el) el.innerHTML = '';
+  const cameras = _sdCollectCameras();
+  try {
+    await fetch('setup/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({streamdeck_cameras: cameras}),
+    });
+    try {
+      let base = {};
+      const cur = await fetch('setup/streamdeck/config').then(x => x.json());
+      if (cur && cur.ok && cur.config && typeof cur.config === 'object') base = cur.config;
+      const merged = Object.assign({}, base, {
+        cameras: cameras.map(c => ({name: c.name, snapshot_url: c.snapshot_url})),
+      });
+      const r = await fetch('setup/streamdeck/config', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({config: merged}),
+      });
+      if (r.ok) await fetch('setup/streamdeck/restart', {method: 'POST'});
+    } catch (e) { /* no bridge reachable: app settings are still saved */ }
+    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Cameras saved.</span>';
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
 }
 
