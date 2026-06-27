@@ -266,6 +266,22 @@ def update_default(
     return ingress_redirect(request, "/ui/defaults?msg=Rule+updated.")
 
 
+@router.get("/convert", response_class=HTMLResponse)
+async def convert_page(request: Request):
+    return templates.TemplateResponse(request, "convert.html", {
+        "request": request,
+        "active": "convert",
+    })
+
+
+@router.get("/timers", response_class=HTMLResponse)
+async def timers_page(request: Request):
+    return templates.TemplateResponse(request, "timers.html", {
+        "request": request,
+        "active": "timers",
+    })
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     return templates.TemplateResponse(request, "about.html", {

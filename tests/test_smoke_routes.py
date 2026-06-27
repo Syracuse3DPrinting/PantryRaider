@@ -70,8 +70,23 @@ GET_PAGES = [
     "/ui/shopping",
     "/ui/expiring",
     "/ui/defaults",
+    "/ui/convert",
+    "/ui/timers",
     "/setup",
 ]
+
+
+def test_convert_page_has_known_conversion(client):
+    r = client.get("/ui/convert")
+    assert r.status_code == 200
+    # A stable, accurate conversion that the cheat sheet must list.
+    assert "240 ml" in r.text  # 1 cup
+
+
+def test_timers_page_has_empty_state(client):
+    r = client.get("/ui/timers")
+    assert r.status_code == 200
+    assert "No timers running" in r.text
 
 
 @pytest.mark.parametrize("path", GET_PAGES)
