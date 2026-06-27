@@ -88,7 +88,7 @@ _SETUP_BYPASS = {
     "/setup/test/grocy", "/setup/test/vision", "/setup/test/remote",
     "/setup/test/provider", "/setup/test/mealie", "/setup/test/recipes",
     "/setup/totp/generate", "/setup/totp/verify", "/setup/totp/disable",
-    "/setup/satellite/sync",
+    "/setup/satellite/sync", "/setup/ha/cameras",
     # Satellites pull config here; the handler enforces its own X-API-Key, so
     # it is safe to skip the setup-redirect/auth wrappers.
     "/api/config/satellite",

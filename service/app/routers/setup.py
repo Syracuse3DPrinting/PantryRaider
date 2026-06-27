@@ -37,6 +37,7 @@ _SECRET_FIELDS = [
     "grocy_api_key", "mealie_api_key",
     "themealdb_api_key", "spoonacular_api_key",
     "auth_password", "api_key", "upstream_api_key", "kiosk_pin",
+    "streamdeck_ha_token",
 ]
 _CLEAR = "__CLEAR__"
 
@@ -195,6 +196,9 @@ class SetupPayload(BaseModel):
     streamdeck_key_style: str = ""
     streamdeck_icon_color: str = ""
     streamdeck_cameras: list = []
+    streamdeck_ha_base_url: str = ""
+    streamdeck_ha_token: str = ""
+    streamdeck_ha_slots: list = []
     floating_nav_position: str = ""
     floating_nav_orientation: str = ""
     floating_nav_autohide_streamdeck: bool = False
@@ -1192,6 +1196,17 @@ async def streamdeck_config_set(request: Request):
                 payload["config"]["theme"] = settings.ui_theme
                 payload["config"]["key_style"] = settings.streamdeck_key_style
                 payload["config"]["icon_color"] = settings.streamdeck_icon_color
+                # Home Assistant credentials, key map, and cameras live in app
+                # settings (one source of truth, server or Pi). Stamp them so the
+                # deck always gets the server's values regardless of what the page
+                # posted, and a satellite's deck inherits them (FoodAssistant-cr50).
+                payload["config"]["ha_base_url"] = settings.streamdeck_ha_base_url
+                payload["config"]["ha_token"] = settings.streamdeck_ha_token
+                payload["config"]["ha_slots"] = settings.streamdeck_ha_slots
+                payload["config"]["cameras"] = [
+                    {"name": c.get("name", ""), "snapshot_url": c.get("snapshot_url", "")}
+                    for c in settings.streamdeck_cameras if isinstance(c, dict)
+                ]
                 if settings.is_satellite():
                     payload["config"]["weather_location"] = settings.streamdeck_weather_location
                     payload["config"]["weather_units"] = settings.streamdeck_weather_units
@@ -1201,6 +1216,74 @@ async def streamdeck_config_set(request: Request):
         except Exception as e:
             return JSONResponse(status_code=500, content={"ok": False, "error": str(e)})
     return JSONResponse(status_code=500, content={"ok": False, "error": "bridge unavailable"})
+
+
+def _ha_camera_urls(base: str, token: str, entity: str) -> dict:
+    """Build the HLS stream and still-snapshot URLs for an HA camera entity.
+
+    The token is embedded in the URL (the camera proxy endpoints accept a
+    ``?token=`` query param), so the kiosk <img>/<video> and the deck snapshot
+    can fetch the feed without an auth header. Built server-side so the token
+    never has to leave the server to be turned into a usable URL.
+    """
+    from urllib.parse import quote
+    b = base.rstrip("/")
+    e = quote(entity, safe="")
+    t = quote(token, safe="")
+    return {
+        "stream_url": f"{b}/api/camera_proxy_stream/{e}?token={t}",
+        "snapshot_url": f"{b}/api/camera_proxy/{e}?token={t}",
+    }
+
+
+class HaCameraDiscoverPayload(BaseModel):
+    # Optional overrides so a freshly typed (not yet saved) base/token can be
+    # tested before the user commits them. Blank falls back to saved settings.
+    base_url: str = ""
+    token: str = ""
+
+
+@router.post("/ha/cameras")
+async def ha_discover_cameras(payload: HaCameraDiscoverPayload):
+    """Discover Home Assistant camera entities and build their feed URLs.
+
+    Queries HA ``/api/states`` with the long-lived access token, keeps the
+    ``camera.*`` entities, and returns each with a friendly name plus prebuilt
+    stream and snapshot URLs. Credentials come from app settings (one source of
+    truth, pulled by satellites), but the request body may override them so the
+    Cameras page can test a token before it is saved. The token stays on the
+    server: only the finished URLs (which embed it) come back.
+    """
+    base = (payload.base_url or settings.streamdeck_ha_base_url or "").strip().rstrip("/")
+    token = (payload.token or settings.streamdeck_ha_token or "").strip()
+    if not base or not token:
+        return {"ok": False, "error": "Set the Home Assistant URL and token first."}
+    try:
+        async with httpx.AsyncClient(timeout=8.0) as c:
+            r = await c.get(
+                f"{base}/api/states",
+                headers={"Authorization": f"Bearer {token}"},
+            )
+    except Exception as e:
+        return {"ok": False, "error": f"Could not reach Home Assistant: {e}"}
+    if r.status_code in (401, 403):
+        return {"ok": False, "error": "Home Assistant rejected the token (401/403)."}
+    if r.status_code != 200:
+        return {"ok": False, "error": f"Home Assistant returned HTTP {r.status_code}."}
+    try:
+        states = r.json()
+    except Exception:
+        return {"ok": False, "error": "Unexpected response from Home Assistant."}
+    cameras = []
+    for st in states if isinstance(states, list) else []:
+        entity = st.get("entity_id", "") if isinstance(st, dict) else ""
+        if not entity.startswith("camera."):
+            continue
+        attrs = st.get("attributes") or {}
+        name = attrs.get("friendly_name") or entity.split(".", 1)[1].replace("_", " ").title()
+        cameras.append({"entity_id": entity, "name": name, **_ha_camera_urls(base, token, entity)})
+    cameras.sort(key=lambda c: c["name"].lower())
+    return {"ok": True, "cameras": cameras}
 
 
 @router.get("/streamdeck/actions")

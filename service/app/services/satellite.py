@@ -83,12 +83,19 @@ _HOST_BRIDGE = "http://127.0.0.1:9299"
 _STREAMDECK_SYNCED_FIELDS = (
     "streamdeck_weather_location", "streamdeck_weather_units", "ui_theme",
     "streamdeck_key_style", "streamdeck_icon_color",
+    # HA credentials/keys and cameras come from the server too, so a satellite's
+    # deck drives the same entities and feeds without local setup (cr50).
+    "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
+    "streamdeck_cameras",
 )
 
 
 def _merge_streamdeck_settings(config: dict, location: str, units: str, theme: str,
-                               key_style: str = "rich", icon_color: str = "full") -> dict:
-    """Return config with the synced weather, theme, and key style overlaid.
+                               key_style: str = "rich", icon_color: str = "full",
+                               ha_base_url: str = "", ha_token: str = "",
+                               ha_slots: list | None = None,
+                               cameras: list | None = None) -> dict:
+    """Return config with the synced weather, theme, key style, HA, and cameras overlaid.
 
     The bridge rewrites the whole config.toml from the posted dict, so a caller
     must read the current config, overlay just these keys, and post the whole
@@ -100,6 +107,13 @@ def _merge_streamdeck_settings(config: dict, location: str, units: str, theme: s
     merged["theme"] = theme
     merged["key_style"] = key_style
     merged["icon_color"] = icon_color
+    merged["ha_base_url"] = ha_base_url
+    merged["ha_token"] = ha_token
+    merged["ha_slots"] = ha_slots or []
+    merged["cameras"] = [
+        {"name": c.get("name", ""), "snapshot_url": c.get("snapshot_url", "")}
+        for c in (cameras or []) if isinstance(c, dict)
+    ]
     return merged
 
 
@@ -126,6 +140,10 @@ def _push_streamdeck_settings(timeout: float = 4.0) -> bool:
             settings.ui_theme,
             settings.streamdeck_key_style,
             settings.streamdeck_icon_color,
+            settings.streamdeck_ha_base_url,
+            settings.streamdeck_ha_token,
+            settings.streamdeck_ha_slots,
+            settings.streamdeck_cameras,
         )
         resp = httpx.post(
             f"{_HOST_BRIDGE}/streamdeck/config", json={"config": merged}, timeout=timeout

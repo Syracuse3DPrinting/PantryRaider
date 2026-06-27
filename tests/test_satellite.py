@@ -342,6 +342,40 @@ def test_merge_streamdeck_settings_overlays_only_weather_and_theme():
     assert base["weather_location"] == "old"
 
 
+def test_merge_streamdeck_settings_overlays_ha_and_cameras():
+    from app.services import satellite as sat
+
+    base = {"rotation": 0}
+    merged = sat._merge_streamdeck_settings(
+        base, "Boston", "f", "dark", "clean", "color",
+        ha_base_url="http://ha.local:8123",
+        ha_token="secret-llat",
+        ha_slots=[{"entity_id": "light.kitchen", "service": "light.toggle"}],
+        cameras=[{"name": "Door", "stream_url": "http://x/s.m3u8",
+                  "snapshot_url": "http://x/snap.jpg", "extra": "drop me"}],
+    )
+    # HA credentials and key map propagate so a satellite's deck inherits them.
+    assert merged["ha_base_url"] == "http://ha.local:8123"
+    assert merged["ha_token"] == "secret-llat"
+    assert merged["ha_slots"][0]["entity_id"] == "light.kitchen"
+    # The deck only needs name + snapshot_url; extra keys are dropped.
+    assert merged["cameras"] == [{"name": "Door", "snapshot_url": "http://x/snap.jpg"}]
+    assert base == {"rotation": 0}  # original not mutated
+
+
+def test_ha_camera_urls_embed_token():
+    from app.routers.setup import _ha_camera_urls
+
+    urls = _ha_camera_urls("http://ha.local:8123/", "tok en", "camera.front_door")
+    # Trailing slash trimmed, entity + token URL-encoded, both proxy endpoints built.
+    assert urls["stream_url"] == (
+        "http://ha.local:8123/api/camera_proxy_stream/camera.front_door?token=tok%20en"
+    )
+    assert urls["snapshot_url"] == (
+        "http://ha.local:8123/api/camera_proxy/camera.front_door?token=tok%20en"
+    )
+
+
 def test_push_streamdeck_settings_skipped_off_pi(monkeypatch):
     from app.services import satellite as sat
 

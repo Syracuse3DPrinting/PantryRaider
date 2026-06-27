@@ -123,3 +123,83 @@ def test_test_remote_handles_unreachable(client, monkeypatch):
     r = client.post("/setup/test/remote", json={"remote_server_url": "http://127.0.0.1:1"})
     assert r.status_code == 200
     assert r.json()["ok"] is False
+
+
+# Home Assistant camera discovery (FoodAssistant-cr50) ------------------------
+
+class _FakeResp:
+    def __init__(self, status, payload):
+        self.status_code = status
+        self._payload = payload
+
+    def json(self):
+        return self._payload
+
+
+class _FakeAsyncClient:
+    """Async context-manager stand-in returning a canned /api/states response."""
+
+    def __init__(self, resp):
+        self._resp = resp
+
+    def __init_subclass__(cls):  # pragma: no cover - not subclassed
+        pass
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *a):
+        return False
+
+    async def get(self, url, **kwargs):
+        return self._resp
+
+
+def _patch_ha(monkeypatch, resp):
+    import httpx
+    monkeypatch.setattr(setup_router, "httpx", httpx, raising=False)
+    monkeypatch.setattr(
+        setup_router.httpx, "AsyncClient", lambda *a, **k: _FakeAsyncClient(resp)
+    )
+
+
+def test_ha_discover_needs_credentials(client, monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_base_url", "", raising=False)
+    monkeypatch.setattr(settings, "streamdeck_ha_token", "", raising=False)
+    r = client.post("/setup/ha/cameras", json={})
+    assert r.status_code == 200
+    body = r.json()
+    assert body["ok"] is False
+    assert "url and token" in body["error"].lower()
+
+
+def test_ha_discover_lists_camera_entities(client, monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_base_url", "http://ha.local:8123", raising=False)
+    monkeypatch.setattr(settings, "streamdeck_ha_token", "tok", raising=False)
+    states = [
+        {"entity_id": "light.kitchen", "attributes": {"friendly_name": "Kitchen"}},
+        {"entity_id": "camera.front_door", "attributes": {"friendly_name": "Front Door"}},
+        {"entity_id": "camera.garage", "attributes": {}},
+    ]
+    _patch_ha(monkeypatch, _FakeResp(200, states))
+    r = client.post("/setup/ha/cameras", json={})
+    body = r.json()
+    assert body["ok"] is True
+    cams = body["cameras"]
+    # Only camera.* entities, sorted by name, with built URLs and derived names.
+    assert [c["entity_id"] for c in cams] == ["camera.front_door", "camera.garage"]
+    assert cams[1]["name"] == "Garage"  # derived from entity id when no friendly_name
+    assert cams[0]["snapshot_url"] == (
+        "http://ha.local:8123/api/camera_proxy/camera.front_door?token=tok"
+    )
+    assert cams[0]["stream_url"].endswith("/api/camera_proxy_stream/camera.front_door?token=tok")
+
+
+def test_ha_discover_reports_bad_token(client, monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_base_url", "http://ha.local:8123", raising=False)
+    monkeypatch.setattr(settings, "streamdeck_ha_token", "tok", raising=False)
+    _patch_ha(monkeypatch, _FakeResp(401, {}))
+    r = client.post("/setup/ha/cameras", json={})
+    body = r.json()
+    assert body["ok"] is False
+    assert "401" in body["error"] or "token" in body["error"].lower()

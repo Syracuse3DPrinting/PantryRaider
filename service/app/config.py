@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.51"
+APP_VERSION = "0.6.52"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -182,6 +182,7 @@ _SAVEABLE = [
     "streamdeck_weather_location", "streamdeck_weather_units",
     "streamdeck_key_style", "streamdeck_icon_color",
     "streamdeck_cameras",
+    "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
     "floating_nav_position", "floating_nav_orientation", "floating_nav_autohide_streamdeck",
     "deployment_mode", "remote_server_url", "remote_server_ip", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
@@ -214,6 +215,9 @@ SATELLITE_PULL_FIELDS = [
     "streamdeck_key_style", "streamdeck_icon_color",
     # Cameras, so a satellite's kiosk page and deck mirror the server's feeds.
     "streamdeck_cameras",
+    # Home Assistant credentials + key map, so a satellite's deck drives the same
+    # HA entities and can build camera URLs without re-entering the token.
+    "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
 ]
 
 # Stream Deck key rendering style (FoodAssistant-fygv). Pushed into the deck's
@@ -230,6 +234,7 @@ SECRET_SETTING_KEYS = [
     "grocy_api_key", "mealie_api_key",
     "themealdb_api_key", "spoonacular_api_key",
     "auth_password", "totp_secret", "api_key", "extra_api_keys", "secret_key", "kiosk_pin",
+    "streamdeck_ha_token",
 ]
 
 _DEFAULT_GROCY_URL = "http://grocy:80"
@@ -564,6 +569,17 @@ class Settings(BaseSettings):
     # Held at the app level so a satellite mirrors the server's cameras via the
     # satellite config sync (see SATELLITE_PULL_FIELDS).
     streamdeck_cameras: list = []
+
+    # Home Assistant connection, shared by the Stream Deck HA keys and the camera
+    # discovery helper (FoodAssistant-cr50). Held at the app level (not just the
+    # deck's config.toml) so it can be set from the server or a Pi, has one source
+    # of truth, and is pulled by a satellite so a second Pi remote inherits the
+    # credentials without re-entering them. ha_base_url is the HA instance URL;
+    # ha_token is a long-lived access token (HA profile, Security). ha_slots maps
+    # the five deck keys ha_1..ha_5 to entities (each {entity_id, service, label}).
+    streamdeck_ha_base_url: str = ""
+    streamdeck_ha_token: str = ""
+    streamdeck_ha_slots: list = []
 
     # Advanced Stream Deck per-key overrides set in the setup page. A JSON list
     # where each entry is a dict with "slot" (grid index), "type" (ha_action |

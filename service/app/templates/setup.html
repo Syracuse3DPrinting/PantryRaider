@@ -1425,11 +1425,41 @@
           </div>
 
           <div class="section-card">
+            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Home Assistant</div>
+            <p class="text-secondary small">Connect a Home Assistant instance once here, on the server or a Pi. The URL and
+              token are stored on the main server, so a second Pi remote inherits them automatically. They power the Stream Deck
+              Home Assistant keys and the camera discovery below. Create a token in Home Assistant under your profile, Security,
+              Long-lived access tokens.</p>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="streamdeck_ha_base_url">Base URL</label>
+                <input type="text" class="form-control form-control-sm" id="streamdeck_ha_base_url"
+                       placeholder="http://homeassistant.local:8123" value="{{ s.streamdeck_ha_base_url or '' }}">
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="streamdeck_ha_token">Long-lived access token</label>
+                <input type="password" class="form-control form-control-sm" id="streamdeck_ha_token" autocomplete="off"
+                       placeholder="{% if has.streamdeck_ha_token %}(unchanged){% else %}(token){% endif %}">
+              </div>
+            </div>
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHomeAssistant(this)">
+                <i class="bi bi-check-lg me-1"></i>Save Home Assistant
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_haTestConnection(this)">
+                <i class="bi bi-plug me-1"></i>Test connection
+              </button>
+            </div>
+            <div class="test-result mt-2" id="ha-result"></div>
+          </div>
+
+          <div class="section-card">
             <div class="section-title"><i class="bi bi-camera-video text-success"></i> Cameras</div>
             <p class="text-secondary small">Camera feeds shown on the on-screen <a href="ui/camera" target="_blank">Camera page</a>
               and, when a Stream Deck is connected, as a snapshot key or the full-deck overlay. Stream URL is the live feed
-              (an .m3u8 HLS stream or an MJPEG URL); Snapshot URL is a still image. The "From Home Assistant" button fills both
-              from a camera entity using the Home Assistant URL and token set on the Stream Deck pane.</p>
+              (an .m3u8 HLS stream or an MJPEG URL); Snapshot URL is a still image. Use <strong>Discover from Home Assistant</strong>
+              to pull cameras from the instance above, or add a row by hand. The house button on a row fills both URLs from its
+              HA entity.</p>
             <div id="streamdeck-cameras" class="d-flex flex-column gap-2 mb-2">
               {% for cam in s.streamdeck_cameras %}
               <div class="row g-2 align-items-end sd-camera-row">
@@ -1456,14 +1486,18 @@
               </div>
               {% endfor %}
             </div>
-            <div class="d-flex gap-2">
+            <div class="d-flex gap-2 flex-wrap">
               <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdAddCameraRow()">
                 <i class="bi bi-plus-lg me-1"></i>Add camera
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdDiscoverCameras(this)">
+                <i class="bi bi-search me-1"></i>Discover from Home Assistant
               </button>
               <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneCameras(this)">
                 <i class="bi bi-check-lg me-1"></i>Save cameras
               </button>
             </div>
+            <div id="cameras-discovered" class="mt-2"></div>
             <div class="test-result mt-2" id="cameras-result"></div>
           </div>
         </div>
@@ -2006,19 +2040,12 @@ docker compose up -d</code></pre>
               <div class="card bg-body-tertiary border-secondary mb-3">
                 <div class="card-body">
                   <h6 class="card-title"><i class="bi bi-house me-1"></i>Home Assistant keys</h6>
-                  <div class="form-text mb-2">Bind the five Home Assistant keys (ha_1 to ha_5) to entities on your Home Assistant instance. These settings live on this device's deck only. Create a long-lived access token in Home Assistant under your profile, Security, Long-lived access tokens, then paste it below.</div>
-                  <div class="row g-2 mb-2">
-                    <div class="col-md-6">
-                      <label class="form-label small mb-1" for="streamdeck_ha_base_url">Base URL</label>
-                      <input type="text" class="form-control form-control-sm" id="streamdeck_ha_base_url" placeholder="http://homeassistant.local:8123">
-                    </div>
-                    <div class="col-md-6">
-                      <label class="form-label small mb-1" for="streamdeck_ha_token">Long-lived access token</label>
-                      <input type="password" class="form-control form-control-sm" id="streamdeck_ha_token" placeholder="(token)" autocomplete="off">
-                    </div>
-                  </div>
+                  <div class="form-text mb-2">Bind the five Home Assistant keys (ha_1 to ha_5) to entities. The instance URL and
+                    token are set once under <strong>Interface &gt; Home Assistant</strong> (stored on the server so a second Pi
+                    inherits them); these key bindings are saved with the rest of the Stream Deck settings below.</div>
                   <div id="streamdeck-ha-slots" class="d-flex flex-column gap-2">
                     {% for i in range(1, 6) %}
+                    {% set slot = s.streamdeck_ha_slots[i - 1] if s.streamdeck_ha_slots and s.streamdeck_ha_slots|length >= i else None %}
                     <div class="row g-2 align-items-end sd-ha-slot">
                       <div class="col-auto" style="max-width:70px">
                         <label class="form-label small mb-1">Key</label>
@@ -2026,15 +2053,15 @@ docker compose up -d</code></pre>
                       </div>
                       <div class="col">
                         <label class="form-label small mb-1">Entity ID</label>
-                        <input type="text" class="form-control form-control-sm sd-ha-entity" placeholder="light.kitchen">
+                        <input type="text" class="form-control form-control-sm sd-ha-entity" placeholder="light.kitchen" value="{{ slot.entity_id if slot else '' }}">
                       </div>
                       <div class="col">
                         <label class="form-label small mb-1">Service (optional)</label>
-                        <input type="text" class="form-control form-control-sm sd-ha-service" placeholder="light.toggle">
+                        <input type="text" class="form-control form-control-sm sd-ha-service" placeholder="light.toggle" value="{{ slot.service if slot else '' }}">
                       </div>
                       <div class="col">
                         <label class="form-label small mb-1">Label (optional)</label>
-                        <input type="text" class="form-control form-control-sm sd-ha-label" placeholder="Kitchen">
+                        <input type="text" class="form-control form-control-sm sd-ha-label" placeholder="Kitchen" value="{{ slot.label if slot else '' }}">
                       </div>
                     </div>
                     {% endfor %}
@@ -4659,20 +4686,100 @@ function _sdAddCameraRow(cam) {
   if (wrap) wrap.appendChild(_sdCameraRow(cam));
 }
 
-// Fill a row's Stream and Snapshot URLs from its Entity ID using the HA base URL
-// and token already on the page. If either is blank, leave the URLs for the user
-// to paste rather than building a broken link.
-function _sdCameraFromHa(btn) {
+// Read the HA base/token currently in the Interface > Home Assistant fields.
+// A blank token means "use the one saved on the server" (the field is never
+// pre-filled with the stored secret), so it is only sent when freshly typed.
+function _haFormCreds() {
+  const base = (document.getElementById('streamdeck_ha_base_url')?.value.trim() || '');
+  const token = (document.getElementById('streamdeck_ha_token')?.value.trim() || '');
+  return {base_url: base, token: token};
+}
+
+// Ask the server to list HA cameras (with URLs built from the saved or freshly
+// typed token) so the browser never needs the secret. Returns {ok, cameras|error}.
+async function _haDiscover() {
+  const r = await fetch('setup/ha/cameras', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify(_haFormCreds()),
+  });
+  return r.json();
+}
+
+// Fill a row's Stream and Snapshot URLs from its HA entity. The URLs are built
+// on the server (which holds the token), so this works even when the token was
+// saved earlier and is not in the form.
+async function _sdCameraFromHa(btn) {
   const row = btn.closest('.sd-camera-row');
   if (!row) return;
   const entity = row.querySelector('.sd-cam-entity')?.value.trim() || '';
-  const base = (document.getElementById('streamdeck_ha_base_url')?.value.trim() || '').replace(/\/+$/, '');
-  const token = document.getElementById('streamdeck_ha_token')?.value.trim() || '';
-  if (!entity || !base || !token) return;
-  const e = encodeURIComponent(entity);
-  const t = encodeURIComponent(token);
-  row.querySelector('.sd-cam-stream').value = `${base}/api/camera_proxy_stream/${e}?token=${t}`;
-  row.querySelector('.sd-cam-snapshot').value = `${base}/api/camera_proxy/${e}?token=${t}`;
+  if (!entity) return;
+  const orig = btn.innerHTML;
+  btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+  try {
+    const data = await _haDiscover();
+    if (data && data.ok) {
+      const match = (data.cameras || []).find(c => c.entity_id === entity);
+      if (match) {
+        row.querySelector('.sd-cam-stream').value = match.stream_url || '';
+        row.querySelector('.sd-cam-snapshot').value = match.snapshot_url || '';
+        if (!row.querySelector('.sd-cam-name').value.trim()) {
+          row.querySelector('.sd-cam-name').value = match.name || '';
+        }
+      }
+    }
+  } catch (e) { /* leave the URLs for the user to paste */ }
+  finally { btn.disabled = false; btn.innerHTML = orig; }
+}
+
+// Discover all HA cameras and list them with an Add button each. Already-added
+// entities are skipped so the list only offers cameras not yet configured.
+async function _sdDiscoverCameras(btn) {
+  const out = document.getElementById('cameras-discovered');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Searching...'; }
+  if (out) out.innerHTML = '';
+  try {
+    const data = await _haDiscover();
+    if (!data || !data.ok) {
+      if (out) out.innerHTML = `<span class="text-danger small">${(data && data.error) || 'Discovery failed.'}</span>`;
+      return;
+    }
+    const cams = data.cameras || [];
+    if (!cams.length) {
+      if (out) out.innerHTML = '<span class="text-secondary small">No camera entities found on Home Assistant.</span>';
+      return;
+    }
+    const have = new Set(_sdCollectCameras().map(c => (c.snapshot_url || '').split('?')[0]));
+    const list = document.createElement('div');
+    list.className = 'list-group';
+    cams.forEach(cam => {
+      const already = have.has((cam.snapshot_url || '').split('?')[0]);
+      const item = document.createElement('div');
+      item.className = 'list-group-item d-flex justify-content-between align-items-center py-1';
+      const label = document.createElement('span');
+      label.className = 'small';
+      label.textContent = `${cam.name} (${cam.entity_id})`;
+      const add = document.createElement('button');
+      add.type = 'button';
+      add.className = 'btn btn-sm ' + (already ? 'btn-outline-secondary' : 'btn-outline-success');
+      add.innerHTML = already ? '<i class="bi bi-check2"></i> Added' : '<i class="bi bi-plus-lg"></i> Add';
+      add.disabled = already;
+      add.onclick = () => {
+        _sdAddCameraRow({name: cam.name, stream_url: cam.stream_url, snapshot_url: cam.snapshot_url});
+        add.disabled = true;
+        add.className = 'btn btn-sm btn-outline-secondary';
+        add.innerHTML = '<i class="bi bi-check2"></i> Added';
+      };
+      item.appendChild(label);
+      item.appendChild(add);
+      list.appendChild(item);
+    });
+    if (out) { out.appendChild(list); }
+  } catch (e) {
+    if (out) out.innerHTML = `<span class="text-danger small">${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
 }
 
 // Collect the camera rows into a list of non-empty dicts. A row needs at least a
@@ -4691,13 +4798,14 @@ function _sdCollectCameras() {
   return out;
 }
 
-// Pre-fill the HA base URL, token, and the five slot rows from a loaded config.
+// Migrate HA settings from a legacy deck config into the form. Credentials and
+// the slot rows are now server-rendered from app settings (the source of truth),
+// so this only fills a field that the server left blank: a deck configured before
+// the credentials moved to the server still surfaces its values here for one save.
 function _sdLoadHaSettings(cfg) {
   cfg = cfg || {};
   const urlEl = document.getElementById('streamdeck_ha_base_url');
-  if (urlEl && cfg.ha_base_url !== undefined) urlEl.value = cfg.ha_base_url || '';
-  const tokEl = document.getElementById('streamdeck_ha_token');
-  if (tokEl && cfg.ha_token !== undefined) tokEl.value = cfg.ha_token || '';
+  if (urlEl && !urlEl.value && cfg.ha_base_url) urlEl.value = cfg.ha_base_url;
   const wrap = document.getElementById('streamdeck-ha-slots');
   if (!wrap) return;
   const slots = Array.isArray(cfg.ha_slots) ? cfg.ha_slots : [];
@@ -4707,9 +4815,9 @@ function _sdLoadHaSettings(cfg) {
     const e = row.querySelector('.sd-ha-entity');
     const s = row.querySelector('.sd-ha-service');
     const l = row.querySelector('.sd-ha-label');
-    if (e) e.value = slot.entity_id || '';
-    if (s) s.value = slot.service || '';
-    if (l) l.value = slot.label || '';
+    if (e && !e.value) e.value = slot.entity_id || '';
+    if (s && !s.value) s.value = slot.service || '';
+    if (l && !l.value) l.value = slot.label || '';
   });
 }
 
@@ -4727,10 +4835,10 @@ async function saveStreamDeckSettings() {
   const key_style = document.getElementById('streamdeck_key_style')?.value || 'rich';
   const icon_color = document.getElementById('streamdeck_icon_color')?.value || 'full';
   const key_overrides = _sdCollectOverrides();
-  const ha_base_url = document.getElementById('streamdeck_ha_base_url')?.value.trim() || '';
-  const ha_token = document.getElementById('streamdeck_ha_token')?.value.trim() || '';
+  // HA key bindings save with the deck settings; the URL/token live in the
+  // Interface > Home Assistant pane and are stamped into the deck config by the
+  // server, so they are not posted here. Cameras are owned by the Cameras pane.
   const ha_slots = _sdCollectHaSlots();
-  const cameras = _sdCollectCameras();
 
   try {
     await fetch('setup/save', {
@@ -4741,14 +4849,15 @@ async function saveStreamDeckSettings() {
                             streamdeck_weather_units: weather_units,
                             streamdeck_key_style: key_style,
                             streamdeck_icon_color: icon_color,
-                            streamdeck_cameras: cameras}),
+                            streamdeck_ha_slots: ha_slots}),
     });
 
     if (has_streamdeck) {
       // Read-modify-write: start from the current on-disk config so keys we do
       // not edit here (the host bridge rewrites the whole config.toml from this
       // posted dict, it does not merge) survive the save. If the GET fails, fall
-      // back to posting just the edited fields, as the old behaviour did.
+      // back to posting just the edited fields, as the old behaviour did. The
+      // server stamps ha_base_url/ha_token/ha_slots/cameras from settings.
       let base = {};
       try {
         const cur = await fetch('setup/streamdeck/config').then(x => x.json());
@@ -4765,11 +4874,6 @@ async function saveStreamDeckSettings() {
         weather_location,
         weather_units,
         key_overrides,
-        ha_base_url,
-        ha_token,
-        ha_slots,
-        // The deck only needs the name and snapshot URL to render a still.
-        cameras: cameras.map(c => ({name: c.name, snapshot_url: c.snapshot_url}))
       });
       await fetch('setup/streamdeck/config', {
         method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -4814,6 +4918,68 @@ async function savePaneCameras(btn) {
       if (r.ok) await fetch('setup/streamdeck/restart', {method: 'POST'});
     } catch (e) { /* no bridge reachable: app settings are still saved */ }
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Cameras saved.</span>';
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// Save the Home Assistant URL and token to app settings (the server's source of
+// truth, pulled by satellites). A blank token keeps the stored one. After saving,
+// nudge the deck config so the credentials reach a connected deck right away.
+async function savePaneHomeAssistant(btn) {
+  const el = document.getElementById('ha-result');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...'; }
+  if (el) el.innerHTML = '';
+  const base = document.getElementById('streamdeck_ha_base_url')?.value.trim() || '';
+  const token = document.getElementById('streamdeck_ha_token')?.value || '';
+  try {
+    const body = {streamdeck_ha_base_url: base};
+    // Only send the token when the user typed one; blank means keep the stored
+    // secret (the field is never pre-filled with it).
+    if (token.trim()) body.streamdeck_ha_token = token.trim();
+    await fetch('setup/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    try {
+      let cfg = {};
+      const cur = await fetch('setup/streamdeck/config').then(x => x.json());
+      if (cur && cur.ok && cur.config && typeof cur.config === 'object') cfg = cur.config;
+      const r = await fetch('setup/streamdeck/config', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({config: cfg}),
+      });
+      if (r.ok) await fetch('setup/streamdeck/restart', {method: 'POST'});
+    } catch (e) { /* no bridge: settings are still saved on the server */ }
+    // Clear the token box so the typed secret is not left on screen.
+    const tokEl = document.getElementById('streamdeck_ha_token');
+    if (tokEl) { tokEl.value = ''; tokEl.placeholder = '(unchanged)'; }
+    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Home Assistant saved.</span>';
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// Probe Home Assistant with the current (saved or freshly typed) credentials and
+// report how many camera entities it sees. Doubles as a connectivity check.
+async function _haTestConnection(btn) {
+  const el = document.getElementById('ha-result');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...'; }
+  if (el) el.innerHTML = '';
+  try {
+    const data = await _haDiscover();
+    if (data && data.ok) {
+      const n = (data.cameras || []).length;
+      if (el) el.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Connected. ${n} camera${n === 1 ? '' : 's'} found.</span>`;
+    } else {
+      if (el) el.innerHTML = `<span class="text-danger">${(data && data.error) || 'Could not connect.'}</span>`;
+    }
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
   } finally {
