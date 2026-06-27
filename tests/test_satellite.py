@@ -67,8 +67,9 @@ def test_config_endpoint_serves_shareable_fields(client, monkeypatch):
 
 # -- pull side: apply config onto live settings ------------------------------
 
-def test_apply_config_sets_only_shareable_fields(monkeypatch):
+def test_apply_config_sets_only_shareable_fields(monkeypatch, tmp_path):
     from app.services.satellite import _apply_config
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
     monkeypatch.setattr(settings, "grocy_base_url", "")
     monkeypatch.setattr(settings, "gemini_api_key", "")
     applied = _apply_config({
@@ -83,6 +84,20 @@ def test_apply_config_sets_only_shareable_fields(monkeypatch):
     assert settings.gemini_api_key == "pulled-key"
     assert getattr(settings, "secret_key") != "SHOULD-NOT-APPLY"
     assert settings.server_sourced_fields >= {"grocy_base_url", "gemini_api_key"}
+
+
+def test_apply_config_persists_pulled_fields(monkeypatch, tmp_path):
+    # Pulled config must hit settings.json so it survives a restart and is shared
+    # across worker processes (the camera-not-showing-on-pi_remote bug).
+    import json
+    from app.services.satellite import _apply_config
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    monkeypatch.setattr(settings, "streamdeck_cameras", [], raising=False)
+    cams = [{"name": "Doorbell", "stream_url": "http://x/s", "snapshot_url": "http://x/snap"}]
+    _apply_config({"streamdeck_cameras": cams, "streamdeck_ha_base_url": "http://ha:8123"})
+    saved = json.loads((tmp_path / "settings.json").read_text())
+    assert saved["streamdeck_cameras"] == cams
+    assert saved["streamdeck_ha_base_url"] == "http://ha:8123"
 
 
 def test_sync_noops_when_not_satellite(monkeypatch):

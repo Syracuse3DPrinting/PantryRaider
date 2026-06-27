@@ -60,13 +60,28 @@ def _apply_config(config: dict) -> list[str]:
     """Overlay pulled backend config onto the live settings object.
 
     Returns the list of field names that were applied (server-sourced).
+
+    The pulled values are persisted to settings.json, not just held in memory:
+    a satellite often runs more than one worker process, and only the one that
+    ran the sync would otherwise see the new config, so its setup page and camera
+    page could show stale/empty values (e.g. a camera added on the server not
+    appearing here). Persisting also means the last-known config survives a
+    restart and is available before the first post-boot sync completes. These
+    fields render read-only on a satellite, so persisting cannot be edited away.
     """
     applied: list[str] = []
+    persist: dict = {}
     for field in SATELLITE_PULL_FIELDS:
         if field not in config:
             continue
         object.__setattr__(settings, field, config[field])
+        persist[field] = config[field]
         applied.append(field)
+    if persist:
+        try:
+            settings.save(persist)
+        except Exception as exc:  # non-fatal: the in-memory values still apply
+            logger.warning("satellite sync: could not persist pulled config: %s", exc)
     # Record provenance so the UI can render these read-only.
     object.__setattr__(settings, "server_sourced_fields", set(applied))
     return applied
