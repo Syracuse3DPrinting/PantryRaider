@@ -292,6 +292,51 @@ async def camera_page(request: Request):
     })
 
 
+@router.get("/camera/diag")
+async def camera_diag():
+    """One-shot camera diagnostics (JSON), for troubleshooting a blank feed.
+
+    Reports what the server sees (how many cameras, whether HA is configured)
+    and, per camera, the resolved entity and the result of actually fetching its
+    snapshot from Home Assistant. Tokens are never included.
+    """
+    import httpx
+    from ..services.cameras import resolve_ha_entity, ha_feed
+    cams = settings.streamdeck_cameras or []
+    out = {
+        "camera_count": len(cams),
+        "ha_base_url_set": bool(settings.streamdeck_ha_base_url),
+        "ha_token_set": bool(settings.streamdeck_ha_token),
+        "ha_base_url": settings.streamdeck_ha_base_url or "",
+        "cameras": [],
+    }
+    for idx, cam in enumerate(cams):
+        if not isinstance(cam, dict):
+            continue
+        entity, base = resolve_ha_entity(cam)
+        info = {
+            "index": idx,
+            "name": cam.get("name", ""),
+            "is_ha": bool(entity),
+            "entity": entity,
+            "has_direct_snapshot": bool(cam.get("snapshot_url")),
+        }
+        url, headers = ha_feed(cam, "snapshot")
+        if url:
+            # Show the upstream path without the token (it is in the header).
+            info["upstream"] = url
+            try:
+                async with httpx.AsyncClient(timeout=8.0) as c:
+                    r = await c.get(url, headers=headers)
+                info["fetch_status"] = r.status_code
+                info["fetch_bytes"] = len(r.content) if r.status_code == 200 else 0
+                info["content_type"] = r.headers.get("content-type", "")
+            except Exception as e:
+                info["fetch_error"] = str(e)
+        out["cameras"].append(info)
+    return out
+
+
 @router.get("/camera/{idx}/snapshot")
 async def camera_snapshot(idx: int):
     """Proxy a still frame for camera ``idx``.
