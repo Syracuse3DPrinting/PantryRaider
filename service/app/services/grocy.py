@@ -134,6 +134,18 @@ class GrocyClient:
             "spoiled": False,
         })
 
+    async def consume_by_barcode(self, barcode: str, amount: float = 1.0) -> dict:
+        """Consume stock for the product carrying ``barcode`` (Grocy native).
+
+        Grocy resolves the barcode to its product, so the scanner can use up an
+        item without a separate lookup. Raises GrocyError (via _post) when the
+        barcode is unknown or there is no stock to consume.
+        """
+        return await self._post(
+            f"/stock/products/by-barcode/{barcode}/consume",
+            {"amount": amount, "spoiled": False},
+        )
+
     async def get_expiring(self, days: int = 7) -> list[dict]:
         stock = await self.get_stock()
         today = date.today()

@@ -97,6 +97,9 @@ class Controller:
         # Today's planned meal name shown on a meal_today info key. Refreshed on
         # the normal status poll; defaults to a neutral face until first fetched.
         self.meal_today: str = "No meal"
+        # Active barcode scanner mode label shown on a scan_mode key (8jbk).
+        # Refreshed on the poll loop; defaults to the inventory ("Stock") face.
+        self.scanner_mode_label: str = "Stock"
         self.timers: dict[str, TimerState] = {}  # action name -> timer state
         # Active-recipe timer suggestions mapped onto the timer keys. Keyed by
         # the timer action name (timer_1/2/3 and any timer-override slot name),
@@ -393,12 +396,19 @@ class Controller:
                     color = base_color
                     alert = False
                     count = None
-                elif spec.kind in ("shopping_add", "macro"):
-                    # Quick-add and macro override keys are stateless faces: they
-                    # show their configured label and colour and do their work on
-                    # press (dispatched through actions.run_action), so there is
-                    # no live count or alert to compute here.
+                elif spec.kind in ("shopping_add", "macro", "ha_service"):
+                    # Quick-add, macro, and media (ha_service) keys are stateless
+                    # faces: they show their configured label and colour and do
+                    # their work on press (dispatched through actions.run_action),
+                    # so there is no live count or alert to compute here.
                     label = spec.label
+                    color = base_color
+                    alert = False
+                    count = None
+                elif spec.kind == "scan_mode":
+                    # The scan-mode key shows the active barcode scanner mode,
+                    # refreshed by the poll loop.
+                    label = f"Scan\n{self.scanner_mode_label}"
                     color = base_color
                     alert = False
                     count = None
@@ -700,6 +710,25 @@ class Controller:
         label = await actions.fetch_meal_today(self.client, self.config.base_url)
         if label != self.meal_today:
             self.meal_today = label
+            self._draw_page()
+
+    async def _refresh_scanner_mode(self) -> None:
+        """Refresh the active scanner mode label for any scan_mode key.
+
+        Best-effort and only when a scan_mode key is shown, so a deck without one
+        never pays for the call. Redraws when the mode changes (for example after
+        it is cycled from another device)."""
+        if self.client is None or not self._has_kind("scan_mode"):
+            return
+        try:
+            r = await self.client.get(
+                f"{self.config.base_url.rstrip('/')}/pending/scanner-mode", timeout=4.0
+            )
+            label = (r.json() or {}).get("label", "") if r.status_code == 200 else ""
+        except Exception:  # noqa: BLE001 - unreachable -> keep last label
+            return
+        if label and label != self.scanner_mode_label:
+            self.scanner_mode_label = label
             self._draw_page()
 
     async def _refresh_health(self) -> None:
@@ -1274,6 +1303,8 @@ class Controller:
         # Refresh the cached snapshot behind any single-key camera face, same
         # cadence. Skipped when no camera key is shown or none is configured.
         await self._refresh_camera_snapshot()
+        # Refresh the active scanner mode for any scan_mode key, same cadence.
+        await self._refresh_scanner_mode()
 
     def _tick_timers(self) -> bool:
         """Advance all active timers. Returns True if any expired this tick."""

@@ -14,6 +14,7 @@ from ..models.food import FoodItem, FoodCategory, StorageType
 from ..services.barcode import lookup_barcode, BarcodeNotFound, BarcodeServiceError
 from ..services.defaults import apply_defaults
 from ..services.grocy import GrocyClient
+from ..services import scanner_mode
 
 router = APIRouter(prefix="/pending", tags=["pending"])
 
@@ -138,6 +139,45 @@ async def scan_barcode(body: ScanRequest, request: Request, db: Session = Depend
     if not barcode:
         raise HTTPException(400, "Barcode is required")
 
+    # Scanner mode routes the same physical scan to a different action
+    # (FoodAssistant-8jbk). "inventory" (the default) falls through to the
+    # pending-queue behavior below, unchanged; the others act immediately and
+    # return a short status the scanner UI / deck can show. Errors come back as
+    # a 200 status object rather than an exception so a scan never hard-fails.
+    mode = scanner_mode.get_mode()
+    if mode == "consume":
+        try:
+            await GrocyClient().consume_by_barcode(barcode, body.quantity)
+            return {"status": "consumed", "barcode": barcode, "mode": mode}
+        except Exception as e:  # noqa: BLE001 - unknown barcode / no stock
+            return JSONResponse(
+                {"status": "consume_failed", "barcode": barcode, "mode": mode, "error": str(e)},
+                status_code=200,
+            )
+    if mode == "shopping":
+        name = f"Unknown ({barcode})"
+        try:
+            item = await lookup_barcode(barcode, db)
+            name = item.name
+        except (BarcodeNotFound, BarcodeServiceError):
+            pass
+        try:
+            from ..services.mealie import MealieClient
+            m = MealieClient()
+            lists = await m.get_shopping_lists()
+            if not lists:
+                return JSONResponse(
+                    {"status": "shopping_failed", "mode": mode, "error": "No shopping list in Mealie."},
+                    status_code=200,
+                )
+            await m.add_shopping_item(lists[0]["id"], name)
+            return {"status": "shopping_added", "name": name, "mode": mode}
+        except Exception as e:  # noqa: BLE001
+            return JSONResponse(
+                {"status": "shopping_failed", "name": name, "mode": mode, "error": str(e)},
+                status_code=200,
+            )
+
     # Same barcode already pending → bump quantity instead of duplicating
     existing = (
         db.query(PendingItem)
@@ -172,6 +212,33 @@ async def scan_barcode(body: ScanRequest, request: Request, db: Session = Depend
     db.commit()
     db.refresh(row)
     return {"status": "queued", "item": _row_dict(row)}
+
+
+class ScannerModePayload(BaseModel):
+    mode: str = ""
+
+
+@router.get("/scanner-mode")
+async def scanner_mode_get(request: Request):
+    """Current scanner mode. Lives on the inventory owner (the main server)."""
+    if _upstream():
+        return await _forward(request, "/scanner-mode")
+    return scanner_mode.get_state()
+
+
+@router.post("/scanner-mode")
+async def scanner_mode_set(body: ScannerModePayload, request: Request):
+    if _upstream():
+        return await _forward(request, "/scanner-mode")
+    return scanner_mode.set_mode(body.mode)
+
+
+@router.post("/scanner-mode/cycle")
+async def scanner_mode_cycle(request: Request):
+    """Advance to the next scanner mode (the Stream Deck key calls this)."""
+    if _upstream():
+        return await _forward(request, "/scanner-mode/cycle")
+    return scanner_mode.cycle_mode()
 
 
 @router.get("/")

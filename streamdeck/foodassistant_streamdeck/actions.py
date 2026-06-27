@@ -720,6 +720,7 @@ ACTION_ICONS: dict[str, str] = {
     "reboot": "power",
     "camera": "camera-video",
     "camera_full": "camera",
+    "scan_mode": "upc-scan",
 }
 
 
@@ -1066,6 +1067,15 @@ ACTIONS: dict[str, ActionSpec] = {
         description="Take over the whole deck with a single live camera frame "
         "sliced across every key. Press any key to exit.",
     ),
+    "scan_mode": ActionSpec(
+        name="scan_mode",
+        label="Scan\nMode",
+        color="#0369a1",
+        kind="scan_mode",
+        description="Cycle the barcode scanner mode (Stock, Use, Shop). The same "
+        "physical scanner then adds to inventory, consumes stock, or adds to the "
+        "shopping list. The key face shows the active mode.",
+    ),
 }
 
 # Stamp each spec with its glyph from the single-source-of-truth map above, so
@@ -1163,6 +1173,7 @@ _GROUP_BY_KIND = {
     "recipe_scale": "Recipe", "display_power": "System",
     "health": "System", "bridge_action": "System",
     "camera": "Camera", "camera_full": "Camera",
+    "scan_mode": "Actions", "ha_service": "Home Assistant",
 }
 
 
@@ -1916,6 +1927,19 @@ async def run_action(spec: ActionSpec, ctx: ActionContext, long_press: bool = Fa
         if face in ("OK", "Sent"):
             return "On" if spec.power_on else "Off"
         return face
+
+    if spec.kind == "scan_mode":
+        # Cycle the barcode scanner mode on the app; the face shows the active
+        # mode, refreshed by the poll loop (and right after this press).
+        if ctx.client is None:
+            return "scan: no client"
+        try:
+            r = await ctx.client.post(f"{base}/pending/scanner-mode/cycle")
+            data = r.json() if r.status_code == 200 else {}
+            await ctx.refresh()
+            return data.get("label", "Scan")
+        except Exception as e:  # noqa: BLE001
+            return f"scan err: {e}"
 
     if spec.kind == "health":
         # The health key's live state comes from the poll loop; a press just

@@ -2722,3 +2722,35 @@ def test_media_override_builds_ha_service_spec():
     assert actions.override_to_spec(1, {"type": "media", "entity_id": "x", "action": "zzz"}).ha_service == "media_player.media_play_pause"
     assert actions.override_to_spec(1, {"type": "media", "action": "next"}) is None
     assert "media" in actions.OVERRIDE_TYPES
+
+
+def test_scan_mode_action_cycles_via_app():
+    # The scan_mode key posts the cycle endpoint and shows the returned label.
+    posted = []
+
+    class _Resp:
+        status_code = 200
+        def json(self):
+            return {"mode": "consume", "label": "Use"}
+
+    class _Client:
+        async def post(self, url, **k):
+            posted.append(url)
+            return _Resp()
+
+    async def noop():
+        pass
+
+    ctx = actions.ActionContext(
+        client=_Client(), base_url="http://x", refresh=noop,
+        navigate=lambda p: noop(), cycle_brightness=lambda: 0,
+        page_next=lambda: None, page_prev=lambda: None,
+    )
+    spec = actions.resolve("scan_mode")
+    assert spec is not None and spec.kind == "scan_mode"
+    msg = asyncio.run(actions.run_action(spec, ctx))
+    assert msg == "Use"
+    assert posted == ["http://x/pending/scanner-mode/cycle"]
+    # It is grouped under Actions in the web key editor.
+    items = {i["name"]: i for i in actions.catalog()}
+    assert items["scan_mode"]["group"] == "Actions"
