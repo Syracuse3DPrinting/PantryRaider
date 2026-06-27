@@ -2619,3 +2619,38 @@ def test_camera_full_action_is_marker():
     )
     msg = asyncio.run(actions.run_action(actions.resolve("camera_full"), ctx))
     assert msg == "Camera"
+
+
+def test_camera_override_chooses_camera_and_full():
+    # A "camera" override targets a named camera and can take over the whole deck.
+    spec = actions.override_to_spec(2, {"type": "camera", "camera": "Garage"})
+    assert spec is not None and spec.kind == "camera" and spec.camera_name == "Garage"
+    full = actions.override_to_spec(3, {"type": "camera", "camera": "Door", "full": True})
+    assert full is not None and full.kind == "camera_full" and full.camera_name == "Door"
+    # No camera named: still builds (resolves to the first camera at draw time),
+    # and the label defaults sensibly.
+    blank = actions.override_to_spec(1, {"type": "camera"})
+    assert blank is not None and blank.kind == "camera" and blank.camera_name == ""
+    assert blank.label == "Camera"
+
+
+def test_camera_override_in_override_types():
+    assert "camera" in actions.OVERRIDE_TYPES
+
+
+def test_camera_url_for_selects_named_camera():
+    import types
+    from foodassistant_streamdeck.controller import Controller
+
+    fake = types.SimpleNamespace(config=types.SimpleNamespace(cameras=[
+        {"name": "Front", "snapshot_url": "http://a/snap"},
+        {"name": "Garage", "snapshot_url": "http://b/snap"},
+    ]))
+    # Named match (case-insensitive), blank -> first, unknown -> first fallback.
+    assert Controller._camera_url_for(fake, "Garage") == "http://b/snap"
+    assert Controller._camera_url_for(fake, "garage") == "http://b/snap"
+    assert Controller._camera_url_for(fake, "") == "http://a/snap"
+    assert Controller._camera_url_for(fake, "Nope") == "http://a/snap"
+    # No cameras at all -> empty string, never raises.
+    empty = types.SimpleNamespace(config=types.SimpleNamespace(cameras=[]))
+    assert Controller._camera_url_for(empty, "x") == ""

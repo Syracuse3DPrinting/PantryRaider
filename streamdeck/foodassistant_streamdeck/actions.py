@@ -655,6 +655,9 @@ class ActionSpec:
                              # False blanks it (via the host bridge).
     bridge_path: str = ""    # for kind=="bridge_action": host-bridge path to POST
                              # on press (e.g. "/kiosk/restart").
+    camera_name: str = ""    # for kind=="camera"/"camera_full" overrides: which
+                             # configured camera to show (matched by name). Empty
+                             # falls back to the first configured camera.
 
 
 # Single source of truth for key iconography. Each action maps to the same
@@ -1189,7 +1192,7 @@ def resolve(name: str) -> Optional[ActionSpec]:
 # controller already knows how to render and dispatch. "default" is a sentinel
 # that leaves the slot's stock action in place (used to clear an override).
 OVERRIDE_TYPES: tuple[str, ...] = (
-    "ha_action", "timer", "weather", "shopping_add", "macro", "default"
+    "ha_action", "timer", "weather", "shopping_add", "macro", "camera", "default"
 )
 
 _OVERRIDE_DEFAULT_COLORS = {
@@ -1198,6 +1201,7 @@ _OVERRIDE_DEFAULT_COLORS = {
     "weather": "#1e40af",
     "shopping_add": "#0f766e",
     "macro": "#6d28d9",
+    "camera": "#0f172a",
 }
 
 _OVERRIDE_DEFAULT_ICONS = {
@@ -1206,6 +1210,7 @@ _OVERRIDE_DEFAULT_ICONS = {
     "weather": "cloud-sun",
     "shopping_add": "cart-plus",
     "macro": "collection-play",
+    "camera": "camera-video",
 }
 
 # Longest item name a shopping_add key shows on its face before truncation, so a
@@ -1335,6 +1340,21 @@ def override_to_spec(slot: int, override: dict) -> Optional[ActionSpec]:
         return ActionSpec(
             name=name, label=label or "Macro", color=color, kind="macro",
             macro_actions=tuple(names), icon=icon,
+        )
+
+    if otype == "camera":
+        # Pick which configured camera a camera key shows (by name; empty = the
+        # first camera). The "full" flag takes over the whole deck on press
+        # instead of drawing a single-key snapshot face.
+        cam_name = str(override.get("camera", override.get("camera_name", ""))).strip()
+        full = _truthy(override.get("full"))
+        kind = "camera_full" if full else "camera"
+        if not label:
+            label = cam_name or ("Camera\nFull" if full else "Camera")
+        return ActionSpec(
+            name=name, label=label, color=color, kind=kind,
+            camera_name=cam_name, icon=icon,
+            target_path="" if full else "ui/camera",
         )
 
     return None

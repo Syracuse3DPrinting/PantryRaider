@@ -4380,6 +4380,7 @@ const _SD_OVERRIDE_PREVIEW = {
   weather: {color: '#1e40af', icon: 'cloud-sun', label: 'Weather'},
   shopping_add: {color: '#0f766e', icon: 'cart-plus', label: 'Add'},
   macro: {color: '#6d28d9', icon: 'collection-play', label: 'Macro'},
+  camera: {color: '#0f172a', icon: 'camera-video', label: 'Camera'},
 };
 
 // Paint each configured override onto its target grid cell so the grid mirrors
@@ -4411,6 +4412,7 @@ function _sdPaintOverridesOnGrid() {
     if (o.type === 'weather' && o.forecast) { color = '#0e7490'; icon = icon || 'thermometer-half'; if (!o.label) label = 'Forecast'; }
     if (o.type === 'shopping_add' && !o.label && o.item) label = o.item;
     if (o.type === 'macro' && !o.label && Array.isArray(o.actions) && o.actions.length) label = o.actions.length + ' steps';
+    if (o.type === 'camera') { if (o.full) icon = icon || 'camera'; if (!o.label) label = o.camera || (o.full ? 'Full' : 'Camera'); }
     if (!cell.dataset.ovBase) cell.dataset.ovBase = cell.style.background;
     cell.dataset.ovColor = color;
     cell.style.background = color;
@@ -4434,6 +4436,7 @@ const _SD_OVERRIDE_TYPES = [
   {value: 'weather', label: 'Weather tile'},
   {value: 'shopping_add', label: 'Quick-add shopping item'},
   {value: 'macro', label: 'Macro (run actions in sequence)'},
+  {value: 'camera', label: 'Camera feed'},
 ];
 
 // Curated Bootstrap Icons glyphs (names without the "bi-" prefix) offered in
@@ -4457,6 +4460,13 @@ function _sdOverrideRow(o) {
   const iconListId = uid + '-icons';
   const forecastId = uid + '-fc';
   const macroListId = uid + '-macro';
+  const camListId = uid + '-cam';
+  const camFullId = uid + '-camfull';
+  // Camera-name suggestions from the currently configured cameras, so a camera
+  // override can pick one by name (free text still works for a not-yet-saved one).
+  const camOpts = _sdCollectCameras()
+    .map(c => c.name).filter(Boolean)
+    .map(n => `<option value="${escapeHtml(n)}">`).join('');
   const iconOpts = _SD_HA_ICONS.map(g => `<option value="${escapeHtml(g)}">`).join('');
   // Offer the loaded action catalog (minus blank and macro keys, which a macro
   // cannot usefully run) as autocomplete suggestions for the macro field.
@@ -4551,6 +4561,20 @@ function _sdOverrideRow(o) {
         <datalist id="${macroListId}">${macroOpts}</datalist>
         <div class="form-text">Comma-separated action names, run in order on a single press. Other macros are skipped.</div>
       </div>
+    </div>
+    <div class="row g-2 mt-1 sd-ov-fields-camera">
+      <div class="col-md-7">
+        <label class="form-label small mb-1">Camera</label>
+        <input type="text" class="form-control form-control-sm sd-ov-camera" list="${camListId}" placeholder="(first camera)" value="${escapeHtml(o.camera || o.camera_name || '')}">
+        <datalist id="${camListId}">${camOpts}</datalist>
+        <div class="form-text">Which configured camera to show. Leave blank for the first one. Configure cameras under Interface &gt; Cameras.</div>
+      </div>
+      <div class="col-md-5 d-flex align-items-end">
+        <div class="form-check">
+          <input class="form-check-input sd-ov-camera-full" type="checkbox" id="${camFullId}"${o.full ? ' checked' : ''}>
+          <label class="form-check-label small" for="${camFullId}">Full deck (press to take over every key)</label>
+        </div>
+      </div>
     </div>`;
   const typeSel = row.querySelector('.sd-ov-type');
   const sync = () => {
@@ -4627,6 +4651,10 @@ function _sdCollectOverrides() {
         .split(',').map(s => s.trim()).filter(Boolean);
       if (actions.length < 1) continue;
       entry.actions = actions;
+    } else if (type === 'camera') {
+      const camera = row.querySelector('.sd-ov-camera')?.value.trim() || '';
+      if (camera) entry.camera = camera;
+      if (row.querySelector('.sd-ov-camera-full')?.checked) entry.full = true;
     } else {
       continue;
     }

@@ -175,15 +175,17 @@ class Controller:
         # even when the health probe passes on the closed handle.
         self._deck_live: bool = True
 
-        # Camera snapshot cache for the single-key camera face. Holds the last
-        # fetched JPEG bytes and the monotonic time it was fetched, so the draw
-        # loop reuses a recent frame instead of hammering the camera each redraw.
-        self._camera_snapshot_bytes: Optional[bytes] = None
-        self._camera_snapshot_at: float = 0.0
+        # Camera snapshot cache, keyed by snapshot URL so several camera keys can
+        # each show a different configured camera without evicting one another.
+        # Each entry is (jpeg_bytes, monotonic_fetch_time) so the draw loop reuses
+        # a recent frame instead of hammering the camera on every redraw.
+        self._camera_cache: dict[str, tuple[bytes, float]] = {}
         # Full-deck overlay state. While active, a dedicated task refreshes the
-        # whole deck from one frame and any key press exits it.
+        # whole deck from one frame and any key press exits it. _camera_full_name
+        # is the chosen camera (by name) for the active overlay; empty = first.
         self._camera_full_active: bool = False
         self._camera_full_task: Optional[asyncio.Task] = None
+        self._camera_full_name: str = ""
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -422,13 +424,16 @@ class Controller:
                     emoji=actions.emoji_for(spec.name),
                 )
                 # A camera key paints the latest snapshot over the fallback face
-                # when a frame is cached; if decoding fails it keeps the label.
-                if spec.kind == "camera" and self._camera_snapshot_bytes:
-                    snap = render.image_from_jpeg(
-                        self._camera_snapshot_bytes, self._key_size()
+                # when a frame is cached for its chosen camera; if decoding fails
+                # it keeps the label.
+                if spec.kind == "camera":
+                    cached = self._cached_snapshot(
+                        self._camera_url_for(getattr(spec, "camera_name", "") or "")
                     )
-                    if snap is not None:
-                        image = snap
+                    if cached:
+                        snap = render.image_from_jpeg(cached, self._key_size())
+                        if snap is not None:
+                            image = snap
             if rotation:
                 # PIL rotates counter-clockwise, so negate to turn the face
                 # clockwise (matching how a user physically turns the deck).
@@ -517,8 +522,10 @@ class Controller:
         spec = page[slot]
         # A camera_full key takes over the whole deck. Enter the overlay on the
         # loop thread (it creates a task) rather than running the no-op handler.
+        # Pass the key's chosen camera so a per-key override targets it.
         if spec.kind == "camera_full":
-            self.loop.call_soon_threadsafe(self._enter_camera_full)
+            cam_name = getattr(spec, "camera_name", "") or ""
+            self.loop.call_soon_threadsafe(self._enter_camera_full, cam_name)
             return
         fut = asyncio.run_coroutine_threadsafe(
             self._handle(spec, long_press=long_press), self.loop
@@ -710,13 +717,22 @@ class Controller:
 
     # -- camera ------------------------------------------------------------
 
-    def _first_camera_url(self) -> str:
-        """Snapshot URL of the first configured camera, or "" when none.
+    def _camera_url_for(self, name: str = "") -> str:
+        """Snapshot URL of the camera called ``name``, or the first when blank.
 
-        ``config.cameras`` is a list of dicts pushed by the app; only the first
-        entry feeds the single-key face and the full-deck overlay today.
+        ``config.cameras`` is a list of dicts pushed by the app. A non-empty
+        ``name`` matches a camera by its name (case-insensitive); if it does not
+        match, or is blank, the first camera with a snapshot URL is used so a key
+        bound to a since-removed camera still shows something. "" when none.
         """
         cams = getattr(self.config, "cameras", None) or []
+        want = name.strip().lower()
+        if want:
+            for cam in cams:
+                if isinstance(cam, dict) and str(cam.get("name", "")).strip().lower() == want:
+                    url = str(cam.get("snapshot_url", "")).strip()
+                    if url:
+                        return url
         for cam in cams:
             if isinstance(cam, dict):
                 url = str(cam.get("snapshot_url", "")).strip()
@@ -724,54 +740,80 @@ class Controller:
                     return url
         return ""
 
-    async def _camera_snapshot(self, max_age: float = 0.0) -> Optional[bytes]:
-        """Fetch the first camera's snapshot JPEG, cached briefly. None on failure.
+    def _first_camera_url(self) -> str:
+        """Snapshot URL of the first configured camera, or "" when none."""
+        return self._camera_url_for("")
 
+    def _cached_snapshot(self, url: str) -> Optional[bytes]:
+        """Last good JPEG bytes cached for ``url``, or None if nothing cached."""
+        entry = self._camera_cache.get(url)
+        return entry[0] if entry else None
+
+    async def _camera_snapshot(self, url: str = "", max_age: float = 0.0) -> Optional[bytes]:
+        """Fetch a camera snapshot JPEG, cached per URL. None on failure.
+
+        ``url`` is the snapshot endpoint (empty resolves to the first camera).
         Reuses the cached frame when it is younger than ``max_age`` seconds (0
         forces a fresh fetch) so the draw loop does not hammer the camera. Any
         network or service error returns None and leaves the cache untouched, so
         a transient hiccup keeps showing the last good frame rather than blanking.
         """
-        url = self._first_camera_url()
+        url = url or self._first_camera_url()
         if not url or self.client is None:
             return None
-        if (max_age > 0 and self._camera_snapshot_bytes is not None
-                and (time.monotonic() - self._camera_snapshot_at) < max_age):
-            return self._camera_snapshot_bytes
+        if max_age > 0:
+            entry = self._camera_cache.get(url)
+            if entry is not None and (time.monotonic() - entry[1]) < max_age:
+                return entry[0]
         try:
             r = await self.client.get(url, timeout=4.0)
             if r.status_code == 200 and r.content:
-                self._camera_snapshot_bytes = r.content
-                self._camera_snapshot_at = time.monotonic()
-                return self._camera_snapshot_bytes
+                self._camera_cache[url] = (r.content, time.monotonic())
+                return r.content
         except Exception:  # noqa: BLE001 - keep the last good frame, never crash
             pass
         return None
 
-    async def _refresh_camera_snapshot(self) -> None:
-        """Refresh the cached snapshot for any single-key camera face, on poll.
+    def _shown_camera_urls(self) -> list[str]:
+        """Distinct snapshot URLs for the single-key camera faces on this page."""
+        urls: list[str] = []
+        for spec in self._current():
+            if spec is not None and spec.kind == "camera":
+                url = self._camera_url_for(getattr(spec, "camera_name", "") or "")
+                if url and url not in urls:
+                    urls.append(url)
+        return urls
 
-        Best-effort and only when a camera key is shown and a camera is
-        configured, so a deck without one never pays for the fetch. Redraws when a
-        new frame arrives so the face stays current between presses."""
-        if not self._has_kind("camera") or not self._first_camera_url():
+    async def _refresh_camera_snapshot(self) -> None:
+        """Refresh the cached snapshots for the camera faces on this page, on poll.
+
+        Best-effort and only for the cameras a visible key actually shows, so a
+        deck without one never pays for the fetch and two keys on different
+        cameras each refresh. Redraws when any new frame arrives so the faces stay
+        current between presses."""
+        urls = self._shown_camera_urls()
+        if not urls:
             return
-        # Refresh roughly on the status-poll cadence; a slightly stale frame is
-        # fine for the small single-key face.
-        before = self._camera_snapshot_bytes
-        snap = await self._camera_snapshot(max_age=0.0)
-        if snap is not None and snap is not before:
+        changed = False
+        for url in urls:
+            before = self._cached_snapshot(url)
+            snap = await self._camera_snapshot(url, max_age=0.0)
+            if snap is not None and snap is not before:
+                changed = True
+        if changed:
             self._draw_page()
 
-    def _enter_camera_full(self) -> None:
+    def _enter_camera_full(self, camera_name: str = "") -> None:
         """Take over the whole deck with the live camera overlay.
 
-        Starts a refresh task that paints every key from one frame. A no camera
-        or no event loop case is a safe no-op. Re-entry while already active is
-        ignored so a double press does not stack tasks.
+        Starts a refresh task that paints every key from one frame of the chosen
+        camera (``camera_name`` empty = the first camera). A no camera or no event
+        loop case is a safe no-op. Re-entry while already active is ignored so a
+        double press does not stack tasks.
         """
         if self._camera_full_active or self.loop is None or not self.loop.is_running():
             return
+        self._camera_full_name = camera_name or ""
         self._camera_full_active = True
         # Treat the overlay as activity and ensure the deck is lit, so it does
         # not fight the idle blanker while the user is watching.
@@ -824,7 +866,9 @@ class Controller:
         rows, cols = self.deck.key_layout()
         key_size = self.deck.key_image_format()["size"]
         try:
-            snap = await self._camera_snapshot(max_age=0.0)
+            snap = await self._camera_snapshot(
+                self._camera_url_for(self._camera_full_name), max_age=0.0
+            )
             if snap is None:
                 self._set_full_deck_tiles(
                     render.message_across_deck(rows, cols, key_size, "No camera")
@@ -855,7 +899,7 @@ class Controller:
                 # Each tick counts as activity so the idle blanker stays out of
                 # the way while the overlay is up.
                 self._last_activity = time.monotonic()
-                if not ok and not self._first_camera_url():
+                if not ok and not self._camera_url_for(self._camera_full_name):
                     # No camera is even configured: stop rather than spin showing
                     # the placeholder forever. A configured-but-down camera keeps
                     # retrying so it recovers when the feed comes back.
