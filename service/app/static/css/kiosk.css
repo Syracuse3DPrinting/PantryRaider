@@ -36,6 +36,16 @@ a.btn {
   display: none !important;
 }
 
+/* In kiosk mode the three-dots "More" menu is the only dropdown a touch user
+ * has, and the reference links above (Defaults, About, API docs, shortcuts) are
+ * kiosk-hidden, which would leave just Settings. Reveal the overflow copies of
+ * the secondary nav destinations (Recipes, Cook, Current Recipe, Meal Plan,
+ * Camera, ...) so every page stays reachable from the kebab on a kiosk of any
+ * width, not only the under-820px panels the base stylesheet already handles. */
+.nav-overflow-item {
+  display: list-item !important;
+}
+
 /* Nav-tab links (add.html input tabs, etc.) */
 .nav-tabs .nav-link,
 .nav-pills .nav-link {

@@ -19,15 +19,24 @@ NAV_TABS = [
     {"key": "current_recipe", "label": "Current Recipe", "icon": "bi-journal-check", "href": "ui/current-recipe", "requires": "mealie"},
     {"key": "mealplan",  "label": "Meal Plan", "icon": "bi-calendar-week",   "href": "ui/mealplan", "requires": "mealie"},
     {"key": "shopping",  "label": "Shopping",  "icon": "bi-cart",            "href": "ui/shopping"},
+    {"key": "camera",    "label": "Camera",    "icon": "bi-camera-video",    "href": "ui/camera",   "requires": "cameras"},
     {"key": "defaults",  "label": "Defaults",  "icon": "bi-table",           "href": "ui/defaults"},
     {"key": "about",     "label": "About",     "icon": "bi-info-circle",     "href": "ui/about"},
 ]
+
+# Requirements backed by a configurable service that gets its own "unlock" hint
+# in the navbar when missing (see auto_hidden_groups). A requirement outside this
+# set (for example "cameras", which is configured in Interface, not a service)
+# simply hides its tab when unmet, with no lock badge.
+_SERVICE_REQUIREMENTS = {"mealie"}
 
 
 def _requirement_met(tab: dict) -> bool:
     req = tab.get("requires")
     if req == "mealie":
         return settings.mealie_configured()
+    if req == "cameras":
+        return bool(settings.streamdeck_cameras)
     return True
 
 
@@ -51,7 +60,7 @@ def auto_hidden_groups() -> list[dict]:
     groups: dict[str, dict] = {}
     for t in NAV_TABS:
         req = t.get("requires")
-        if not req or t["key"] in user_hidden:
+        if req not in _SERVICE_REQUIREMENTS or t["key"] in user_hidden:
             continue
         if not _requirement_met(t):
             if req not in groups:
