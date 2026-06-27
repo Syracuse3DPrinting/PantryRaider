@@ -194,6 +194,7 @@ class SetupPayload(BaseModel):
     streamdeck_weather_units: str = "f"
     streamdeck_key_style: str = ""
     streamdeck_icon_color: str = ""
+    streamdeck_cameras: list = []
     floating_nav_position: str = ""
     floating_nav_orientation: str = ""
     floating_nav_autohide_streamdeck: bool = False

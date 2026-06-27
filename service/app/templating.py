@@ -53,6 +53,8 @@ def theme_context(request: Request) -> dict:
         "floating_nav_orientation": settings.floating_nav_orientation,
         "floating_nav_autohide_streamdeck": settings.floating_nav_autohide_streamdeck,
         "has_streamdeck": settings.has_streamdeck,
+        # Cameras for the kiosk camera page (FoodAssistant-oewn).
+        "cameras": settings.streamdeck_cameras,
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,

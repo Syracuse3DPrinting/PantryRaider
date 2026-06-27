@@ -72,6 +72,7 @@ GET_PAGES = [
     "/ui/defaults",
     "/ui/convert",
     "/ui/timers",
+    "/ui/camera",
     "/setup",
 ]
 
@@ -189,6 +190,16 @@ def test_setup_save_persists_streamdeck_fields(client):
     assert settings.streamdeck_key_overrides == [
         {"slot": 0, "type": "weather", "location": "Portland"}
     ]
+
+
+def test_setup_save_persists_cameras(client):
+    """Cameras round-trip through /save and land on settings (FoodAssistant-oewn)."""
+    from app.config import settings
+
+    cams = [{"name": "Front", "stream_url": "http://x/stream", "snapshot_url": "http://x/snap"}]
+    r = client.post("/setup/save", json={"streamdeck_cameras": cams})
+    assert r.status_code == 200
+    assert settings.streamdeck_cameras == cams
 
 
 def test_streamdeck_style_persists_and_validates(client):

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.48"
+APP_VERSION = "0.6.49"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -181,6 +181,7 @@ _SAVEABLE = [
     "display_idle_timeout", "streamdeck_idle_timeout", "streamdeck_key_overrides",
     "streamdeck_weather_location", "streamdeck_weather_units",
     "streamdeck_key_style", "streamdeck_icon_color",
+    "streamdeck_cameras",
     "floating_nav_position", "floating_nav_orientation", "floating_nav_autohide_streamdeck",
     "deployment_mode", "remote_server_url", "remote_server_ip", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
@@ -211,6 +212,8 @@ SATELLITE_PULL_FIELDS = [
     "streamdeck_weather_location", "streamdeck_weather_units",
     # Stream Deck key visual style, so a satellite's deck looks like the server's.
     "streamdeck_key_style", "streamdeck_icon_color",
+    # Cameras, so a satellite's kiosk page and deck mirror the server's feeds.
+    "streamdeck_cameras",
 ]
 
 # Stream Deck key rendering style (FoodAssistant-fygv). Pushed into the deck's
@@ -553,6 +556,14 @@ class Settings(BaseSettings):
     # full (accent-tinted glyphs) | mono (monochrome).
     streamdeck_key_style: str = "rich"
     streamdeck_icon_color: str = "full"
+
+    # Cameras shown on the kiosk camera page and pushed to the Stream Deck
+    # (FoodAssistant-oewn). A list of dicts, each {name, stream_url,
+    # snapshot_url}: stream_url is the live feed for the kiosk page (an .m3u8 HLS
+    # stream or an MJPEG URL), snapshot_url is a still image the deck can show.
+    # Held at the app level so a satellite mirrors the server's cameras via the
+    # satellite config sync (see SATELLITE_PULL_FIELDS).
+    streamdeck_cameras: list = []
 
     # Advanced Stream Deck per-key overrides set in the setup page. A JSON list
     # where each entry is a dict with "slot" (grid index), "type" (ha_action |

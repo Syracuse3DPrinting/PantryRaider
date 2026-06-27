@@ -282,6 +282,15 @@ async def timers_page(request: Request):
     })
 
 
+@router.get("/camera", response_class=HTMLResponse)
+async def camera_page(request: Request):
+    return templates.TemplateResponse(request, "camera.html", {
+        "request": request,
+        "active": "camera",
+        "cameras": settings.streamdeck_cameras,
+    })
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     return templates.TemplateResponse(request, "about.html", {

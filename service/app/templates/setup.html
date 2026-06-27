@@ -1999,6 +1999,42 @@ docker compose up -d</code></pre>
                 </div>
               </div>
 
+              <div class="card bg-body-tertiary border-secondary mb-3">
+                <div class="card-body">
+                  <h6 class="card-title"><i class="bi bi-camera-video me-1"></i>Cameras</h6>
+                  <div class="form-text mb-2">Cameras shown on the kiosk Camera page and pushed to the Stream Deck. Stream URL is the live feed (an .m3u8 HLS stream or an MJPEG URL); Snapshot URL is a still image the deck can show. The From Home Assistant control fills both URLs from a camera entity using the Base URL and token entered above.</div>
+                  <div id="streamdeck-cameras" class="d-flex flex-column gap-2 mb-2">
+                    {% for cam in s.streamdeck_cameras %}
+                    <div class="row g-2 align-items-end sd-camera-row">
+                      <div class="col-md-2">
+                        <label class="form-label small mb-1">Name</label>
+                        <input type="text" class="form-control form-control-sm sd-cam-name" placeholder="Front door" value="{{ cam.name or '' }}">
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small mb-1">Stream URL</label>
+                        <input type="text" class="form-control form-control-sm sd-cam-stream" placeholder="http://.../stream.m3u8" value="{{ cam.stream_url or '' }}">
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small mb-1">Snapshot URL</label>
+                        <input type="text" class="form-control form-control-sm sd-cam-snapshot" placeholder="http://.../snapshot.jpg" value="{{ cam.snapshot_url or '' }}">
+                      </div>
+                      <div class="col-md-3">
+                        <label class="form-label small mb-1">Entity ID</label>
+                        <input type="text" class="form-control form-control-sm sd-cam-entity" placeholder="camera.front_door">
+                      </div>
+                      <div class="col-md-1 d-flex gap-1">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" title="From Home Assistant" onclick="_sdCameraFromHa(this)"><i class="bi bi-house"></i></button>
+                        <button type="button" class="btn btn-outline-danger btn-sm" title="Remove" onclick="this.closest('.sd-camera-row').remove()"><i class="bi bi-trash"></i></button>
+                      </div>
+                    </div>
+                    {% endfor %}
+                  </div>
+                  <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdAddCameraRow()">
+                    <i class="bi bi-plus-lg me-1"></i>Add camera
+                  </button>
+                </div>
+              </div>
+
               <div class="mb-3">
                 <label class="form-label" for="streamdeck_idle_timeout">Blank deck after N minutes idle (0 = off)</label>
                 <input class="form-control form-control-sm" style="max-width:120px" type="number"
@@ -4574,6 +4610,77 @@ function _sdCollectHaSlots() {
   return out;
 }
 
+// Cameras (FoodAssistant-oewn). Each row holds a Name, Stream URL, Snapshot URL,
+// plus an optional Entity ID used only by the "From Home Assistant" helper to
+// derive the two URLs from the HA base URL/token entered on this pane.
+function _sdCameraRow(cam) {
+  cam = cam || {};
+  const div = document.createElement('div');
+  div.className = 'row g-2 align-items-end sd-camera-row';
+  div.innerHTML = `
+    <div class="col-md-2">
+      <label class="form-label small mb-1">Name</label>
+      <input type="text" class="form-control form-control-sm sd-cam-name" placeholder="Front door">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">Stream URL</label>
+      <input type="text" class="form-control form-control-sm sd-cam-stream" placeholder="http://.../stream.m3u8">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">Snapshot URL</label>
+      <input type="text" class="form-control form-control-sm sd-cam-snapshot" placeholder="http://.../snapshot.jpg">
+    </div>
+    <div class="col-md-3">
+      <label class="form-label small mb-1">Entity ID</label>
+      <input type="text" class="form-control form-control-sm sd-cam-entity" placeholder="camera.front_door">
+    </div>
+    <div class="col-md-1 d-flex gap-1">
+      <button type="button" class="btn btn-outline-secondary btn-sm" title="From Home Assistant" onclick="_sdCameraFromHa(this)"><i class="bi bi-house"></i></button>
+      <button type="button" class="btn btn-outline-danger btn-sm" title="Remove" onclick="this.closest('.sd-camera-row').remove()"><i class="bi bi-trash"></i></button>
+    </div>`;
+  div.querySelector('.sd-cam-name').value = cam.name || '';
+  div.querySelector('.sd-cam-stream').value = cam.stream_url || '';
+  div.querySelector('.sd-cam-snapshot').value = cam.snapshot_url || '';
+  return div;
+}
+
+function _sdAddCameraRow(cam) {
+  const wrap = document.getElementById('streamdeck-cameras');
+  if (wrap) wrap.appendChild(_sdCameraRow(cam));
+}
+
+// Fill a row's Stream and Snapshot URLs from its Entity ID using the HA base URL
+// and token already on the page. If either is blank, leave the URLs for the user
+// to paste rather than building a broken link.
+function _sdCameraFromHa(btn) {
+  const row = btn.closest('.sd-camera-row');
+  if (!row) return;
+  const entity = row.querySelector('.sd-cam-entity')?.value.trim() || '';
+  const base = (document.getElementById('streamdeck_ha_base_url')?.value.trim() || '').replace(/\/+$/, '');
+  const token = document.getElementById('streamdeck_ha_token')?.value.trim() || '';
+  if (!entity || !base || !token) return;
+  const e = encodeURIComponent(entity);
+  const t = encodeURIComponent(token);
+  row.querySelector('.sd-cam-stream').value = `${base}/api/camera_proxy_stream/${e}?token=${t}`;
+  row.querySelector('.sd-cam-snapshot').value = `${base}/api/camera_proxy/${e}?token=${t}`;
+}
+
+// Collect the camera rows into a list of non-empty dicts. A row needs at least a
+// name or one URL to count; blank rows are skipped.
+function _sdCollectCameras() {
+  const wrap = document.getElementById('streamdeck-cameras');
+  if (!wrap) return [];
+  const out = [];
+  for (const row of wrap.querySelectorAll('.sd-camera-row')) {
+    const name = row.querySelector('.sd-cam-name')?.value.trim() || '';
+    const stream_url = row.querySelector('.sd-cam-stream')?.value.trim() || '';
+    const snapshot_url = row.querySelector('.sd-cam-snapshot')?.value.trim() || '';
+    if (!name && !stream_url && !snapshot_url) continue;
+    out.push({name, stream_url, snapshot_url});
+  }
+  return out;
+}
+
 // Pre-fill the HA base URL, token, and the five slot rows from a loaded config.
 function _sdLoadHaSettings(cfg) {
   cfg = cfg || {};
@@ -4613,6 +4720,7 @@ async function saveStreamDeckSettings() {
   const ha_base_url = document.getElementById('streamdeck_ha_base_url')?.value.trim() || '';
   const ha_token = document.getElementById('streamdeck_ha_token')?.value.trim() || '';
   const ha_slots = _sdCollectHaSlots();
+  const cameras = _sdCollectCameras();
 
   try {
     await fetch('setup/save', {
@@ -4622,7 +4730,8 @@ async function saveStreamDeckSettings() {
                             streamdeck_weather_location: weather_location,
                             streamdeck_weather_units: weather_units,
                             streamdeck_key_style: key_style,
-                            streamdeck_icon_color: icon_color}),
+                            streamdeck_icon_color: icon_color,
+                            streamdeck_cameras: cameras}),
     });
 
     if (has_streamdeck) {
@@ -4648,7 +4757,9 @@ async function saveStreamDeckSettings() {
         key_overrides,
         ha_base_url,
         ha_token,
-        ha_slots
+        ha_slots,
+        // The deck only needs the name and snapshot URL to render a still.
+        cameras: cameras.map(c => ({name: c.name, snapshot_url: c.snapshot_url}))
       });
       await fetch('setup/streamdeck/config', {
         method: 'POST', headers: {'Content-Type': 'application/json'},

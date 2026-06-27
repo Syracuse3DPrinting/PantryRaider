@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+{% block title %}Camera: FoodAssistant{% endblock %}
+
+{% block content %}
+<div class="mt-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
+  <h4 class="mb-0"><i class="bi bi-camera-video me-2"></i>Camera</h4>
+  {% if cameras and cameras|length > 1 %}
+  <div class="btn-group btn-group-sm" role="group" id="cameraSwitcher">
+    {% for cam in cameras %}
+    <button type="button"
+            class="btn btn-outline-info{% if loop.first %} active{% endif %}"
+            data-cam-index="{{ loop.index0 }}"
+            onclick="selectCamera({{ loop.index0 }})">
+      {{ cam.name or ("Camera " ~ loop.index) }}
+    </button>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
+
+{% if cameras %}
+<div id="cameraStage"
+     class="d-flex align-items-center justify-content-center rounded overflow-hidden"
+     style="background:#000; width:100%; min-height:70vh;">
+  <video id="cameraVideo" class="d-none" controls autoplay muted playsinline
+         style="width:100%; height:100%; max-height:85vh; object-fit:contain; background:#000;"></video>
+  <img id="cameraImg" class="d-none" alt="Camera feed"
+       style="width:100%; height:100%; max-height:85vh; object-fit:contain; background:#000;">
+  <div id="cameraError" class="d-none text-center text-secondary p-4">
+    <i class="bi bi-camera-video-off fs-1 d-block mb-2"></i>
+    <div>Camera unavailable. Check that the feed is reachable.</div>
+  </div>
+</div>
+{% else %}
+<div class="card">
+  <div class="card-body text-center text-secondary py-5">
+    <i class="bi bi-camera-video-off fs-1 d-block mb-3"></i>
+    <p class="mb-3">No cameras are configured yet.</p>
+    <a href="{{ ingress_path }}/setup#pane-streamdeck" class="btn btn-outline-info btn-sm">
+      <i class="bi bi-gear me-1"></i>Add a camera in Settings
+    </a>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+{% if cameras %}
+<script>
+  // Camera feeds rendered from app settings (FoodAssistant-oewn). An .m3u8
+  // stream uses a <video> element (native HLS where the browser supports it);
+  // anything else (typically an MJPEG endpoint) uses an <img>. An onerror on the
+  // element shows a friendly "unavailable" panel instead of a broken icon.
+  const CAMERAS = {{ cameras|tojson }};
+  const videoEl = document.getElementById('cameraVideo');
+  const imgEl = document.getElementById('cameraImg');
+  const errEl = document.getElementById('cameraError');
+
+  function _hideAll() {
+    videoEl.classList.add('d-none');
+    imgEl.classList.add('d-none');
+    errEl.classList.add('d-none');
+  }
+
+  function _showError() {
+    _hideAll();
+    errEl.classList.remove('d-none');
+  }
+
+  function selectCamera(index) {
+    const cam = CAMERAS[index];
+    if (!cam) { _showError(); return; }
+    // Stop any previous img/video load before switching source.
+    imgEl.removeAttribute('src');
+    videoEl.pause();
+    videoEl.removeAttribute('src');
+    videoEl.load();
+    _hideAll();
+
+    const url = (cam.stream_url || '').trim();
+    if (!url) { _showError(); return; }
+
+    if (url.toLowerCase().split('?')[0].endsWith('.m3u8')) {
+      videoEl.src = url;
+      videoEl.classList.remove('d-none');
+      videoEl.play().catch(() => { /* autoplay may be blocked; controls remain */ });
+    } else {
+      imgEl.src = url;
+      imgEl.classList.remove('d-none');
+    }
+
+    // Update the switcher active state.
+    document.querySelectorAll('#cameraSwitcher [data-cam-index]').forEach(btn => {
+      btn.classList.toggle('active', parseInt(btn.dataset.camIndex, 10) === index);
+    });
+  }
+
+  imgEl.addEventListener('error', _showError);
+  videoEl.addEventListener('error', _showError);
+
+  // Start on the first configured camera.
+  if (CAMERAS.length) selectCamera(0);
+</script>
+{% endif %}
+{% endblock %}
