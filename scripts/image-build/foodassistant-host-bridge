@@ -668,6 +668,43 @@ def _parse_wifi_scan(out):
     return sorted(best.values(), key=lambda n: n["signal"], reverse=True)
 
 
+def _ethernet_status():
+    """Best-effort wired status: {connected, device, ip}. Never raises.
+
+    A Pi on Ethernet should not look offline just because Wi-Fi is idle
+    (FoodAssistant-7r5), so the Wi-Fi status carries the wired state too. A
+    physical interface counts as connected when its carrier is up and it holds
+    an IPv4 address; virtual interfaces (docker, veth, bridges) are skipped.
+    """
+    try:
+        for name in sorted(os.listdir("/sys/class/net")):
+            if name == "lo" or name.startswith(("wlan", "ap", "docker", "veth", "br-", "tun", "tap", "vir")):
+                continue
+            try:
+                carrier = Path(f"/sys/class/net/{name}/carrier").read_text().strip()
+            except Exception:
+                carrier = "0"
+            if carrier != "1":
+                continue
+            ip = ""
+            try:
+                out = subprocess.run(
+                    ["ip", "-4", "-o", "addr", "show", "dev", name],
+                    capture_output=True, text=True, timeout=4
+                ).stdout
+                for tok in out.split():
+                    if "/" in tok and tok[0].isdigit():
+                        ip = tok.split("/")[0]
+                        break
+            except Exception:
+                pass
+            if ip:
+                return {"connected": True, "device": name, "ip": ip}
+        return {"connected": False, "device": "", "ip": ""}
+    except Exception:
+        return {"connected": False, "device": "", "ip": ""}
+
+
 def _nm_running():
     """True when NetworkManager (nmcli) is reachable."""
     try:
@@ -814,11 +851,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         #   unmanaged         -> wifi device exists but NM does not manage it
         #   disconnected      -> wifi adapter present, no active connection
         #   connected         -> joined a network (ssid is set)
+        eth = _ethernet_status()
         try:
             if not _nm_running():
                 self._send(200, {
                     "ok": True, "state": "no-networkmanager", "ssid": "",
-                    "detail": "NetworkManager is not running.",
+                    "detail": "NetworkManager is not running.", "ethernet": eth,
                 })
                 return
             dev_out = subprocess.run(
@@ -829,13 +867,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not device:
                 self._send(200, {
                     "ok": True, "state": "no-adapter", "ssid": "",
-                    "detail": "No Wi-Fi adapter found.",
+                    "detail": "No Wi-Fi adapter found.", "ethernet": eth,
                 })
                 return
             if dev_state == "unmanaged":
                 self._send(200, {
                     "ok": True, "state": "unmanaged", "ssid": "", "device": device,
                     "detail": "Wi-Fi device is not managed by NetworkManager.",
+                    "ethernet": eth,
                 })
                 return
             ssid_out = subprocess.run(
@@ -848,9 +887,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 "state": "connected" if ssid else "disconnected",
                 "ssid": ssid,
                 "device": device,
+                "ethernet": eth,
             })
         except Exception as e:
-            self._send(500, {"ok": False, "error": str(e)})
+            self._send(500, {"ok": False, "error": str(e), "ethernet": eth})
 
     def _wifi_scan(self):
         try:

@@ -1490,9 +1490,37 @@ dhcp-option=6,192.168.99.1
 address=/#/192.168.99.1
 EOF
 
-  # Watchdog service: after network-online.target, check wlan0 association.
-  # If not connected after 30 s, bring up the AP interface and start the
-  # hotspot daemons. A flag file signals to the web UI that AP mode is active.
+  # Watchdog script: after network-online.target, only fall back to the setup
+  # hotspot when the device has NO network at all. A Pi on wired Ethernet (or
+  # already on Wi-Fi) must never drop into Wi-Fi setup mode, so we check for a
+  # default route and for any wired interface that is up with an IP before
+  # starting the AP (FoodAssistant-8ah5).
+  cat > /usr/local/sbin/foodassistant-ap-watchdog <<'EOF'
+#!/bin/bash
+sleep 30
+# Already associated to a Wi-Fi network: nothing to do.
+if iw dev wlan0 link 2>/dev/null | grep -q "Connected"; then exit 0; fi
+# A default route via any interface means we have a gateway: stay off the AP.
+if ip route show default 2>/dev/null | grep -q .; then exit 0; fi
+# A wired interface that is up with an IPv4 address means LAN connectivity (the
+# appliance is reachable on the network), so the setup hotspot is not needed.
+for dev in /sys/class/net/*; do
+  name=$(basename "$dev")
+  case "$name" in lo|wlan*) continue;; esac
+  if [ "$(cat "$dev/carrier" 2>/dev/null)" = "1" ] \
+     && ip -4 addr show dev "$name" 2>/dev/null | grep -q "inet "; then
+    exit 0
+  fi
+done
+# No connectivity anywhere: bring up the captive setup hotspot.
+ip addr add 192.168.99.1/24 dev wlan0 2>/dev/null || true
+systemctl start hostapd
+systemctl start dnsmasq
+touch /run/foodassistant-ap-active
+EOF
+  chmod +x /usr/local/sbin/foodassistant-ap-watchdog
+
+  # Watchdog service: runs the script once after the network comes up.
   cat > /etc/systemd/system/foodassistant-ap-watchdog.service <<'EOF'
 [Unit]
 Description=FoodAssistant Wi-Fi fallback AP watchdog
@@ -1503,14 +1531,7 @@ RemainAfterExit=yes
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/bin/bash -c '\
-  sleep 30; \
-  if ! iw dev wlan0 link 2>/dev/null | grep -q "Connected"; then \
-    ip addr add 192.168.99.1/24 dev wlan0 2>/dev/null || true; \
-    systemctl start hostapd; \
-    systemctl start dnsmasq; \
-    touch /run/foodassistant-ap-active; \
-  fi'
+ExecStart=/usr/local/sbin/foodassistant-ap-watchdog
 
 [Install]
 WantedBy=multi-user.target

@@ -875,6 +875,7 @@ async def network_status():
             "ssid": wifi.get("ssid", ""),
             "wifi_state": wifi.get("state", ""),
             "wifi_detail": wifi.get("detail", ""),
+            "ethernet": wifi.get("ethernet", {}),
             "hostname": hn.get("hostname", ""),
         }
     except Exception as e:

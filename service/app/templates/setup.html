@@ -5435,16 +5435,25 @@ function escapeHtml(s) {
 function wifiStatusHtml(d) {
   const state = d.wifi_state || (d.ssid ? 'connected' : 'disconnected');
   const detail = d.wifi_detail ? escapeHtml(d.wifi_detail) : '';
+  // When Wi-Fi is not the active link, show wired status so a Pi on Ethernet
+  // does not read as offline (FoodAssistant-7r5).
+  const eth = d.ethernet || {};
+  const ethBadge = eth.connected
+    ? `<span class="badge bg-success me-2"><i class="bi bi-ethernet me-1"></i>Ethernet</span><span class="text-secondary small">Connected${eth.ip ? ' at ' + escapeHtml(eth.ip) : ''}</span>`
+    : '';
   switch (state) {
     case 'connected':
       return `<span class="badge bg-success me-2"><i class="bi bi-wifi me-1"></i>Connected</span><span class="text-secondary small">${escapeHtml(d.ssid)}</span>`;
     case 'no-adapter':
-      return `<span class="badge bg-secondary me-2"><i class="bi bi-wifi-off me-1"></i>No Wi-Fi adapter</span><span class="text-secondary small">${detail || 'This device has no Wi-Fi hardware. Use Ethernet.'}</span>`;
+      return ethBadge || `<span class="badge bg-secondary me-2"><i class="bi bi-wifi-off me-1"></i>No Wi-Fi adapter</span><span class="text-secondary small">${detail || 'This device has no Wi-Fi hardware. Use Ethernet.'}</span>`;
     case 'no-networkmanager':
       return `<span class="badge bg-warning text-dark me-2"><i class="bi bi-exclamation-triangle me-1"></i>NetworkManager off</span><span class="text-secondary small">${detail || 'NetworkManager is not running.'}</span>`;
     case 'unmanaged':
-      return `<span class="badge bg-warning text-dark me-2"><i class="bi bi-exclamation-triangle me-1"></i>Unmanaged</span><span class="text-secondary small">${detail || 'Wi-Fi device is not managed by NetworkManager.'}</span>`;
+      return ethBadge || `<span class="badge bg-warning text-dark me-2"><i class="bi bi-exclamation-triangle me-1"></i>Unmanaged</span><span class="text-secondary small">${detail || 'Wi-Fi device is not managed by NetworkManager.'}</span>`;
     default:
+      // Disconnected Wi-Fi: if wired is up, lead with that; otherwise show the
+      // Wi-Fi "not connected" state, optionally noting Ethernet alongside.
+      if (ethBadge) return ethBadge + '<span class="badge bg-secondary ms-2"><i class="bi bi-wifi-off me-1"></i>Wi-Fi off</span>';
       return `<span class="badge bg-secondary me-2"><i class="bi bi-wifi-off me-1"></i>Not connected</span><span class="text-secondary small">No active Wi-Fi</span>`;
   }
 }
