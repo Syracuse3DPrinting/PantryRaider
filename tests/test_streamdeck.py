@@ -2754,3 +2754,17 @@ def test_scan_mode_action_cycles_via_app():
     # It is grouped under Actions in the web key editor.
     items = {i["name"]: i for i in actions.catalog()}
     assert items["scan_mode"]["group"] == "Actions"
+
+
+def test_overrides_skip_unplaced_and_ignore_id():
+    # Custom keys carry a stable id and may be unplaced (slot -1, kept only in the
+    # library). The deck applies placed ones (by slot) and ignores the id field.
+    overrides = [
+        {"id": "c1", "slot": 2, "type": "timer", "minutes": 10, "label": "Tea"},
+        {"id": "c2", "slot": -1, "type": "timer", "minutes": 5, "label": "Unplaced"},
+    ]
+    specs = actions.overrides_to_specs(overrides, key_count=15)
+    assert set(specs.keys()) == {2}            # only the placed one
+    assert specs[2].kind == "timer"
+    assert specs[2].label == "Tea"
+    assert specs[2].timer_minutes == 10

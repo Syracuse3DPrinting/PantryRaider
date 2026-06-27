@@ -11,6 +11,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Stream Deck custom keys are a drag-and-drop library.** Custom keys are now created once in their own section (no slot number to type), and each appears as a chip in the palette under the grid. Drag it onto any key to place it, exactly like a built-in action; a custom key left unplaced is kept in the library for later. The grid shows each placed custom key's real face, and its row notes which key it sits on.
 - **Stream Deck Home Assistant media keys.** A Media override type binds a key to a Home Assistant media_player and a transport action (play/pause, next, previous, volume up/down, stop). It fires the service on press with no on/off polling, reusing the shared Home Assistant connection.
 - **Stream Deck barcode scanner modes.** A scan-mode key cycles the scanner context (Stock, Use, Shop) and shows the active mode on its face, so one physical scanner can add to inventory, consume stock, or add to the shopping list. The mode lives on the main server, so a satellite's deck and the server agree.
 - **Version bump tooling.** `scripts/bump-version.sh [patch|minor|major]` edits the single source-of-truth `APP_VERSION`, and `scripts/install-git-hooks.sh` installs a pre-commit hook that auto-bumps the patch on each commit so every commit changes at least the patch number. The hook stays out of the way during rebases, merges, beads-only commits, and explicit minor/major bumps.
