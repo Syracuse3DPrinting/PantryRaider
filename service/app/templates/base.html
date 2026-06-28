@@ -353,9 +353,16 @@
               <i class="bi bi-three-dots-vertical"></i>
             </a>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="moreMenu">
-              {# The page tabs all live in the primary nav now (it scrolls
-                 sideways on a narrow panel), so the kebab holds only the rarely
-                 used destinations: Settings, Defaults, About, and the dev links. #}
+              {# Every page tab is also listed here as a redundant way to reach it,
+                 in addition to the always-visible primary nav. #}
+              {% for tab in nav_tabs() if tab.key not in ['about', 'defaults'] %}
+              <li>
+                <a class="dropdown-item {% if active == tab.key %}active{% endif %}" href="{{ tab.href }}">
+                  <i class="bi {{ tab.icon }} me-2"></i>{{ tab.label }}
+                </a>
+              </li>
+              {% endfor %}
+              <li><hr class="dropdown-divider"></li>
               <li><a class="dropdown-item {% if active == 'setup' %}active{% endif %}" href="setup"><i class="bi bi-gear me-2"></i>Settings</a></li>
               <li class="kiosk-hide"><a class="dropdown-item {% if active == 'defaults' %}active{% endif %}" href="ui/defaults"><i class="bi bi-table me-2"></i>Defaults</a></li>
               <li class="kiosk-hide"><a class="dropdown-item {% if active == 'about' %}active{% endif %}" href="ui/about"><i class="bi bi-info-circle me-2"></i>About</a></li>
