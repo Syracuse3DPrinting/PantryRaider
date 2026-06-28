@@ -36,6 +36,11 @@ def is_staple(text: str) -> bool:
     # Descriptor words a recipe tacks on must not defeat a file staple:
     "parmesan cheese", "grated parmesan", "freshly grated parmesan",
     "fresh garlic", "chopped onions", "sliced onion", "fresh lemons",
+    # Measurement/quantity words in real recipe ingredients must not defeat a
+    # staple match (the reason the "with pantry staples" tier came back empty):
+    "3 tablespoons unsalted butter", "1 teaspoon kosher salt",
+    "1/2 teaspoon black pepper", "2 tablespoons extra-virgin olive oil",
+    "1 cup all-purpose flour", "2 cloves garlic, minced", "1 pinch ground cumin",
 ])
 def test_staples_match(ingredient):
     assert is_staple(ingredient), f"{ingredient!r} should be a staple"

@@ -274,6 +274,26 @@ _STAPLE_GLUE_TOKENS = {
 # Water (in any temperature) never counts against a recipe.
 _FREEBIE_TOKENS = {"water", "ice", "boiling", "warm", "cold", "hot", "tap"}
 
+# Measurement, quantity, and packaging words that ride along in a real recipe
+# ingredient ("3 tablespoons unsalted butter", "1 teaspoon kosher salt") but say
+# nothing about what the food is. Ignored when deciding if an ingredient is a
+# staple, so a verbose ingredient still matches "butter"/"salt"/"olive oil"
+# instead of falling out of the "with pantry staples" tier (the reason that tier
+# often came back empty). Stock matching is unaffected: it intersects on the food
+# word regardless of these.
+_MEASURE_TOKENS = {
+    "teaspoon", "teaspoons", "tsp", "tablespoon", "tablespoons", "tbsp", "tbs",
+    "cup", "cups", "ounce", "ounces", "oz", "pound", "pounds", "lb", "lbs",
+    "gram", "grams", "gm", "gms", "kilogram", "kilograms", "kg",
+    "milliliter", "milliliters", "ml", "liter", "liters", "litre", "litres",
+    "pint", "pints", "quart", "quarts", "gallon", "gallons",
+    "pinch", "pinches", "dash", "dashes", "handful", "splash", "drizzle",
+    "can", "cans", "package", "packages", "pkg", "packet", "packets",
+    "jar", "jars", "box", "boxes", "bag", "bags", "bottle", "bottles",
+    "container", "containers", "slice", "slices", "piece", "pieces",
+    "sprig", "sprigs", "stalk", "stalks", "bunch", "bunches", "knob",
+}
+
 
 def _load_staples_file() -> list[frozenset[str]] | None:
     """Read staples.txt and return each line as a frozen token set.
@@ -361,6 +381,7 @@ _PHRASE_MODIFIERS = {
 _STAPLE_DESCRIPTORS = (
     _PHRASE_MODIFIERS
     | _STAPLE_GLUE_TOKENS
+    | _MEASURE_TOKENS
     | {
         "cheese", "fresh", "chopped", "diced", "sliced", "minced", "grated",
         "shredded", "freshly", "fine", "finely", "coarse", "coarsely", "good",
@@ -390,9 +411,10 @@ def _is_staple_ingredient(ing_toks: set[str]) -> bool:
        milk" does NOT match "Milk" ("coconut" is not a descriptor).
     """
     staple_toks = _active_staple_tokens()
-    # Pathway 1: original fuzzy check
+    # Pathway 1: original fuzzy check. Measurement/quantity words are ignored so
+    # a verbose ingredient ("3 tablespoons unsalted butter") still matches.
     if (ing_toks & staple_toks
-            and ing_toks <= (staple_toks | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS)):
+            and ing_toks <= (staple_toks | _STAPLE_GLUE_TOKENS | _FREEBIE_TOKENS | _MEASURE_TOKENS)):
         return True
     # Pathway 2: phrase containment match (requires file to be present).
     # A staple phrase matches when its core tokens are all present in the
