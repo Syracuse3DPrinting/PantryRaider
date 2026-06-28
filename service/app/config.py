@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.75"
+APP_VERSION = "0.6.76"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -183,6 +183,7 @@ _SAVEABLE = [
     "streamdeck_key_style", "streamdeck_icon_color",
     "streamdeck_cameras",
     "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
+    "ha_events_enabled", "ha_camera_popup_seconds", "convert_custom_rows",
     "floating_nav_position", "floating_nav_orientation", "floating_nav_autohide_streamdeck",
     "deployment_mode", "remote_server_url", "remote_server_ip", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
@@ -218,6 +219,10 @@ SATELLITE_PULL_FIELDS = [
     # Home Assistant credentials + key map, so a satellite's deck drives the same
     # HA entities and can build camera URLs without re-entering the token.
     "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
+    # On-screen HA event channel, so a satellite kiosk behaves like the server
+    # (events are still pushed per-instance by HA). convert_custom_rows is left
+    # device-local on purpose: each kiosk keeps its own conversion cheat sheet.
+    "ha_events_enabled", "ha_camera_popup_seconds",
 ]
 
 # Stream Deck key rendering style (FoodAssistant-fygv). Pushed into the deck's
@@ -580,6 +585,18 @@ class Settings(BaseSettings):
     streamdeck_ha_base_url: str = ""
     streamdeck_ha_token: str = ""
     streamdeck_ha_slots: list = []
+
+    # On-screen Home Assistant event channel (FoodAssistant-*): when enabled, the
+    # kiosk and web UI poll for events pushed from HA (a rest_command in an
+    # automation) and show notification toasts and camera pop-ups on the display.
+    # ha_camera_popup_seconds is the default time a popped-up camera stays up.
+    ha_events_enabled: bool = False
+    ha_camera_popup_seconds: int = 20
+
+    # User-defined reference rows shown on the Conversions page, each a dict
+    # {label, value} (for example {"label": "Stick of butter", "value": "113 g /
+    # 8 tbsp"}). Pure reference text alongside the built-in cheat sheet.
+    convert_custom_rows: list = []
 
     # Advanced Stream Deck per-key overrides set in the setup page. A JSON list
     # where each entry is a dict with "slot" (grid index), "type" (ha_action |

@@ -1469,6 +1469,70 @@
             <div class="test-result mt-2" id="ha-result"></div>
             {% endif %}
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-bell text-success"></i> On-screen notifications &amp; camera pop-ups</div>
+            <p class="text-secondary small">Show messages and camera pop-ups pushed from Home Assistant on this device's screen
+              (the kiosk and any open browser tab). A Home Assistant automation calls FoodAssistant with a <code>rest_command</code>,
+              for example to pop up the doorbell camera when a person is detected.</p>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="ha_events_enabled"
+                     {% if s.ha_events_enabled %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
+              <label class="form-check-label" for="ha_events_enabled">Show Home Assistant notifications and camera pop-ups on screen</label>
+            </div>
+            <div class="row g-2 mb-2" style="max-width:360px">
+              <div class="col-auto">
+                <label class="form-label small mb-1" for="ha_camera_popup_seconds">Camera pop-up seconds</label>
+                <input type="number" min="3" max="300" class="form-control form-control-sm" style="max-width:120px"
+                       id="ha_camera_popup_seconds" value="{{ s.ha_camera_popup_seconds }}" {% if features.satellite %}disabled{% endif %}>
+              </div>
+            </div>
+            {% if features.satellite %}
+            <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Configured on the main server and synced here. Point your Home Assistant automation at <strong>this device</strong> (the one with the screen).</div>
+            {% else %}
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNotifications(this)">
+                <i class="bi bi-check-lg me-1"></i>Save notifications
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_haSendTestEvent(this)">
+                <i class="bi bi-send me-1"></i>Send test notification
+              </button>
+            </div>
+            <div class="test-result mt-2" id="ha-events-result"></div>
+            {% endif %}
+            <details class="mt-3">
+              <summary class="small text-info" style="cursor:pointer">Home Assistant setup (rest_command + automation)</summary>
+              <p class="text-secondary small mt-2 mb-1">Add to your Home Assistant <code>configuration.yaml</code> (use this device's LAN URL and your FoodAssistant API key from Settings &gt; Security):</p>
+<pre class="small bg-body-tertiary border rounded p-2" style="white-space:pre-wrap">rest_command:
+  foodassistant_notify:
+    url: "http://THIS-DEVICE:9284/events/notify"
+    method: POST
+    headers:
+      X-API-Key: "YOUR_FOODASSISTANT_API_KEY"
+    content_type: "application/json"
+    payload: '{"title":"{{ title }}","message":"{{ message }}","level":"{{ level }}"}'
+  foodassistant_camera_popup:
+    url: "http://THIS-DEVICE:9284/events/camera-popup"
+    method: POST
+    headers:
+      X-API-Key: "YOUR_FOODASSISTANT_API_KEY"
+    content_type: "application/json"
+    payload: '{"camera":"{{ camera }}","seconds":{{ seconds }}}'</pre>
+              <p class="text-secondary small mt-2 mb-1">Then an automation, for example pop up the door camera on a person:</p>
+<pre class="small bg-body-tertiary border rounded p-2" style="white-space:pre-wrap">automation:
+  - alias: "Person at door -> pop up camera"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.front_door_person
+        to: "on"
+    action:
+      - service: rest_command.foodassistant_camera_popup
+        data:
+          camera: "Front Door"
+          seconds: 20</pre>
+              <p class="text-secondary small mb-0">The <code>camera</code> name must match one configured on the Cameras page. Notifications take <code>message</code>, optional <code>title</code>, and <code>level</code> (info/success/warning/error).</p>
+            </details>
+          </div>
         </div>
 
         <!-- Cameras -->
@@ -5297,6 +5361,49 @@ async function savePaneHomeAssistant(btn) {
     const tokEl = document.getElementById('streamdeck_ha_token');
     if (tokEl) { tokEl.value = ''; tokEl.placeholder = '(unchanged)'; }
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Home Assistant saved.</span>';
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// Save the on-screen HA event channel settings (notification toasts + camera
+// pop-ups). A reload picks up the new enabled state so the page starts (or
+// stops) polling.
+async function savePaneNotifications(btn) {
+  const el = document.getElementById('ha-events-result');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...'; }
+  if (el) el.innerHTML = '';
+  const enabled = document.getElementById('ha_events_enabled')?.checked || false;
+  const seconds = parseInt(document.getElementById('ha_camera_popup_seconds')?.value || '20', 10) || 20;
+  try {
+    await fetch('setup/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ha_events_enabled: enabled, ha_camera_popup_seconds: seconds}),
+    });
+    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Saved. Reloading to apply...</span>';
+    setTimeout(() => location.reload(), 700);
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
+// Fire a sample notification through the event channel. If this page is polling
+// (the channel is enabled and saved), the toast appears within a few seconds.
+async function _haSendTestEvent(btn) {
+  const el = document.getElementById('ha-events-result');
+  const orig = btn ? btn.innerHTML : '';
+  if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Sending...'; }
+  try {
+    const r = await fetch('events/test', {method: 'POST'});
+    const enabled = document.getElementById('ha_events_enabled')?.checked || false;
+    if (el) el.innerHTML = enabled
+      ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Sent. Watch for the toast in the top-right.</span>'
+      : '<span class="text-warning">Sent, but turn the channel on and Save first to see it on screen.</span>';
+    await r.json().catch(() => {});
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
   } finally {

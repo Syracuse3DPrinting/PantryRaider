@@ -86,6 +86,11 @@
   <script src="static/js/floating-nav.js?v={{ app_version }}"></script>
   <!-- Floating timer window: shows running server-side timers; defers to a deck -->
   <script src="static/js/timer-window.js?v={{ app_version }}"></script>
+  {% if ha_events_enabled %}
+  <!-- On-screen Home Assistant event channel: notification toasts + camera pop-ups -->
+  <div id="ha-events-config" data-enabled="1" data-popup-seconds="{{ ha_camera_popup_seconds }}" hidden></div>
+  <script src="static/js/ha-events.js?v={{ app_version }}"></script>
+  {% endif %}
   <style>
     body { padding-top: 60px; }
     .navbar-brand { font-weight: 700; letter-spacing: -0.5px; }

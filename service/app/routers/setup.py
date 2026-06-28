@@ -199,6 +199,9 @@ class SetupPayload(BaseModel):
     streamdeck_ha_base_url: str = ""
     streamdeck_ha_token: str = ""
     streamdeck_ha_slots: list = []
+    ha_events_enabled: bool = False
+    ha_camera_popup_seconds: int = 20
+    convert_custom_rows: list = []
     floating_nav_position: str = ""
     floating_nav_orientation: str = ""
     floating_nav_autohide_streamdeck: bool = False

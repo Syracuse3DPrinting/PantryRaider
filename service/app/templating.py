@@ -55,6 +55,9 @@ def theme_context(request: Request) -> dict:
         "has_streamdeck": settings.has_streamdeck,
         # Cameras for the kiosk camera page (FoodAssistant-oewn).
         "cameras": settings.streamdeck_cameras,
+        # On-screen Home Assistant event channel (notifications + camera pop-ups).
+        "ha_events_enabled": settings.ha_events_enabled,
+        "ha_camera_popup_seconds": settings.ha_camera_popup_seconds,
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,

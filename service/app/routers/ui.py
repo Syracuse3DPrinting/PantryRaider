@@ -271,6 +271,7 @@ async def convert_page(request: Request):
     return templates.TemplateResponse(request, "convert.html", {
         "request": request,
         "active": "convert",
+        "convert_custom_rows": settings.convert_custom_rows,
     })
 
 
