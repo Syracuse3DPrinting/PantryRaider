@@ -4,12 +4,22 @@ WORKDIR /app
 
 # rclone powers the optional "push backup to a cloud remote" feature
 # (Settings > Security > Backup). ca-certificates is needed for outbound HTTPS.
-# evtest is used by the touchscreen calibration flow to read raw taps from the
-# panel's /dev/input device (the appliance compose mounts /dev/input in); without
-# it in the image, calibration reports the touch stream as disconnected.
+# This line is unchanged on purpose so its build-cache layer is reused and no
+# apt fetch is needed on a rebuild.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends rclone ca-certificates evtest \
+    && apt-get install -y --no-install-recommends rclone ca-certificates \
     && rm -rf /var/lib/apt/lists/*
+
+# evtest lets the touchscreen calibration read raw taps from the panel's
+# /dev/input device (the appliance compose mounts /dev/input in). It is a
+# SEPARATE, best-effort layer: on a network that blocks the Debian mirror in the
+# build (some captive or filtering proxies 401 plain-HTTP apt), the image still
+# builds, just without on-device calibration, instead of failing the whole
+# rebuild. When the mirror is reachable, evtest is installed.
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends evtest \
+    && rm -rf /var/lib/apt/lists/* \
+    || echo "WARN: evtest not installed (apt mirror unreachable); touch calibration will be unavailable"
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
