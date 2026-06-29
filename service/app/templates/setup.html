@@ -3834,7 +3834,11 @@ async function scanLanForServer(inputId, resultId) {
       out.textContent = 'Scan failed: ' + (d.error || 'unknown error');
       return;
     }
-    const servers = (d.found || []).filter(h => h.mode !== 'satellite');
+    // Only a full server (server / pi_hosted) can be a satellite's main server.
+    // Exclude satellites, including THIS device, which reports mode 'pi_remote'
+    // (FoodAssistant-52m7). The older 'satellite' value is filtered too for
+    // safety on mixed-version LANs.
+    const servers = (d.found || []).filter(h => h.mode !== 'pi_remote' && h.mode !== 'satellite');
     if (!servers.length) {
       out.className = 'small mt-1 text-warning';
       out.textContent = 'No FoodAssistant servers found on this subnet.';
