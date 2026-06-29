@@ -2125,24 +2125,6 @@ docker compose up -d</code></pre>
           <p class="pane-intro">Configure the Elgato Stream Deck attached to this appliance.</p>
 
           <div class="section-card mb-3">
-            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
-            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
-            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-display me-1"></i>Display</span>
-                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
-                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-            </div>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
-              <i class="bi bi-arrow-repeat me-1"></i>Refresh
-            </button>
-          </div>
-
-          <div class="section-card mb-3">
             <div class="section-title"><i class="bi bi-grid-3x3-gap text-info"></i> Stream Deck Device</div>
             <div class="form-check form-switch mb-3">
               <input class="form-check-input" type="checkbox" role="switch" id="has_streamdeck"
@@ -2151,6 +2133,17 @@ docker compose up -d</code></pre>
               <label class="form-check-label" for="has_streamdeck">Stream Deck connected to this device</label>
             </div>
             <div id="streamdeck-opts" class="{{ '' if s.has_streamdeck else 'd-none' }}">
+              <!-- Top save bar so settings can be saved without scrolling to the
+                   bottom of a long editor (FoodAssistant-cqbs). -->
+              <div class="d-flex gap-2 flex-wrap align-items-center mb-3 pb-2 border-bottom">
+                <button type="button" class="btn btn-info btn-sm" onclick="saveStreamDeckSettings()">
+                  <i class="bi bi-check-lg me-1"></i>Save Stream Deck settings
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="restartStreamDeck()">
+                  <i class="bi bi-arrow-repeat me-1"></i>Restart service
+                </button>
+                <span class="test-result sd-save-result ms-1"></span>
+              </div>
               <div class="mb-3">
                 <label class="form-label">Model (key count)</label>
                 <select class="form-select form-select-sm" id="streamdeck_key_count" style="max-width:280px" onchange="_sdRenderGrid(); _sdPopulateProfileSelect()">
@@ -2310,7 +2303,7 @@ docker compose up -d</code></pre>
                 <i class="bi bi-arrow-repeat me-1"></i>Restart service
               </button>
             </div>
-            <div class="test-result mt-2" id="streamdeck-save-result"></div>
+            <div class="test-result mt-2 sd-save-result" id="streamdeck-save-result"></div>
           </div>
 
           <div class="section-card">
@@ -2321,6 +2314,26 @@ docker compose up -d</code></pre>
               <li>Logs: <code>journalctl -u foodassistant-streamdeck -f</code></li>
               <li>Config file: <code>/opt/foodassistant/config.toml</code></li>
             </ul>
+          </div>
+
+          <!-- Attached hardware moved to the bottom so the editor is reachable
+               without scrolling past it (FoodAssistant-cqbs). -->
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
+            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
+            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-display me-1"></i>Display</span>
+                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
+                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
+              <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
           </div>
         </div>
 
@@ -5166,8 +5179,11 @@ function _sdLoadHaSettings(cfg) {
 }
 
 async function saveStreamDeckSettings() {
-  const el = document.getElementById('streamdeck-save-result');
-  if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
+  // Mirror the status to every save-result slot (top and bottom of the editor)
+  // so it is visible wherever the user clicked Save.
+  const setRes = (html) => document.querySelectorAll('.sd-save-result')
+    .forEach(e => { e.innerHTML = html; });
+  setRes('<span class="text-secondary">Saving...</span>');
   const has_streamdeck = document.getElementById('has_streamdeck')?.checked || false;
   const streamdeck_key_count = parseInt(document.getElementById('streamdeck_key_count')?.value || '15', 10);
   const streamdeck_idle_timeout = parseInt(document.getElementById('streamdeck_idle_timeout')?.value || '0', 10);
@@ -5227,9 +5243,9 @@ async function saveStreamDeckSettings() {
       await fetch('setup/streamdeck/restart', {method: 'POST'});
     }
     
-    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Stream Deck settings saved.</span>';
+    setRes('<span class="text-success"><i class="bi bi-check-circle me-1"></i>Stream Deck settings saved.</span>');
   } catch (e) {
-    if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+    setRes(`<span class="text-danger">${e}</span>`);
   }
 }
 
