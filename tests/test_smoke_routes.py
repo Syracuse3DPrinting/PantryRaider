@@ -101,6 +101,15 @@ def test_setup_redirect_preserves_kiosk_flag(client, monkeypatch):
     assert r2.headers["location"].endswith("/setup")
 
 
+def test_setup_page_has_rotation_mode_guard(client):
+    """Standalone pages (setup/login/pin) must carry data-rotation-mode like
+    base.html, or kiosk-display.js applies a CSS rotation on top of the
+    compositor's, double-rotating /setup on a Pi (FoodAssistant-anou)."""
+    page = client.get("/setup").text
+    assert "data-rotation-mode=" in page
+    assert "data-display-rotation=" in page
+
+
 def test_kitchen_guide_has_safe_temps(client):
     r = client.get("/ui/kitchen-guide")
     assert r.status_code == 200
