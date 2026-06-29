@@ -944,16 +944,6 @@
           </div>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-download text-info"></i> Software updates</div>
-            <p class="text-secondary small">This device runs from a local checkout. Check for updates to pull the latest FoodAssistant source, refresh dependencies if they changed, and restart the app. A failed pull leaves the running version untouched.</p>
-            <button class="btn btn-outline-primary btn-sm" id="update-btn" onclick="checkForUpdates()">
-              <i class="bi bi-arrow-repeat me-1"></i>Check for updates
-            </button>
-            <div class="test-result" id="update-result"></div>
-            <pre class="small text-secondary mt-2 d-none" id="update-log" style="white-space:pre-wrap; max-height:220px; overflow:auto;"></pre>
-          </div>
-
-          <div class="section-card">
             <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About satellite mode</div>
             <p class="text-secondary small">Backend settings and expiry defaults are managed on the main server and mirrored here read-only. Edit them there, then Sync. This device keeps its own display, Stream Deck, and security settings.</p>
           </div>
@@ -1918,6 +1908,16 @@
           <div class="section-card">
             <div class="section-title"><i class="bi bi-arrow-repeat text-success"></i> Updates
               <span class="badge bg-secondary">v{{ version }}</span></div>
+            {% if is_satellite %}
+            <p class="text-secondary small">This device runs from a local checkout. Check for updates to pull the
+              latest FoodAssistant source, refresh dependencies if they changed, and restart the app. A failed pull
+              leaves the running version untouched.</p>
+            <button class="btn btn-outline-primary btn-sm" id="update-btn" onclick="checkForUpdates()">
+              <i class="bi bi-arrow-repeat me-1"></i>Check for updates
+            </button>
+            <div class="test-result" id="update-result"></div>
+            <pre class="small text-secondary mt-2 d-none" id="update-log" style="white-space:pre-wrap; max-height:220px; overflow:auto;"></pre>
+            {% else %}
             <p class="text-secondary small">FoodAssistant can't update itself from the browser (that would
               need Docker access from inside the container). Check for a new release here, then run the
               matching command.</p>
@@ -1934,6 +1934,7 @@ docker compose up -d</code></pre>
               <div class="small text-secondary"><strong>Built from source:</strong>
                 <code>git pull &amp;&amp; docker compose up -d --build service</code></div>
             </div>
+            {% endif %}
           </div>
         </div>
 
