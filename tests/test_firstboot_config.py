@@ -525,6 +525,19 @@ def test_generic_display_skips_dsi_path(tmp_path):
     assert "Display type is dsi_7inch" not in out
 
 
+# Resistive HDMI / ADS7846 (FoodAssistant-mox4): selecting this display type
+# forces the ads7846 driver even though SPI is off (auto-detect would miss it),
+# so the overlay + SPI get written and a calibration rule is applied.
+
+def test_ads7846_hdmi_forces_ads7846_driver(tmp_path):
+    rc, out = _touch_run(tmp_path, {"DISPLAY_TYPE": "ads7846_hdmi"})
+    assert rc == 0, out
+    assert "forcing ADS7846 SPI touch" in out
+    assert "Configuring touch driver: ads7846" in out
+    # The calibration rule matches the ADS7846 controller name.
+    assert "name=ADS7846*" in out
+
+
 def test_waveshare_display_type_read_from_settings_json(tmp_path):
     # display_type written by the web wizard to settings.json is honoured.
     sf = tmp_path / "settings.json"

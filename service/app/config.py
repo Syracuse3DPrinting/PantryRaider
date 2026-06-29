@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.104"
+APP_VERSION = "0.6.105"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -78,10 +78,16 @@ _DEFAULT_DISPLAY_ROTATION = 0
 #                     touchscreen and 800x480 driver-free clones like the
 #                     Hosyond). Bookworm full KMS dropped DSI auto-detection, so
 #                     firstboot writes dtoverlay=vc4-kms-dsi-7inch to light it.
+#   ads7846_hdmi    - a resistive HDMI panel with an ADS7846 SPI touch
+#                     controller (Waveshare 3.5-4 inch HDMI LCD and similar).
+#                     The touch is invisible until SPI and the ads7846 overlay
+#                     are configured, and auto-detect cannot see it because SPI
+#                     is off at first boot, so firstboot writes both.
 DISPLAY_TYPES = {
     "generic":        {"label": "Generic display"},
-    "waveshare_hdmi": {"label": "Waveshare HDMI touchscreen"},
+    "waveshare_hdmi": {"label": "Waveshare HDMI touchscreen (USB touch)"},
     "dsi_7inch":      {"label": "MIPI DSI 7-inch touchscreen (official / Hosyond clone)"},
+    "ads7846_hdmi":   {"label": "Resistive HDMI touchscreen (ADS7846 SPI, e.g. Waveshare 3.5-4 inch)"},
 }
 _DEFAULT_DISPLAY_TYPE = "generic"
 

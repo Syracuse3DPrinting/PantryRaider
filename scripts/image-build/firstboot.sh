@@ -135,6 +135,9 @@ load_config() {
   #   dsi_7inch       - MIPI DSI 7-inch panel (official Pi 7-inch or 800x480
   #                     clone). configure_touch writes dtoverlay=vc4-kms-dsi-7inch
   #                     so the panel comes up on Bookworm full KMS.
+  #   ads7846_hdmi    - resistive HDMI panel with an ADS7846 SPI touch controller
+  #                     (Waveshare 3.5-4 inch). configure_touch enables SPI and
+  #                     writes the ads7846 overlay so the touch registers.
   # The web wizard writes this to settings.json; config.env can also set it.
   DISPLAY_TYPE="${DISPLAY_TYPE:-generic}"
   FOODASSISTANT_TAG="${FOODASSISTANT_TAG:-latest}"
@@ -982,6 +985,16 @@ configure_touch() {
     _install_touch_calibrate_helper
     _configure_waveshare_hdmi_touch
     return 0
+  fi
+
+  # A resistive HDMI panel with an ADS7846 SPI controller (Waveshare 3.5-4 inch
+  # HDMI LCD and similar) reports no input device until SPI and the ads7846
+  # overlay are configured. Auto-detect cannot find it because SPI is off at
+  # first boot, so selecting this display type forces the ads7846 driver path
+  # below, which writes the overlay and enables SPI.
+  if [ "${DISPLAY_TYPE:-generic}" = "ads7846_hdmi" ]; then
+    log "Display type is ads7846_hdmi; forcing ADS7846 SPI touch"
+    driver="ads7846"
   fi
 
   # Auto-detect: check for SPI bus (ADS7846 candidate) or existing HID touch

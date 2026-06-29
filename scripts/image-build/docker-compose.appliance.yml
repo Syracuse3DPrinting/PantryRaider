@@ -35,6 +35,15 @@ services:
       - FOODASSISTANT_FORCE_MODEL=Raspberry Pi
     volumes:
       - ./data:/app/data
+      # Touch calibration runs evtest against the panel's input device, so the
+      # container needs to read /dev/input/event*. The container runs as root,
+      # so the bind mount plus the input-class device cgroup rule below grants
+      # read access (FoodAssistant-mox4). A Pi with any display always has
+      # /dev/input (HDMI alone creates CEC input devices), so the mount source
+      # exists.
+      - /dev/input:/dev/input
+    device_cgroup_rules:
+      - 'c 13:* rmw'   # char major 13 = /dev/input/* (event, mouse, js)
     restart: unless-stopped
     depends_on:
       grocy:
