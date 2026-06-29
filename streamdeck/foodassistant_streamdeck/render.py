@@ -414,6 +414,38 @@ def _wrap_single_word(
     return lines or [word]
 
 
+def _wrap_text(
+    draw: ImageDraw.ImageDraw, text: str, font, max_width: int
+) -> list[str]:
+    """Word-wrap ``text`` so each line fits ``max_width``.
+
+    Wraps on spaces; a single word still too wide at this size is broken across
+    lines via ``_wrap_single_word`` so nothing runs off the key. Used for the
+    supporting description on a weather feature face (e.g. "Partly Cloudy").
+    """
+    words = text.split()
+    if not words:
+        return [text]
+    lines: list[str] = []
+    current = ""
+    for word in words:
+        candidate = f"{current} {word}".strip()
+        if current and _text_width(draw, candidate, font) > max_width:
+            lines.append(current)
+            current = word
+        else:
+            current = candidate
+    if current:
+        lines.append(current)
+    out: list[str] = []
+    for line in lines:
+        if " " not in line and _text_width(draw, line, font) > max_width:
+            out.extend(_wrap_single_word(draw, line, font, max_width))
+        else:
+            out.append(line)
+    return out or [text]
+
+
 def _styled_background(
     width: int, height: int, bg: tuple[int, int, int], style: str
 ) -> Image.Image:
@@ -677,37 +709,40 @@ def _draw_label(
         y += line_h
 
 
-def _feature_lines(label: str, kind: str) -> list[str]:
-    """Split a feature-face label into display lines.
+def _feature_display_lines(label: str, kind: str) -> list[tuple[str, bool]]:
+    """Ordered (text, is_primary) lines for a feature face.
 
-    Most labels already carry their own newlines (e.g. "Feels\n75°F" or the
-    clock's "08:30\nMon 29"). A single-line current-weather label such as
-    "72°F Sunny" is split on its first space so the temperature can lead and the
-    condition sit beneath it. Everything else is returned as-is.
+    The emphasised (primary) line is rendered large; the rest small. The split
+    is kind-aware so the big value is always just the number, never the number
+    plus trailing words that would run off a small key (FoodAssistant-bx6v):
+
+    - clock: the time leads (line 0), the date sits under it.
+    - weather, current conditions ("86°F Partly Cloudy", possibly with the
+      condition pre-split by a newline): the temperature is isolated as the
+      primary and the whole description becomes one supporting string that the
+      renderer word-wraps. Temperature-led is detected by a digit in the first
+      whitespace token.
+    - weather stats ("Feels\n75°F", "Wind\n12\nmph") and forecast
+      ("Today\nH72 L55"): keep the existing line order and emphasise the line
+      that carries the number; when no line has a digit the first line leads.
     """
-    lines = label.split("\n")
-    if kind == "weather" and len(lines) == 1:
-        parts = lines[0].split(" ", 1)
-        if len(parts) == 2 and any(ch.isdigit() for ch in parts[0]):
-            return parts
-    return lines
-
-
-def _feature_primary_index(lines: list[str], kind: str) -> int:
-    """Index of the emphasised value line on a feature face.
-
-    The clock leads with the time (line 0). Weather and forecast lead with the
-    line carrying the number (the temperature or the high/low); when no line has
-    a digit, the first line is emphasised.
-    """
-    if not lines:
-        return 0
     if kind == "clock":
-        return 0
-    for i, line in enumerate(lines):
-        if any(ch.isdigit() for ch in line):
-            return i
-    return 0
+        parts = label.split("\n")
+        return [(parts[0], True)] + [(p, False) for p in parts[1:] if p]
+
+    if kind == "weather":
+        tokens = label.split()
+        if tokens and any(ch.isdigit() for ch in tokens[0]):
+            temp = tokens[0]
+            rest = " ".join(tokens[1:]).strip()
+            return [(temp, True)] + ([(rest, False)] if rest else [])
+
+    # weather stat or forecast: keep the lines, emphasise the number line.
+    lines = [ln for ln in label.split("\n") if ln != ""] or [label]
+    primary_idx = next(
+        (i for i, ln in enumerate(lines) if any(ch.isdigit() for ch in ln)), 0
+    )
+    return [(ln, i == primary_idx) for i, ln in enumerate(lines)]
 
 
 def _render_feature_face(
@@ -726,7 +761,9 @@ def _render_feature_face(
     corner glyph accent, and a two-tier text layout (a large bright primary value
     with smaller dim supporting lines), independent of the deck's key_style, so
     the at-a-glance widgets never look like flat coloured rectangles (bx6v). The
-    corner glyph is deliberately small so it stays clear of the centred value and
+    supporting text word-wraps and the whole block shrinks to fit, so a long
+    condition like "Partly Cloudy" stays on the key instead of running off it.
+    The corner glyph is deliberately small so it stays clear of the value and
     does not re-truncate it (the concern that drove FoodAssistant-510y).
     """
     top = _lighten(bg, 0.32)
@@ -753,37 +790,56 @@ def _render_feature_face(
             fill=_mix(primary_fill, bottom, 0.55),
         )
 
-    lines = _feature_lines(label, kind) or [label]
-    primary_idx = _feature_primary_index(lines, kind)
+    display = _feature_display_lines(label, kind) or [(label, True)]
     max_w = int(width * _FIT_FRACTION)
 
-    # Size the primary value to fill; supporting lines a clear step smaller.
+    # Size the primary value to fill the width (it is short, e.g. "86°F"); the
+    # supporting text is a clear step smaller and word-wrapped to the width.
+    primary_text = next((t for t, is_p in display if is_p), display[0][0])
     primary_px = _font_px(height, 0.42, density=density, floor=16)
-    primary_font = _fit_font(draw, lines[primary_idx], primary_px, max_w, floor=14)
+    primary_font = _fit_font(draw, primary_text, primary_px, max_w, floor=14)
     primary_size = int(getattr(primary_font, "size", primary_px))
-    secondary_size = max(_MIN_FONT_PX, int(primary_size * 0.55))
+    secondary_size = max(_MIN_FONT_PX, int(primary_size * 0.50))
 
-    fonts: list = []
-    for i, line in enumerate(lines):
-        if i == primary_idx:
-            fonts.append(primary_font)
+    def _physical_lines(p_font, s_size):
+        """Expand the display lines into drawable (text, font, primary) rows,
+        word-wrapping the supporting text at the current secondary size."""
+        s_font = _font(s_size)
+        rows: list[tuple] = []
+        for text, is_p in display:
+            if is_p:
+                rows.append((text, p_font, True))
+            else:
+                for wrapped in _wrap_text(draw, text, s_font, max_w):
+                    rows.append((wrapped, s_font, False))
+        return rows
+
+    # Shrink the supporting text, then the value, until the whole stack fits the
+    # vertical budget, so a long wrapped description never overruns the key.
+    gap = max(1, int(height * 0.04))
+    budget = int(height * 0.90)
+    while True:
+        rows = _physical_lines(primary_font, secondary_size)
+        heights = [draw.textbbox((0, 0), t or "Ag", font=f)[3]
+                   - draw.textbbox((0, 0), t or "Ag", font=f)[1] for t, f, _p in rows]
+        total = sum(heights) + gap * (len(rows) - 1)
+        if total <= budget:
+            break
+        if secondary_size > _MIN_FONT_PX:
+            secondary_size -= 2
+        elif primary_size > 14:
+            primary_size -= 2
+            primary_font = _font(primary_size)
         else:
-            fonts.append(_fit_font(draw, line, secondary_size, max_w, floor=_MIN_FONT_PX))
+            break
 
-    heights: list[int] = []
-    for line, font in zip(lines, fonts):
-        box = draw.textbbox((0, 0), line or "Ag", font=font)
-        heights.append(box[3] - box[1])
-    gap = max(1, int(height * 0.05))
-    block_h = sum(heights) + gap * (len(lines) - 1)
-    # Centre the value block; bias slightly below centre so the corner glyph has
-    # breathing room above. Clamp on-key so nothing falls off the edge.
-    y = max(int(height * 0.06), (height - block_h) // 2)
-    for i, (line, font, line_h) in enumerate(zip(lines, fonts, heights)):
-        box = draw.textbbox((0, 0), line, font=font)
+    block_h = sum(heights) + gap * (len(rows) - 1)
+    y = max(int(height * 0.05), (height - block_h) // 2)
+    for (text, font, is_p), line_h in zip(rows, heights):
+        box = draw.textbbox((0, 0), text, font=font)
         lw = box[2] - box[0]
-        fill = primary_fill if i == primary_idx else secondary_fill
-        draw.text(((width - lw) / 2 - box[0], y - box[1]), line, font=font, fill=fill)
+        fill = primary_fill if is_p else secondary_fill
+        draw.text(((width - lw) / 2 - box[0], y - box[1]), text, font=font, fill=fill)
         y += line_h + gap
     return img
 

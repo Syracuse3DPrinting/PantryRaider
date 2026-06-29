@@ -826,24 +826,51 @@ def test_feature_face_kind_only_for_widgets():
     assert render.feature_face_kind("status") == ""
 
 
-def test_feature_lines_splits_single_line_weather():
-    # A one-line current-weather label leads with the temperature, condition below.
-    assert render._feature_lines("72°F Sunny", "weather") == ["72°F", "Sunny"]
-    # A label with no digit in the first token is left whole.
-    assert render._feature_lines("Clear skies", "weather") == ["Clear skies"]
-    # Multi-line stat labels keep their own lines.
-    assert render._feature_lines("Feels\n75°F", "weather") == ["Feels", "75°F"]
+def test_feature_display_isolates_temperature_for_wrap():
+    # Current conditions: the temperature is the lone big value; the whole
+    # description becomes one supporting string the renderer word-wraps, so it
+    # never shares the big line and run off the key (FoodAssistant-bx6v).
+    assert render._feature_display_lines("86°F Partly Cloudy", "weather") == [
+        ("86°F", True), ("Partly Cloudy", False)]
+    # A condition pre-split by a newline is flattened back into one wrap string.
+    assert render._feature_display_lines("86°F Partly\nCloudy", "weather") == [
+        ("86°F", True), ("Partly Cloudy", False)]
+    # Temperature alone, no description.
+    assert render._feature_display_lines("72°F", "weather") == [("72°F", True)]
 
 
-def test_feature_primary_index_emphasises_value():
-    # Clock leads with the time line.
-    assert render._feature_primary_index(["08:30", "Mon 29"], "clock") == 0
-    # Weather/forecast emphasise the line carrying the number.
-    assert render._feature_primary_index(["Feels", "75°F"], "weather") == 1
-    assert render._feature_primary_index(["Wind", "12", "mph"], "weather") == 1
-    assert render._feature_primary_index(["Today", "H72 L55"], "forecast") == 1
-    # No digit anywhere: fall back to the first line.
-    assert render._feature_primary_index(["No", "signal"], "weather") == 0
+def test_feature_display_emphasises_value_line():
+    # Clock leads with the time, date underneath.
+    assert render._feature_display_lines("08:30\nMon 29", "clock") == [
+        ("08:30", True), ("Mon 29", False)]
+    # Weather stats keep label-above-value order, emphasising the number line.
+    assert render._feature_display_lines("Feels\n75°F", "weather") == [
+        ("Feels", False), ("75°F", True)]
+    assert render._feature_display_lines("Wind\n12\nmph", "weather") == [
+        ("Wind", False), ("12", True), ("mph", False)]
+    # Forecast keeps the high/low together as the emphasised line.
+    assert render._feature_display_lines("Today\nH72 L55", "forecast") == [
+        ("Today", False), ("H72 L55", True)]
+    # No digit anywhere (e.g. an error face): first line leads.
+    assert render._feature_display_lines("No signal", "weather") == [
+        ("No signal", True)]
+
+
+def test_feature_face_long_condition_stays_on_key():
+    # The classic overflow case on a 72px (15-key v1) deck: a long current-
+    # conditions label must not paint past the right edge or the bottom edge.
+    img = render.render_key(
+        72, 72, label="86°F Partly Cloudy", color="#1e40af",
+        icon="cloud-sun", feature_face="weather",
+    )
+    gray = img.convert("L")
+    w, h = gray.size
+    # The right two columns and bottom two rows stay near the dark gradient edge
+    # (no bright text bleeding off the key).
+    right = list(gray.crop((w - 2, 0, w, h)).getdata())
+    bottom = list(gray.crop((0, h - 2, w, h)).getdata())
+    assert max(right) < 140
+    assert max(bottom) < 140
 
 
 def test_feature_face_renders_gradient_not_flat():
