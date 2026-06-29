@@ -184,6 +184,16 @@
       <span class="tag-pill" data-tag="Budget" onclick="toggleTag(this)">💸 Budget</span>
     </div>
 
+    <!-- Ingredient include/exclude filter (FoodAssistant-w3s5). Free-text,
+         comma-separated; AI-only steering like the tags above. -->
+    <div class="pref-section-label">Ingredients <span class="ai-only">✨ AI only</span></div>
+    <div class="ingredient-filter">
+      <input type="text" class="form-control form-control-sm" id="pref-include"
+             placeholder="Must include, e.g. chicken, basil" oninput="savePrefs(); updatePrefLabels();">
+      <input type="text" class="form-control form-control-sm" id="pref-exclude"
+             placeholder="Avoid, e.g. cilantro, mushrooms" oninput="savePrefs(); updatePrefLabels();">
+    </div>
+
     <div class="pref-reset-row">
       <a href="#" onclick="resetPrefs(); return false;">Reset to defaults</a>
     </div>
@@ -434,6 +444,14 @@ input[type=range].pref-slider {
   border-color: var(--bs-success);
   color: #fff;
 }
+.ingredient-filter {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+@media (max-width: 520px) {
+  .ingredient-filter { grid-template-columns: 1fr; }
+}
 .pref-reset-row {
   text-align: right;
   margin-top: 0.75rem;
@@ -478,8 +496,11 @@ function updatePrefLabels() {
   document.getElementById('lbl-time').textContent       = TIME_LABELS[tVal];
   document.getElementById('lbl-portions').textContent   = PORTIONS_LABELS[pVal];
   const anyDisabled = Object.values(prefOn).some(on => !on);
+  const hasIng = ((document.getElementById('pref-include')?.value || '').trim()
+    || (document.getElementById('pref-exclude')?.value || '').trim());
   const nonDefault = cVal !== 3 || sVal !== 3 || tVal !== 3 || pVal !== 3
-    || anyDisabled || activeDiets.size > 0 || activeCuisines.size > 0 || activeTags.size > 0;
+    || anyDisabled || activeDiets.size > 0 || activeCuisines.size > 0 || activeTags.size > 0
+    || hasIng;
   document.getElementById('prefs-active-badge').classList.toggle('d-none', !nonDefault);
 }
 
@@ -541,6 +562,8 @@ function savePrefs() {
     complexity: cVal, spice: sVal, time: tVal, portions: pVal,
     enabled: {...prefOn},
     diets: [...activeDiets], cuisines: [...activeCuisines], tags: [...activeTags],
+    include: document.getElementById('pref-include')?.value || '',
+    exclude: document.getElementById('pref-exclude')?.value || '',
   }));
 }
 
@@ -560,6 +583,10 @@ function loadPrefs() {
     activeDiets = new Set(p.diets || []);
     activeCuisines = new Set(p.cuisines || []);
     activeTags = new Set(p.tags || []);
+    const incEl = document.getElementById('pref-include');
+    const excEl = document.getElementById('pref-exclude');
+    if (incEl) incEl.value = p.include || '';
+    if (excEl) excEl.value = p.exclude || '';
   } catch (_) {}
   document.getElementById('pref-complexity').value = cVal;
   document.getElementById('pref-spice').value      = sVal;
@@ -598,6 +625,10 @@ function resetPrefs() {
   document.querySelectorAll('.diet-pill').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.cuisine-pill').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.tag-pill').forEach(el => el.classList.remove('active'));
+  const incEl = document.getElementById('pref-include');
+  const excEl = document.getElementById('pref-exclude');
+  if (incEl) incEl.value = '';
+  if (excEl) excEl.value = '';
   savePrefs();
   updatePrefLabels();
   scheduleRefresh();
@@ -626,6 +657,8 @@ function buildPrefsString() {
   if (cuisines)   parts.push(`preferred cuisine: ${cuisines}`);
   const tagPhrase = buildTagsPhrase();
   if (tagPhrase)  parts.push(tagPhrase);
+  const ingPhrase = buildIngredientPhrase();
+  if (ingPhrase)  parts.push(ingPhrase);
   return parts.join('. ');
 }
 
@@ -648,6 +681,20 @@ const TAG_PHRASES = {
 };
 const COURSE_TAGS = new Set(['Breakfast', 'Appetizer', 'Soup', 'Salad', 'Main Course',
   'Side Dish', 'Snack', 'Dessert', 'Baked Goods', 'Candy', 'Drink']);
+
+function ingValue(id) {
+  return (document.getElementById(id)?.value || '')
+    .split(',').map(s => s.trim()).filter(Boolean);
+}
+
+function buildIngredientPhrase() {
+  const inc = ingValue('pref-include');
+  const exc = ingValue('pref-exclude');
+  const out = [];
+  if (inc.length) out.push(`must use these ingredients: ${inc.join(', ')}`);
+  if (exc.length) out.push(`must NOT use these ingredients: ${exc.join(', ')}`);
+  return out.join('. ');
+}
 
 function buildTagsPhrase() {
   if (!activeTags.size) return '';
