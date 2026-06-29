@@ -59,35 +59,13 @@
     { label: 'bottom-left',  tx: 0.05, ty: 0.95 },
   ];
 
-  const ROTATION = parseInt({{ rotation | default(0) | tojson }}, 10) || 0;
-
-  // Approach: fit the affine straight from raw to the VISIBLE target positions
-  // (this is what works at rotation 0), then compose the result with the inverse
-  // of the compositor's output transform for the current rotation. The
-  // compositor applies its transform to touch at runtime, so composing its
-  // inverse here cancels it and the net mapping stays raw -> visible target at
-  // any rotation. Normalized-coordinate inverse-transform matrices (2x3,
-  // [a b c d e f] mapping (x,y) -> (a*x+b*y+c, d*x+e*y+f)):
-  const INV_OUTPUT_TRANSFORM = {
-    0:   [1, 0, 0, 0, 1, 0],
-    90:  [0, 1, 0, -1, 0, 1],   // (x,y) -> (y, 1-x)
-    180: [-1, 0, 1, 0, -1, 1],  // (x,y) -> (1-x, 1-y)
-    270: [0, -1, 1, 1, 0, 0],   // (x,y) -> (1-y, x)
-  };
-
-  // Compose t (2x3) after m (2x3): returns the affine for t(m(x,y)).
-  function composeAffine(t, m) {
-    const [a, b, c, d, e, f] = m;
-    const [t0, t1, t2, t3, t4, t5] = t;
-    return [
-      t0 * a + t1 * d,
-      t0 * b + t1 * e,
-      t0 * c + t1 * f + t2,
-      t3 * a + t4 * d,
-      t3 * b + t4 * e,
-      t3 * c + t4 * f + t5,
-    ];
-  }
+  // Calibration is a plain 4-corner affine fit straight from the raw device
+  // coordinates to the VISIBLE target positions, at whatever rotation the
+  // display is currently in. A 2x3 affine already represents any rotation,
+  // flip, or axis swap between the panel and the screen, so the four taps
+  // capture the full mapping without a separate rotation step. (An earlier
+  // version tried to pre-compensate for a compositor output transform; on this
+  // hardware that corrupted 90/180/270, so the straight fit is used instead.)
 
   let es = null;
   let step = 0;
@@ -168,11 +146,9 @@
   }
 
   async function applyCalibration() {
-    const fit = solveAffine(samples);
-    // Fold in the inverse of the compositor's rotation so the matrix stays
-    // correct once the compositor transforms touch at runtime.
-    const inv = INV_OUTPUT_TRANSFORM[ROTATION] || INV_OUTPUT_TRANSFORM[0];
-    const coeffs = composeAffine(inv, fit);
+    // Straight raw -> visible-target affine; the four corners capture the full
+    // panel-to-screen mapping (including any rotation) on their own.
+    const coeffs = solveAffine(samples);
     const matrix = coeffs.map(v => v.toFixed(4)).join(' ');
     msgEl.textContent = 'Applying calibration...';
     try {
