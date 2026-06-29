@@ -101,6 +101,17 @@ def test_setup_redirect_preserves_kiosk_flag(client, monkeypatch):
     assert r2.headers["location"].endswith("/setup")
 
 
+def test_touch_calibration_done_flag(client):
+    """After a calibration applies, the remote UI's done poll fires once so the
+    Cancel control clears (FoodAssistant-mox4). The flag is one-shot."""
+    from app.routers import setup as s
+    s._CAL_DONE_FLAG.write_text("1")
+    first = client.get("/setup/calibrate/touch/done/pending").json()
+    assert first["pending"] is True
+    second = client.get("/setup/calibrate/touch/done/pending").json()
+    assert second["pending"] is False
+
+
 def test_touch_calibration_remote_cancel_flag(client):
     """The remote Cancel sets a one-shot flag the Pi calibration page polls
     (FoodAssistant-mox4): pending is true once, then cleared."""

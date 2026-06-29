@@ -2067,7 +2067,7 @@ docker compose up -d</code></pre>
                       title="Remove the calibration matrix and revert to the panel default">
                 <i class="bi bi-arrow-counterclockwise me-1"></i>Reset calibration
               </button>
-              <div class="form-text">Launches a four-corner tap test on the Pi's attached touchscreen. Stand at the device and tap each crosshair. If a calibration comes out wrong, Reset reverts to the panel default.</div>
+              <div class="form-text">Launches a four-corner tap test on the Pi's attached touchscreen. Stand at the device and tap each crosshair. If a calibration comes out wrong, Reset reverts to the panel default. Recalibrate after changing the display rotation.</div>
               <div class="test-result mt-2" id="touch-calibrate-result"></div>
             </div>
             {% endif %}
@@ -6049,6 +6049,7 @@ async function startTouchCalibration() {
           ' <button type="button" class="btn btn-outline-danger btn-sm ms-2" onclick="cancelTouchCalibration()">' +
           '<i class="bi bi-x-circle me-1"></i>Cancel calibration</button>';
       }
+      _watchCalibrationDone();
     } else if (el) {
       el.className = 'test-result mt-2 text-danger';
       el.textContent = 'Could not start: ' + (data.error || 'unknown error');
@@ -6076,10 +6077,33 @@ async function resetTouchCalibration() {
   }
 }
 
+// Poll until the calibration is applied on the Pi, then clear the in-progress
+// state (including the Cancel button) so it does not linger after success. The
+// Pi kiosk restarts when it applies, so it cannot report back itself; the app
+// sets a one-shot done flag we watch here. Gives up after a few minutes.
+let _calDoneTimer = null;
+function _watchCalibrationDone() {
+  if (_calDoneTimer) clearInterval(_calDoneTimer);
+  const started = Date.now();
+  _calDoneTimer = setInterval(async function () {
+    if (Date.now() - started > 240000) { clearInterval(_calDoneTimer); _calDoneTimer = null; return; }
+    try {
+      const r = await fetch('/setup/calibrate/touch/done/pending', { cache: 'no-store' });
+      const d = await r.json();
+      if (d && d.pending) {
+        clearInterval(_calDoneTimer); _calDoneTimer = null;
+        const el = document.getElementById('touch-calibrate-result');
+        if (el) { el.className = 'test-result mt-2 text-success'; el.textContent = 'Calibration applied. The kiosk display restarted to load it.'; }
+      }
+    } catch (e) { /* transient: keep polling */ }
+  }, 1500);
+}
+
 // Cancel a calibration in progress from this remote browser: the Pi's
 // fullscreen calibration page polls for this and returns to the dashboard.
 async function cancelTouchCalibration() {
   const el = document.getElementById('touch-calibrate-result');
+  if (_calDoneTimer) { clearInterval(_calDoneTimer); _calDoneTimer = null; }
   try {
     await fetch('/setup/calibrate/touch/cancel', { method: 'POST' });
     if (el) { el.className = 'test-result mt-2 text-secondary'; el.textContent = 'Calibration cancelled.'; }

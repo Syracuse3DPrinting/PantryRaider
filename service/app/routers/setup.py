@@ -1610,9 +1610,10 @@ async def calibrate_touch_request():
     try:
         _CAL_FLAG.parent.mkdir(parents=True, exist_ok=True)
         _CAL_FLAG.write_text("1")
-        # Drop any leftover cancel from a previous run so it does not abort this
-        # one before it starts.
+        # Drop any leftover cancel/done from a previous run so they do not abort
+        # or prematurely clear this one.
         _CAL_CANCEL_FLAG.unlink(missing_ok=True)
+        _CAL_DONE_FLAG.unlink(missing_ok=True)
     except OSError as e:
         return JSONResponse({"ok": False, "error": str(e)})
     return {"ok": True, "message": "Calibration started on the Pi touchscreen."}
@@ -1787,11 +1788,35 @@ async def calibrate_touch_apply(payload: TouchMatrixPayload):
                              json={"matrix": matrix_str})
         data = r.json()
         if data.get("ok"):
+            # Signal the remote browser that calibration finished, so it can
+            # clear the Cancel control (the kiosk restarts here and cannot report
+            # back itself). One-shot flag, read+cleared by the done poll below.
+            try:
+                _CAL_DONE_FLAG.write_text("1")
+                _CAL_CANCEL_FLAG.unlink(missing_ok=True)
+            except OSError:
+                pass
             return {"ok": True, "message": data.get("message", ""),
                     "kiosk_restarted": data.get("kiosk_restarted", False)}
         return JSONResponse({"ok": False, "error": data.get("error", f"HTTP {r.status_code}")})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
+
+
+_CAL_DONE_FLAG = Path(settings.data_dir) / "calibrate_done.flag"
+
+
+@router.get("/calibrate/touch/done/pending")
+async def calibrate_touch_done_pending():
+    """Polled by the remote UI; true once a calibration has been applied. The
+    flag is one-shot so the Cancel control clears exactly once."""
+    pending = _CAL_DONE_FLAG.exists()
+    if pending:
+        try:
+            _CAL_DONE_FLAG.unlink()
+        except OSError:
+            pass
+    return {"pending": pending}
 
 
 # Backwards-compatible alias for the old endpoint name
