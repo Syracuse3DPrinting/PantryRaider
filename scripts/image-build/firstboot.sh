@@ -1669,13 +1669,28 @@ seed_app_settings() {
     sd_val="true"
   fi
   local mode="${DEPLOYMENT_MODE:-pi_hosted}"
+  # Pre-seed the BACKEND service URLs for a local stack (server / pi_hosted).
+  # The app container runs with host networking, and Grocy/Mealie are published
+  # on host ports, so the app reaches them at localhost:PORT (a docker service
+  # name like "grocy" or an mDNS host like foodassistant.local does not resolve
+  # from the host-networked app). The browser-facing links are derived from
+  # these and rewritten to the LAN address automatically, so a single localhost
+  # base URL serves both. A satellite (pi_remote) pulls these from its server,
+  # so they are left unset there.
+  local extra=""
+  if ! is_remote_mode; then
+    extra=', "grocy_base_url": "http://localhost:9383"'
+    if is_true "$ENABLE_MEALIE"; then
+      extra="$extra, \"mealie_base_url\": \"http://localhost:9285\""
+    fi
+  fi
   if [ "$DRY_RUN" = "1" ]; then
-    log "DRY_RUN would write $settings_file: deployment_mode=$mode has_streamdeck=$sd_val"
+    log "DRY_RUN would write $settings_file: deployment_mode=$mode has_streamdeck=$sd_val${extra}"
     return 0
   fi
   mkdir -p "$(dirname "$settings_file")"
   cat > "$settings_file" <<EOF
-{"deployment_mode": "$mode", "has_streamdeck": $sd_val}
+{"deployment_mode": "$mode", "has_streamdeck": $sd_val${extra}}
 EOF
   chmod 600 "$settings_file"
   log "seed_app_settings: wrote $settings_file (deployment_mode=$mode, has_streamdeck=$sd_val)"

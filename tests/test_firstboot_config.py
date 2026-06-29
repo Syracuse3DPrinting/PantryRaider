@@ -49,6 +49,30 @@ def test_default_enables_mealie(tmp_path):
     assert "with-ollama" not in out
 
 
+def test_seed_writes_local_backend_urls_pi_hosted(tmp_path):
+    # The host-networked app reaches Grocy/Mealie at localhost:PORT, so the seed
+    # pre-fills the backend URLs there (FoodAssistant). Mealie is on by default.
+    rc, out = run_firstboot(tmp_path, "HOSTNAME=foodassistant\n")
+    assert rc == 0, out
+    assert "grocy_base_url" in out and "localhost:9383" in out
+    assert "mealie_base_url" in out and "localhost:9285" in out
+
+
+def test_seed_skips_mealie_url_when_mealie_off(tmp_path):
+    rc, out = run_firstboot(tmp_path, "ENABLE_MEALIE=false\n")
+    assert rc == 0, out
+    assert "grocy_base_url" in out and "localhost:9383" in out
+    assert "mealie_base_url" not in out
+
+
+def test_seed_skips_backend_urls_for_pi_remote(tmp_path):
+    # A satellite pulls Grocy/Mealie config from its server, so they are not
+    # seeded locally.
+    rc, out = run_firstboot(tmp_path, "DEPLOYMENT_MODE=pi_remote\nREMOTE_SERVER_URL=http://srv:9284\n")
+    assert rc == 0, out
+    assert "grocy_base_url" not in out
+
+
 def test_mealie_disabled_runs_grocy_only(tmp_path):
     # Explicit opt-out drops back to Grocy only (<none> optional profiles).
     rc, out = run_firstboot(tmp_path, "ENABLE_MEALIE=false\n")
