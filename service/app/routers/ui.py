@@ -275,6 +275,16 @@ async def convert_page(request: Request):
     })
 
 
+@router.get("/kitchen-guide", response_class=HTMLResponse)
+async def kitchen_guide_page(request: Request):
+    """Static reference: safe cooking temperatures, doneness, substitutions,
+    and technique tips (FoodAssistant-95ad). No backend data required."""
+    return templates.TemplateResponse(request, "kitchen_guide.html", {
+        "request": request,
+        "active": "guide",
+    })
+
+
 @router.get("/timers", response_class=HTMLResponse)
 async def timers_page(request: Request):
     return templates.TemplateResponse(request, "timers.html", {

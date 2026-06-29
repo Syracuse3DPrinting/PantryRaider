@@ -71,6 +71,7 @@ GET_PAGES = [
     "/ui/expiring",
     "/ui/defaults",
     "/ui/convert",
+    "/ui/kitchen-guide",
     "/ui/timers",
     "/ui/camera",
     "/ui/weather",
@@ -83,6 +84,13 @@ def test_convert_page_has_known_conversion(client):
     assert r.status_code == 200
     # A stable, accurate conversion that the cheat sheet must list.
     assert "240 ml" in r.text  # 1 cup
+
+
+def test_kitchen_guide_has_safe_temps(client):
+    r = client.get("/ui/kitchen-guide")
+    assert r.status_code == 200
+    # Poultry safe minimum is a stable USDA reference the page must list.
+    assert "165&deg;F / 74&deg;C" in r.text
 
 
 def test_timers_page_has_empty_state(client):
