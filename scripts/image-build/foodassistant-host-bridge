@@ -1247,11 +1247,26 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             import tomllib
             path = "/opt/foodassistant/config.toml"
-            if not os.path.exists(path):
-                self._send(200, {"ok": True, "config": {}})
-                return
-            with open(path, "rb") as f:
-                data = tomllib.load(f)
+            data = {}
+            if os.path.exists(path):
+                with open(path, "rb") as f:
+                    data = tomllib.load(f)
+            # Replace the raw on-disk keys with the RESOLVED layout the controller
+            # actually uses (defaults to the full DEFAULT_ORDER, drops invalid
+            # names), so the web editor mirrors the deck instead of showing a
+            # missing or stale key list (FoodAssistant-3y5p). Best-effort: a
+            # failure here just leaves the raw keys in place.
+            try:
+                r = subprocess.run(
+                    ["/opt/foodassistant/venv/bin/python", "-m",
+                     "foodassistant_streamdeck", "--dump-config", "--config", path],
+                    cwd="/opt/foodassistant", capture_output=True, text=True, timeout=10)
+                if r.returncode == 0 and r.stdout.strip():
+                    resolved = json.loads(r.stdout)
+                    if isinstance(resolved.get("keys"), list):
+                        data["keys"] = resolved["keys"]
+            except Exception:
+                pass
             self._send(200, {"ok": True, "config": data})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})

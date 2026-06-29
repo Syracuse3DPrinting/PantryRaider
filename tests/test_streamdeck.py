@@ -49,6 +49,30 @@ def test_unknown_keys_dropped_and_fallback(tmp_path):
     assert cfg.keys == list(actions.DEFAULT_ORDER)
 
 
+def test_dump_config_emits_resolved_keys(tmp_path, monkeypatch, capsys):
+    # The bridge calls `--dump-config` to serve the RESOLVED keys to the editor
+    # (FoodAssistant-3y5p): invalid names dropped, valid ones kept in order.
+    import json
+    from foodassistant_streamdeck import __main__ as m
+    f = tmp_path / "config.toml"
+    f.write_text('keys = ["cook", "bogus", "blank", "expiring"]\n')
+    monkeypatch.setattr(m.sys, "argv", ["x", "--dump-config", "--config", str(f)])
+    rc = m.main([])
+    assert rc == 0
+    assert json.loads(capsys.readouterr().out)["keys"] == ["cook", "blank", "expiring"]
+
+
+def test_dump_config_defaults_when_no_keys(tmp_path, monkeypatch, capsys):
+    import json
+    from foodassistant_streamdeck import __main__ as m
+    from foodassistant_streamdeck import actions
+    f = tmp_path / "config.toml"
+    f.write_text('base_url = "http://x"\n')
+    monkeypatch.setattr(m.sys, "argv", ["x", "--dump-config", "--config", str(f)])
+    assert m.main([]) == 0
+    assert json.loads(capsys.readouterr().out)["keys"] == list(actions.DEFAULT_ORDER)
+
+
 def test_numbers_are_clamped(tmp_path):
     f = tmp_path / "config.toml"
     f.write_text("brightness = 999\npoll_seconds = 1\nsoon_days = -4\n")

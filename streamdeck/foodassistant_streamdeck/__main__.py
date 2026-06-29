@@ -33,6 +33,19 @@ def main(argv: list[str] | None = None) -> int:
         from .actions import catalog
         print(json.dumps(catalog()))
         return 0
+    if "--dump-config" in sys.argv:
+        # Emit the RESOLVED config the controller actually uses (defaults applied,
+        # invalid key names dropped), so the web editor can mirror the deck rather
+        # than the raw on-disk TOML. Only the fields the editor needs.
+        import json
+        path = None
+        if "--config" in sys.argv:
+            i = sys.argv.index("--config")
+            if i + 1 < len(sys.argv):
+                path = sys.argv[i + 1]
+        cfg = load(path)
+        print(json.dumps({"keys": cfg.keys}))
+        return 0
     args = _parse_args(argv if argv is not None else sys.argv[1:])
     logging.basicConfig(
         level=logging.DEBUG if args.verbose else logging.INFO,

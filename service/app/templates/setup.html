@@ -4494,11 +4494,11 @@ async function _sdRenderGrid() {
 
   grid.style.gridTemplateColumns = `repeat(${dim.cols}, minmax(0,1fr))`;
 
-  // Normalize _sdKeys to the cell count.
+  // The grid shows one deck page (`total` cells), but the controller paginates
+  // the full keys list across pages on a small deck. Pad up to a full page, but
+  // do NOT truncate keys that belong to later pages, or saving would drop them.
   const total = dim.cols * dim.rows;
-  const keys = _sdKeys.slice(0, total);
-  while (keys.length < total) keys.push('blank');
-  _sdKeys = keys;
+  while (_sdKeys.length < total) _sdKeys.push('blank');
 
   grid.innerHTML = '';
   for (let i = 0; i < total; i++) {
