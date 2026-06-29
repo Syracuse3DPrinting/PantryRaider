@@ -322,6 +322,49 @@ def test_hardware_status_nothing_attached(monkeypatch):
     }
 
 
+def test_touch_device_name_finds_ads7846(tmp_path):
+    # The ADS7846 reports PROP=0 but its name carries "touch"/"ads7846", so the
+    # name-hint match finds it for the calibration rule (FoodAssistant-mox4).
+    devs = tmp_path / "devices"
+    devs.write_text(
+        'I: Bus=001c Vendor=0000 Product=1ea6\n'
+        'N: Name="ADS7846 Touchscreen"\n'
+        'H: Handlers=mouse0 event1\n'
+        'B: PROP=0\nB: EV=b\nB: ABS=1000003\n'
+        '\n'
+        'N: Name="vc4-hdmi-0"\nH: Handlers=kbd event2\nB: PROP=20\n'
+    )
+    assert bridge._touch_device_name(str(devs)) == "ADS7846 Touchscreen"
+
+
+def test_touch_device_name_none_when_no_touch(tmp_path):
+    devs = tmp_path / "devices"
+    devs.write_text('N: Name="vc4-hdmi-0"\nH: Handlers=kbd event2\nB: PROP=20\nB: REL=3\n')
+    assert bridge._touch_device_name(str(devs)) == ""
+
+
+def test_write_calibration_rule_targets_named_device(tmp_path, monkeypatch):
+    captured = {}
+    monkeypatch.setattr(bridge, "_touch_device_name", lambda *a, **k: "ADS7846 Touchscreen")
+    monkeypatch.setattr(bridge.os, "makedirs", lambda *a, **k: None)
+    monkeypatch.setattr(bridge.subprocess, "run", lambda *a, **k: None)
+    rule_file = tmp_path / "rule"
+
+    real_open = open
+
+    def _fake_open(path, *a, **k):
+        if str(path).endswith("99-foodassistant-touch.rules"):
+            return real_open(rule_file, *a, **k)
+        return real_open(path, *a, **k)
+
+    monkeypatch.setattr("builtins.open", _fake_open)
+    target = bridge._write_calibration_rule("1 0 0 0 1 0")
+    assert target == "ADS7846 Touchscreen"
+    written = rule_file.read_text()
+    assert 'ATTRS{name}=="ADS7846 Touchscreen"' in written
+    assert 'ENV{LIBINPUT_CALIBRATION_MATRIX}="1 0 0 0 1 0"' in written
+
+
 def test_streamdeck_keycount_from_sysfs_fallback(tmp_path, monkeypatch):
     # When lsusb is unavailable, the key count is read from the Elgato device's
     # sysfs idProduct (FoodAssistant): an MK.2 (006d) maps to 15 keys.

@@ -571,6 +571,59 @@ _SD_PRODUCT_KEYS = {
 }
 
 
+# Touch-controller name hints (lowercased) for finding the panel in the kernel
+# input list when applying a calibration matrix. Mirrors the app's detection.
+_TOUCH_NAME_HINTS = (
+    "touch", "ads7846", "goodix", "ft5x", "ft6", "edt-ft5", "ilitek", "ili2",
+    "silead", "eeti", "egalax", "hynitron", "st1633", "gslx680", "stmpe",
+    "raspberrypi-ts", "waveshare", "hosyond", "chipone", "cst", "zforce",
+)
+
+
+def _touch_device_name(path="/proc/bus/input/devices"):
+    """Name of the first touchscreen in the input device list, or '' if none.
+
+    Matches a known controller name, or a kernel-flagged direct absolute pointer
+    (INPUT_PROP_DIRECT plus absolute axes), the same signals the app uses."""
+    try:
+        blocks = open(path).read().split("\n\n")
+    except OSError:
+        return ""
+    for b in blocks:
+        nm = re.search(r'^N: Name="(.*)"', b, re.M)
+        if not nm:
+            continue
+        low = b.lower()
+        if any(h in low for h in _TOUCH_NAME_HINTS):
+            return nm.group(1)
+        prop = re.search(r"^B: PROP=([0-9a-fA-F]+)", b, re.M)
+        has_abs = re.search(r"^B: ABS=[0-9a-fA-F]", b, re.M) is not None
+        if prop and (int(prop.group(1), 16) & 0x2) and has_abs:
+            return nm.group(1)
+    return ""
+
+
+def _write_calibration_rule(matrix):
+    """Write the LIBINPUT_CALIBRATION_MATRIX udev rule and reload udev.
+
+    Matches the detected panel by name (or any udev-tagged touchscreen as a
+    fallback), so cage/libinput applies the matrix when the device is next
+    opened. Returns the device match used, for the log."""
+    name = _touch_device_name()
+    match = 'ATTRS{name}=="%s"' % name if name else 'ENV{ID_INPUT_TOUCHSCREEN}=="1"'
+    rule = (
+        "# FoodAssistant touchscreen calibration (applied from the web UI).\n"
+        'SUBSYSTEM=="input", KERNEL=="event*", %s, '
+        'ENV{LIBINPUT_CALIBRATION_MATRIX}="%s"\n' % (match, matrix)
+    )
+    os.makedirs("/etc/udev/rules.d", exist_ok=True)
+    with open("/etc/udev/rules.d/99-foodassistant-touch.rules", "w") as f:
+        f.write(rule)
+    subprocess.run(["udevadm", "control", "--reload-rules"], timeout=10)
+    subprocess.run(["udevadm", "trigger", "--subsystem-match=input"], timeout=10)
+    return name or "ID_INPUT_TOUCHSCREEN"
+
+
 def _streamdeck_keycount(usb_root="/sys/bus/usb/devices"):
     """Best-effort key count for the attached deck, or None if unknown."""
     try:
@@ -1048,18 +1101,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except ValueError:
             self._send(400, {"ok": False, "error": "matrix has a non-numeric value"})
             return
-        helper = "/usr/local/bin/foodassistant-touch-calibrate"
-        if not os.path.exists(helper):
-            self._send(500, {"ok": False, "error": "calibrate helper not installed"})
-            return
         try:
-            r = subprocess.run(
-                [helper, "--apply-matrix", " ".join(parts)],
-                capture_output=True, text=True, timeout=15,
-            )
-            if r.returncode != 0:
-                self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
-                return
+            # Write the calibration udev rule directly (the bridge runs as root),
+            # rather than shelling out to a separately installed helper, so this
+            # works even on a device whose touch was configured by hand.
+            target = _write_calibration_rule(" ".join(parts))
             # The compositor (cage/wlroots) holds the touch device open and only
             # reads LIBINPUT_CALIBRATION_MATRIX when the device is added, so a
             # udevadm trigger alone does not change the live mapping. Restart the
@@ -1076,7 +1122,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                     pass
             self._send(200, {
                 "ok": True,
-                "message": r.stdout.strip(),
+                "message": "Calibration applied to %s." % target,
                 "kiosk_restarted": restarted,
             })
         except Exception as e:
