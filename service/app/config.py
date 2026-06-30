@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.168"
+APP_VERSION = "0.6.169"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -202,6 +202,7 @@ _SAVEABLE = [
     "secret_key", "auth_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
+    "debug_logging",
 ]
 
 # Settings a satellite (pi_remote) pulls from its main server and mirrors
@@ -830,6 +831,10 @@ class Settings(BaseSettings):
     extra_api_key_names: list[str] = []
     rclone_remote: str = ""          # e.g. "s3:mybucket/foodassistant"
     rclone_schedule_hours: int = 0   # 0 = disabled; 24 = daily
+
+    # Verbose logging to a rotating file under data_dir/logs for support bundles
+    # (FoodAssistant-asra). Off by default; raises the app log level to DEBUG.
+    debug_logging: bool = False
 
     # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "subscription"
     tunnel_mode: str = ""

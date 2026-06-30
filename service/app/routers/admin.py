@@ -10,6 +10,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 
 from ..config import settings, SECRET_SETTING_KEYS, APP_VERSION, GITHUB_REPO
 
@@ -26,6 +27,47 @@ from ..version_compare import (  # noqa: E402
 async def version():
     """Current running version (no network call)."""
     return {"version": APP_VERSION}
+
+
+class _LoggingReq(BaseModel):
+    enabled: bool
+
+
+@router.get("/logging")
+async def logging_status():
+    """Whether debug logging is on and the size of the captured log."""
+    from ..services import diagnostics
+    path = diagnostics.log_path(settings.data_dir)
+    size = path.stat().st_size if path.exists() else 0
+    return {"enabled": bool(settings.debug_logging), "bytes": size}
+
+
+@router.post("/logging")
+async def set_logging(req: _LoggingReq):
+    """Turn debug logging on or off, persist it, and apply it immediately."""
+    from ..services import diagnostics
+    settings.save({"debug_logging": req.enabled})  # persists and applies to the live object
+    diagnostics.configure_file_logging(settings.data_dir, req.enabled)
+    logger.info("Debug logging %s via Settings.", "enabled" if req.enabled else "disabled")
+    return {"ok": True, "enabled": req.enabled}
+
+
+@router.get("/logs/download")
+async def download_logs():
+    """Stream the captured log (current plus rollovers) as a text download, with
+    any configured secret values redacted so the bundle is safe to share."""
+    from ..services import diagnostics
+    secrets_values = [str(getattr(settings, k, "") or "") for k in SECRET_SETTING_KEYS]
+    text = diagnostics.read_log_text(settings.data_dir, secrets_values)
+    if not text:
+        text = ("No log has been captured yet. Enable debug logging in Settings, "
+                "reproduce the problem, then download again.\n")
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return StreamingResponse(
+        io.BytesIO(text.encode("utf-8")),
+        media_type="text/plain",
+        headers={"Content-Disposition": f'attachment; filename="foodassistant-logs-{stamp}.txt"'},
+    )
 
 
 @router.get("/check-update")

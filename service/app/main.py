@@ -17,6 +17,14 @@ from .routers import analyze, defaults, inventory, expiring, ui, setup, pending,
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Bring up file logging early so startup itself is captured when debug
+    # logging is enabled (FoodAssistant-asra). Best-effort: a read-only data dir
+    # just leaves console logging in place.
+    try:
+        from .services.diagnostics import configure_file_logging
+        configure_file_logging(settings.data_dir, settings.debug_logging)
+    except Exception:
+        pass
     Base.metadata.create_all(bind=engine)
     db = next(get_db())
     try:

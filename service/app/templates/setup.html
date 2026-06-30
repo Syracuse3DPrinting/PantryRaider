@@ -2035,6 +2035,21 @@ docker compose up -d</code></pre>
             </div>
             {% endif %}
           </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-bug text-warning"></i> Diagnostics</div>
+            <p class="text-secondary small">Turn on debug logging to capture detailed logs for troubleshooting, then
+              download them to share with support. Logs are written to a rotating file on this device and any saved
+              API keys or passwords are redacted from the download.</p>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" id="debug_logging" onchange="toggleDebugLogging(this)">
+              <label class="form-check-label" for="debug_logging">Enable debug logging</label>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="downloadLogs()">
+              <i class="bi bi-download me-1"></i>Download logs
+            </button>
+            <span class="test-result ms-2" id="logging-result"></span>
+          </div>
         </div>
 
         {% if not features.satellite %}
@@ -4046,6 +4061,39 @@ async function syncFromUpstream() {
   }
 }
 
+// Diagnostics: debug logging toggle + log download (FoodAssistant-asra).
+async function _loadLoggingState() {
+  const box = document.getElementById('debug_logging');
+  if (!box) return;
+  try {
+    const d = await fetch('admin/logging', { cache: 'no-store' }).then(r => r.json());
+    box.checked = !!d.enabled;
+  } catch (e) { /* leave unchecked */ }
+}
+
+async function toggleDebugLogging(box) {
+  const out = document.getElementById('logging-result');
+  if (out) { out.className = 'test-result ms-2 text-secondary'; out.textContent = 'Saving...'; }
+  try {
+    const r = await fetch('admin/logging', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: box.checked }),
+    });
+    const d = await r.json();
+    if (out) {
+      out.className = 'test-result ms-2 ' + (d.ok ? 'text-success' : 'text-danger');
+      out.textContent = d.ok ? (d.enabled ? 'Debug logging on.' : 'Debug logging off.') : 'Could not save.';
+    }
+  } catch (e) {
+    if (out) { out.className = 'test-result ms-2 text-danger'; out.textContent = 'Could not save.'; }
+  }
+}
+
+function downloadLogs() {
+  // A plain navigation triggers the attachment download without fetch/blob.
+  window.location = 'admin/logs/download';
+}
+
 // Satellite: passively detect whether a newer version exists, without touching
 // the local git checkout. admin/check-update reads APP_VERSION from the main
 // branch over HTTPS and compares it to this device's running version, so it
@@ -4387,6 +4435,8 @@ function showKioskWizard() {
   // the device shows new software is ready without the user pressing anything.
   if (typeof checkSatelliteUpdate === 'function') checkSatelliteUpdate(null);
   {% endif %}
+  // Reflect the saved debug-logging state in its toggle.
+  if (typeof _loadLoggingState === 'function') _loadLoggingState();
 
   // Settings form only: update auth hint on load
   {% if configured %}
