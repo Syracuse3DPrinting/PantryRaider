@@ -30,7 +30,7 @@ from ..database import SessionLocal
 from ..dependencies import reset_providers
 from ..hardware import is_raspberry_pi, board_model
 from ..models.db_models import StreamDeckProfile
-from ..navigation import all_tabs
+from ..navigation import all_tabs, normalize_custom_tabs, NAV_TABS
 from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
 
@@ -46,6 +46,36 @@ _SECRET_FIELDS = [
     "streamdeck_ha_token",
 ]
 _CLEAR = "__CLEAR__"
+
+
+def _clean_custom_nav_tabs(submitted) -> list[dict]:
+    """Validate posted custom nav tabs into clean stored dicts.
+
+    Runs the same normalizer the renderer uses, then re-projects to the stored
+    shape {id,label,icon,url,parent} so settings.json holds only valid entries
+    with stable, de-duplicated ids. Invalid rows are silently dropped.
+    """
+    cleaned = normalize_custom_tabs(submitted if isinstance(submitted, list) else [])
+    return [{"id": t["key"], "label": t["label"], "icon": t["icon"],
+             "url": t["href"], "parent": t.get("parent", "")} for t in cleaned]
+
+
+def _clean_nav_parents(submitted) -> dict:
+    """Keep only built-in child->parent string pairs from a posted map.
+
+    Custom tabs carry their own parent field, so this map covers built-ins only.
+    A child or parent that is not a known built-in key, or a self-reference, is
+    dropped so a stale or hand-crafted value never breaks the nav tree.
+    """
+    if not isinstance(submitted, dict):
+        return {}
+    keys = {t["key"] for t in NAV_TABS}
+    out: dict = {}
+    for child, parent in submitted.items():
+        child, parent = str(child), str(parent or "").strip()
+        if child in keys and parent in keys and child != parent:
+            out[child] = parent
+    return out
 
 
 # Extra-key rows that were left untouched in the UI come back as this sentinel
@@ -170,6 +200,10 @@ class SetupPayload(BaseModel):
     suggest_per_tier: int = 8
     nav_order: str = ""
     nav_hidden: str = ""
+    # Custom nav tabs + built-in nesting map (FoodAssistant-9gdz). None = the
+    # field was not submitted, so the stored value is left alone (see handler).
+    custom_nav_tabs: list[dict] | None = None
+    nav_parents: dict | None = None
     ui_theme: str = _DEFAULT_THEME
     # Custom theme builder swatches (FoodAssistant-hatd). Declared so they
     # round-trip through /save (BaseModel drops undeclared fields).
@@ -575,6 +609,20 @@ async def save_setup(payload: SetupPayload):
             data["kitchen_appliances"] = [k for k in KITCHEN_APPLIANCE_KEYS if k in chosen]
         else:
             data.pop("kitchen_appliances", None)
+    # Custom nav tabs (FoodAssistant-9gdz): normalize to {id,label,icon,url,
+    # parent} and drop invalid entries so a malformed POST never persists. An
+    # absent field leaves the stored tabs alone; an empty list clears them.
+    if "custom_nav_tabs" in data:
+        if data["custom_nav_tabs"] is None:
+            data.pop("custom_nav_tabs", None)
+        else:
+            data["custom_nav_tabs"] = _clean_custom_nav_tabs(data["custom_nav_tabs"])
+    # Built-in nesting map: keep only string->string pairs for known tab keys.
+    if "nav_parents" in data:
+        if data["nav_parents"] is None:
+            data.pop("nav_parents", None)
+        else:
+            data["nav_parents"] = _clean_nav_parents(data["nav_parents"])
     # Drop an unknown deployment mode rather than persisting a broken value;
     # an empty/absent mode leaves the existing choice untouched.
     if data.get("deployment_mode") and data["deployment_mode"] not in DEPLOYMENT_MODES:

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.169"
+APP_VERSION = "0.6.170"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -184,7 +184,8 @@ _SAVEABLE = [
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "kitchen_appliances",
     "perishable_days", "expiring_soon_days", "suggest_per_tier",
-    "nav_order", "nav_hidden", "custom_storage_categories", "ui_theme",
+    "nav_order", "nav_hidden", "custom_nav_tabs", "nav_parents",
+    "custom_storage_categories", "ui_theme",
     "custom_theme_base", "custom_theme_primary", "custom_theme_accent",
     "custom_theme_bg", "custom_theme_surface", "custom_theme_text",
     "ui_scale", "display_rotation",
@@ -604,6 +605,19 @@ class Settings(BaseSettings):
     # (unlisted tabs follow in default order); nav_hidden hides tabs.
     nav_order: str = ""
     nav_hidden: str = ""
+
+    # Custom navigation tabs (FoodAssistant-9gdz). User-created top-level entries
+    # or submenu children, each a dict {id, label, icon, url, parent}. "id" is a
+    # stable key (auto-prefixed "custom_"), "url" is a root-relative href or a
+    # full external link, "parent" is the key of the tab this nests under (empty
+    # for a top-level tab). See navigation.py for validation and tree building.
+    custom_nav_tabs: list = []
+
+    # Parent assignments for nesting EXISTING (built-in) tabs under another tab,
+    # as a child key -> parent key map. A built-in tab listed here renders inside
+    # its parent's dropdown instead of as a top-level link. Custom tabs carry
+    # their own "parent" field instead, so this map only covers built-ins.
+    nav_parents: dict = {}
 
     # UI colour theme. One of the keys in THEMES (dark | light | bootswatch | custom).
     ui_theme: str = _DEFAULT_THEME
