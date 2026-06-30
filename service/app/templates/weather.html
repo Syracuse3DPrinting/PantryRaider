@@ -9,49 +9,84 @@
   </button>
 </div>
 
-<div id="weatherStage"
-     class="d-flex align-items-center justify-content-center rounded overflow-hidden"
-     style="background:#000; width:100%; min-height:70vh;">
-  <img id="weatherImg" alt="Weather forecast"
-       style="max-width:100%; max-height:85vh; object-fit:contain; background:#000;">
-  <div id="weatherError" class="d-none text-center text-secondary p-4">
-    <i class="bi bi-cloud-slash fs-1 d-block mb-2"></i>
-    <div>Forecast unavailable. Check the internet connection{% if not weather_location %}, and set a weather location under Settings, Stream Deck{% endif %}.</div>
+<div id="weatherLoading" class="text-secondary py-5 text-center">
+  <span class="spinner-border spinner-border-sm me-2"></span>Loading the forecast…
+</div>
+
+<div id="weatherBody" class="d-none">
+  <!-- Current conditions -->
+  <div class="card mb-3">
+    <div class="card-body d-flex align-items-center flex-wrap gap-4">
+      <div>
+        <div class="display-3 fw-semibold" id="wxTemp">--</div>
+        <div class="text-secondary" id="wxDesc"></div>
+      </div>
+      <div class="row row-cols-2 g-3 small flex-grow-1" style="max-width:420px;">
+        <div class="col"><span class="text-secondary">Feels like</span><div class="fs-5" id="wxFeels">--</div></div>
+        <div class="col"><span class="text-secondary">Humidity</span><div class="fs-5" id="wxHumidity">--</div></div>
+        <div class="col"><span class="text-secondary">Wind</span><div class="fs-5" id="wxWind">--</div></div>
+      </div>
+    </div>
   </div>
+  <!-- Multi-day forecast -->
+  <div class="row g-3" id="wxDays"></div>
+</div>
+
+<div id="weatherError" class="d-none text-center text-secondary p-4">
+  <i class="bi bi-cloud-slash fs-1 d-block mb-2"></i>
+  <div>Forecast unavailable. Check the server's internet connection{% if not weather_location %}, and set a weather location under Settings (the Stream Deck weather card){% endif %}.</div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-  // Full-screen forecast for the kiosk. The image comes from wttr.in (the same
-  // free service the Stream Deck weather widget uses), rendered as a panel PNG.
-  // The browser fetches it directly, so the kiosk needs internet access. Units
-  // map to wttr.in's flags: "u" for USCS (Fahrenheit), "m" for metric (Celsius).
-  const WX_LOCATION = {{ weather_location|tojson }};
-  const WX_UNITS = {{ weather_units|tojson }};
-  const imgEl = document.getElementById('weatherImg');
+  // The server fetches wttr.in's JSON API (the same reliable source the Stream
+  // Deck weather widget uses) and we render it here, so the page no longer
+  // depends on the flaky panel PNG or the kiosk's own internet (afqd).
+  const loadingEl = document.getElementById('weatherLoading');
+  const bodyEl = document.getElementById('weatherBody');
   const errEl = document.getElementById('weatherError');
 
-  function weatherUrl() {
-    const unit = (WX_UNITS === 'c') ? 'm' : 'u';
-    const loc = encodeURIComponent(WX_LOCATION || '');
-    // Cache-bust each load so a refresh fetches the latest panel.
-    return `https://v2.wttr.in/${loc}.png?${unit}&_=${Date.now()}`;
+  function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+
+  function render(fc) {
+    const c = fc.current || {};
+    document.getElementById('wxTemp').textContent = `${c.temp}°${c.unit}`;
+    document.getElementById('wxDesc').textContent = c.desc || '';
+    document.getElementById('wxFeels').textContent = `${c.feels}°${c.unit}`;
+    document.getElementById('wxHumidity').textContent = `${c.humidity}%`;
+    document.getElementById('wxWind').textContent = `${c.wind} ${c.wind_unit}`;
+    const days = fc.days || [];
+    document.getElementById('wxDays').innerHTML = days.map(d => `
+      <div class="col-6 col-md-4 col-lg-3">
+        <div class="card h-100 text-center">
+          <div class="card-body py-3">
+            <div class="fw-semibold">${esc(d.label)}</div>
+            <div class="small text-secondary mb-2">${esc(d.desc)}</div>
+            <div class="fs-4">${esc(d.hi)}°<span class="text-secondary fs-6"> / ${esc(d.lo)}°${esc(d.unit)}</span></div>
+          </div>
+        </div>
+      </div>`).join('');
   }
 
-  function reloadWeather() {
+  async function reloadWeather() {
+    loadingEl.classList.remove('d-none');
+    bodyEl.classList.add('d-none');
     errEl.classList.add('d-none');
-    imgEl.classList.remove('d-none');
-    imgEl.src = weatherUrl();
+    try {
+      const r = await fetch('weather/data', { cache: 'no-store' });
+      const d = await r.json();
+      if (!d.ok || !d.forecast) throw new Error('unavailable');
+      render(d.forecast);
+      loadingEl.classList.add('d-none');
+      bodyEl.classList.remove('d-none');
+    } catch (e) {
+      loadingEl.classList.add('d-none');
+      errEl.classList.remove('d-none');
+    }
   }
-
-  imgEl.addEventListener('error', () => {
-    imgEl.classList.add('d-none');
-    errEl.classList.remove('d-none');
-  });
 
   reloadWeather();
-  // Refresh on a relaxed cadence; the forecast does not change minute to minute.
   setInterval(reloadWeather, 10 * 60 * 1000);
 </script>
 {% endblock %}

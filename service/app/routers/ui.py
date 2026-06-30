@@ -478,6 +478,25 @@ async def weather_page(request: Request):
     })
 
 
+@router.get("/weather/data")
+async def weather_data():
+    """Server-side forecast for the kiosk weather page (FoodAssistant-afqd).
+
+    Fetches wttr.in's reliable JSON API on the server (the same path the Stream
+    Deck weather widget uses) so the page does not depend on the flaky PNG
+    endpoint or the kiosk's own internet access. Returns {ok, forecast} or
+    {ok: false} when the upstream is unreachable."""
+    from ..services import weather as weather_svc
+    forecast = await weather_svc.fetch_forecast(
+        settings.streamdeck_weather_location or "",
+        settings.streamdeck_weather_units or "f",
+    )
+    if forecast is None:
+        return {"ok": False}
+    return {"ok": True, "forecast": forecast,
+            "location": settings.streamdeck_weather_location or ""}
+
+
 @router.get("/about", response_class=HTMLResponse)
 async def about_page(request: Request):
     return templates.TemplateResponse(request, "about.html", {
