@@ -195,6 +195,8 @@ docker compose pull
 docker compose up -d
 ```
 
+> The GHCR package must be **Public**, or the pull fails with `Head "https://ghcr.io/v2/.../manifests/latest": unauthorized` and nothing (including Watchtower auto-updates) can pull the image. After the publish workflow pushes the image for the first time the package defaults to private; make it public once under the org or user Packages page (foodassistant, Package settings, Danger Zone, Change visibility, Public). If you must keep it private, run `docker login ghcr.io` with a token that has `read:packages` on each host before pulling.
+
 Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.3.1` in `.env`.
 
 **Automatic updates (server):** the prod compose runs Watchtower, which checks for a new FoodAssistant image and recreates the service container when one is published. This is **on by default** so a server install stays current without intervention, and updated Python dependencies come along for free because they are baked into the image. It only touches the FoodAssistant container (the others stay on their pinned versions) and polls daily (override with `WATCHTOWER_POLL_INTERVAL` seconds in `.env`).
