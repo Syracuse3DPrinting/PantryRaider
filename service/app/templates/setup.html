@@ -81,6 +81,11 @@
     /* Live install/start log panels: fixed-height scroll region so streaming
        output does not push the page longer. The tailer auto-scrolls to bottom. */
     .install-log { max-height: 14rem; overflow: auto; white-space: pre-wrap; }
+    /* Keep the menu/content hidden until init() picks the Settings vs
+       Personalization group, so the page never paints one group and then
+       visibly switches to the other. visibility (not display) avoids any
+       layout shift while hidden. */
+    .menu-initializing .side-menu, .menu-initializing .tab-content { visibility: hidden; }
   </style>
 </head>
 <body>
@@ -828,7 +833,7 @@
   </div>
   {% endif %}
 
-  <div class="row g-3">
+  <div class="row g-3 menu-initializing">
 
     <!-- Side menu -->
     <div class="col-md-3">
@@ -4922,7 +4927,34 @@ function showSettingsMenu(group, activate) {
   }
 }
 
+// Failsafe: never leave the menu/content hidden, even if init() throws before
+// it reaches the reveal step. A blank Settings page is worse than a brief flash.
+function _revealMenu() {
+  document.querySelectorAll('.menu-initializing').forEach(function (el) {
+    el.classList.remove('menu-initializing');
+  });
+}
+setTimeout(_revealMenu, 1500);
+
 (function init() {
+  // Resolve the menu group and reveal the content first, so a later failure in
+  // any optional init step cannot leave the page blank or stuck on the wrong
+  // group. A #pane-* hash wins (and selects its group); else the last-used
+  // choice; else default to Personalization (the everyday screen).
+  try {
+    var hash0 = window.location.hash;
+    var hashBtn0 = (hash0 && hash0.startsWith('#pane-'))
+      ? document.querySelector('[data-bs-target="' + hash0 + '"]') : null;
+    var startGroup0;
+    if (hashBtn0) {
+      startGroup0 = hashBtn0.getAttribute('data-mgroup') || 's';
+    } else {
+      try { startGroup0 = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { startGroup0 = 'p'; }
+    }
+    showSettingsMenu(startGroup0, hashBtn0);
+  } catch (e) { }
+  _revealMenu();
+
   showProvider();
   showRecipeSource();
   scannerTypeChanged();
@@ -4946,19 +4978,10 @@ function showSettingsMenu(group, activate) {
   toggleAuthRequired();
   {% endif %}
 
-  // Pick the side-menu group. A #pane-* hash wins (and selects its group); else
-  // the last-used choice; else default to Personalization (the everyday screen).
+  // If we arrived via a #pane-* hash, scroll it into view (the group was
+  // already selected at the top of init()).
   var hash = window.location.hash;
-  var hashBtn = (hash && hash.startsWith('#pane-'))
-    ? document.querySelector('[data-bs-target="' + hash + '"]') : null;
-  var startGroup;
-  if (hashBtn) {
-    startGroup = hashBtn.getAttribute('data-mgroup') || 's';
-  } else {
-    try { startGroup = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { startGroup = 'p'; }
-  }
-  showSettingsMenu(startGroup, hashBtn);
-  if (hashBtn) {
+  if (hash && hash.startsWith('#pane-')) {
     setTimeout(function() {
       var el = document.getElementById(hash.slice(1));
       if (el) el.scrollIntoView({behavior: 'smooth', block: 'start'});
