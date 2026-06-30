@@ -1794,8 +1794,14 @@
           <p class="pane-intro">Connect a Home Assistant instance to drive its entities from the Stream Deck keys and to discover cameras. The URL and token are stored on the main server, so a second Pi remote inherits them.</p>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Connection</div>
-            <p class="text-secondary small">Create a token in Home Assistant under your profile, Security, Long-lived access tokens, then paste it here. The URL and token power the Stream Deck Home Assistant keys and the camera discovery on the Cameras page.</p>
+            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Connection
+              {% if s.streamdeck_ha_base_url and has.streamdeck_ha_token %}
+              <span class="badge bg-success ms-2" id="ha-conn-status"><i class="bi bi-check-circle me-1"></i>Configured</span>
+              {% else %}
+              <span class="badge bg-secondary ms-2" id="ha-conn-status">Not configured</span>
+              {% endif %}
+            </div>
+            <p class="text-secondary small">Create a token in Home Assistant under your profile, Security, Long-lived access tokens, then paste it here. The URL and token power the Stream Deck Home Assistant keys and the camera discovery on the Cameras page.{% if features.satellite %} The connection is set on the main server and synced here.{% endif %}</p>
             <div class="row g-2 mb-2">
               <div class="col-md-6">
                 <label class="form-label small mb-1" for="streamdeck_ha_base_url">Base URL</label>
@@ -1812,6 +1818,10 @@
             </div>
             {% if features.satellite %}
             <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Home Assistant is configured on the main server and syncs here automatically. Change it there.</div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="_haTestConnection(this)">
+              <i class="bi bi-plug me-1"></i>Test connection
+            </button>
+            <div class="test-result mt-2" id="ha-result"></div>
             {% else %}
             <div class="d-flex gap-2">
               <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHomeAssistant(this)">
@@ -1833,7 +1843,18 @@
             <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch" id="ha_events_enabled"
                      {% if s.ha_events_enabled %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
-              <label class="form-check-label" for="ha_events_enabled">Show Home Assistant notifications and camera pop-ups on screen</label>
+              <label class="form-check-label" for="ha_events_enabled">Show Home Assistant notifications and camera pop-ups on screen{% if not features.satellite %} (default for all devices){% endif %}</label>
+            </div>
+            {# Per-device override (FoodAssistant-vcuz): each device (the server,
+               each Pi Remote) decides for itself whether to show events, since
+               the server may be headless and there can be several displays. #}
+            <div class="form-check form-switch mb-2">
+              <select class="form-select form-select-sm" id="ha_events_device" style="max-width:320px" onchange="_haSetDeviceEvents(this.value)">
+                <option value="default">This device: follow the default above</option>
+                <option value="1">This device: always show</option>
+                <option value="0">This device: never show</option>
+              </select>
+              <div class="form-text">A per-device choice, stored on this device only. Use it on a headless server (never show) or to pick which Pi Remote displays pop-ups.</div>
             </div>
             <div class="row g-2 mb-2" style="max-width:360px">
               <div class="col-auto">
@@ -5536,6 +5557,8 @@ setTimeout(_revealMenu, 1500);
   }
   // Reflect the saved debug-logging state in its toggle.
   if (typeof _loadLoggingState === 'function') _loadLoggingState();
+  // Reflect this device's on-screen-events choice in its selector.
+  if (typeof _haInitDeviceEvents === 'function') _haInitDeviceEvents();
 
   // Settings form only: update auth hint on load
   {% if configured %}
@@ -7172,19 +7195,39 @@ async function _haTestConnection(btn) {
   const orig = btn ? btn.innerHTML : '';
   if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Testing...'; }
   if (el) el.innerHTML = '';
+  const badge = document.getElementById('ha-conn-status');
   try {
     const data = await _haDiscover();
     if (data && data.ok) {
       const n = (data.cameras || []).length;
       if (el) el.innerHTML = `<span class="text-success"><i class="bi bi-check-circle me-1"></i>Connected. ${n} camera${n === 1 ? '' : 's'} found.</span>`;
+      if (badge) { badge.className = 'badge bg-success ms-2'; badge.innerHTML = '<i class="bi bi-check-circle me-1"></i>Connected'; }
     } else {
       if (el) el.innerHTML = `<span class="text-danger">${(data && data.error) || 'Could not connect.'}</span>`;
+      if (badge) { badge.className = 'badge bg-danger ms-2'; badge.textContent = 'Not reachable'; }
     }
   } catch (e) {
     if (el) el.innerHTML = `<span class="text-danger">${e}</span>`;
+    if (badge) { badge.className = 'badge bg-danger ms-2'; badge.textContent = 'Not reachable'; }
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
+}
+
+// Per-device on-screen events (FoodAssistant-vcuz): persist this device's choice
+// in localStorage so the HA event poller (ha-events.js) can honour it.
+function _haSetDeviceEvents(val) {
+  try {
+    if (val === 'default') localStorage.removeItem('haEventsShow');
+    else localStorage.setItem('haEventsShow', val === '1' ? '1' : '0');
+  } catch (e) { }
+}
+function _haInitDeviceEvents() {
+  const sel = document.getElementById('ha_events_device');
+  if (!sel) return;
+  let v = null;
+  try { v = localStorage.getItem('haEventsShow'); } catch (e) { }
+  sel.value = (v === '1' || v === '0') ? v : 'default';
 }
 
 async function restartStreamDeck() {

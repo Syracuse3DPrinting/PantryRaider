@@ -13,7 +13,14 @@
  */
 (function () {
   var cfg = document.getElementById('ha-events-config');
-  if (!cfg || cfg.dataset.enabled !== '1') return;
+  if (!cfg) return;
+  // Per-device override (FoodAssistant-vcuz): a device can show or hide on-screen
+  // events independently of the server default. localStorage 'haEventsShow' is
+  // '1' (show), '0' (hide), or absent (follow the server default).
+  var ov = null;
+  try { ov = localStorage.getItem('haEventsShow'); } catch (e) { }
+  var enabled = ov === '1' ? true : (ov === '0' ? false : cfg.dataset.default === '1');
+  if (!enabled) return;
 
   var POLL_MS = 4000;
   var DEFAULT_TOAST_MS = 8000;
