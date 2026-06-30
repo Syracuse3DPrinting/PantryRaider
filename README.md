@@ -192,6 +192,18 @@ docker compose up -d
 
 Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.3.1` in `.env`.
 
+**Automatic updates (server):** the prod compose runs Watchtower, which checks for a new FoodAssistant image and recreates the service container when one is published. This is **on by default** so a server install stays current without intervention, and updated Python dependencies come along for free because they are baked into the image. It only touches the FoodAssistant container (the others stay on their pinned versions) and polls daily (override with `WATCHTOWER_POLL_INTERVAL` seconds in `.env`).
+
+To turn auto-updates off, stop the one service or pin to a fixed version:
+
+```bash
+docker compose stop watchtower        # disable auto-updates
+# or pin a version in .env so no newer image is ever picked up:
+# FOODASSISTANT_TAG=v1.3.1
+```
+
+Watchtower needs the Docker socket, which is host-root-equivalent access; that is the tradeoff for hands-off updates on a server with no host bridge.
+
 **Home Assistant add-on:** update from the add-on page in Home Assistant when a new version is offered.
 
 **Built from source (development):** the dev `docker-compose.yml` mounts the code and runs with `--reload`, so a `git pull` applies changes live. Rebuild only when `requirements.txt` or the Dockerfile changes:

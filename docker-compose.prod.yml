@@ -22,6 +22,10 @@ services:
     ports:
       - "9284:8000"
     restart: unless-stopped
+    # Watchtower only touches containers with this label (see the watchtower
+    # service below), so enabling auto-updates never disturbs Grocy/Mealie/Ollama.
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
     depends_on:
       grocy:
         condition: service_started
@@ -63,4 +67,29 @@ services:
       - ./ollama:/root/.ollama
     ports:
       - "11434:11434"
+    restart: unless-stopped
+
+  # Automatic updates for the server (non-Pi) install, ON BY DEFAULT. A plain
+  # server has no host bridge, so it cannot run the in-app one-button update the
+  # Pi appliances use. Watchtower fills that gap: it watches the FoodAssistant
+  # image on GHCR and, when a new version is published, pulls it and recreates
+  # the service container (which brings in updated Python dependencies, since
+  # they are baked into the image). New deps need no separate step.
+  #
+  # WATCHTOWER_LABEL_ENABLE means it ONLY touches containers carrying the
+  # com.centurylinklabs.watchtower.enable=true label (just the service above),
+  # so Grocy, Mealie, and Ollama stay on their pinned versions and are never
+  # auto-updated. Security note: Watchtower needs the Docker socket, which is
+  # host-root-equivalent access. To turn auto-updates OFF, stop this one service
+  # (docker compose stop watchtower) or pin FOODASSISTANT_TAG to a fixed version.
+  watchtower:
+    image: containrrr/watchtower:1.7.1   # pinned; see "Upgrading pinned images" in README
+    container_name: foodassistant-watchtower
+    environment:
+      - TZ=${TZ:-America/New_York}
+      - WATCHTOWER_LABEL_ENABLE=true
+      - WATCHTOWER_CLEANUP=true
+      - WATCHTOWER_POLL_INTERVAL=${WATCHTOWER_POLL_INTERVAL:-86400}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
     restart: unless-stopped
