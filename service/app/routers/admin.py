@@ -17,7 +17,9 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
-from ..version_compare import normalize as _normalize, is_version_tag as _is_version_tag  # noqa: E402
+from ..version_compare import (  # noqa: E402
+    normalize as _normalize, is_version_tag as _is_version_tag, is_newer as _is_newer,
+)
 
 
 @router.get("/version")
@@ -28,18 +30,40 @@ async def version():
 
 @router.get("/check-update")
 async def check_update():
-    """Compare the running version with the highest version tag on GitHub.
+    """Compare the running version with the latest on the main branch.
 
-    Uses the tags API, so a bare git tag is enough (no published Release
-    required). Makes one outbound call; returns gracefully offline. The repo
-    must be public for the unauthenticated call to succeed.
+    APP_VERSION is bumped on every commit but tagged only for minor/major
+    releases (see CLAUDE.md), so the old tag-based check could never see a patch
+    update and always reported "latest" (FoodAssistant-jhug). We instead read
+    APP_VERSION straight from service/app/config.py on the main branch, which
+    reflects every pushed patch. If that is unavailable (offline, private repo,
+    layout change) we fall back to the highest version tag. One or two outbound
+    calls; returns gracefully on any error. The repo must be public for the
+    unauthenticated calls to succeed.
     """
+    import re
     import httpx
-    url = f"https://api.github.com/repos/{GITHUB_REPO}/tags"
+    raw_url = f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/service/app/config.py"
     try:
-        async with httpx.AsyncClient(timeout=6.0) as client:
-            r = await client.get(url, headers={"Accept": "application/vnd.github+json"},
-                                 params={"per_page": 100})
+        async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
+            # Primary: the version on main (every patch bump lands here).
+            try:
+                rr = await client.get(raw_url)
+                if rr.status_code == 200:
+                    m = re.search(r'APP_VERSION\s*=\s*["\']([0-9][0-9.]*)["\']', rr.text)
+                    if m:
+                        latest = m.group(1)
+                        return {"ok": True, "current": APP_VERSION, "latest": latest,
+                                "update_available": _is_newer(latest, APP_VERSION),
+                                "release_url": f"https://github.com/{GITHUB_REPO}"}
+            except Exception:
+                pass  # fall through to the tag check
+            # Fallback: the highest version tag (covers tagged releases).
+            r = await client.get(
+                f"https://api.github.com/repos/{GITHUB_REPO}/tags",
+                headers={"Accept": "application/vnd.github+json"},
+                params={"per_page": 100},
+            )
         if r.status_code != 200:
             hint = " (private repo or no tags yet)" if r.status_code == 404 else ""
             return {"ok": False, "current": APP_VERSION,
@@ -48,9 +72,8 @@ async def check_update():
         if not tags:
             return {"ok": False, "current": APP_VERSION, "error": "No version tags found yet."}
         latest = max(tags, key=_normalize)  # tags API isn't semver-sorted; pick the highest
-        update = _normalize(latest) > _normalize(APP_VERSION)
         return {"ok": True, "current": APP_VERSION, "latest": latest,
-                "update_available": update,
+                "update_available": _is_newer(latest, APP_VERSION),
                 "release_url": f"https://github.com/{GITHUB_REPO}/releases/tag/{latest}"}
     except Exception as e:
         return {"ok": False, "current": APP_VERSION,
