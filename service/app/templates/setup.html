@@ -1982,11 +1982,15 @@
             <div class="section-title"><i class="bi bi-arrow-repeat text-success"></i> Updates
               <span class="badge bg-secondary">v{{ version }}</span></div>
             {% if is_satellite %}
-            <p class="text-secondary small">This device runs from a local checkout. Check for updates to pull the
-              latest FoodAssistant source, refresh dependencies if they changed, and restart the app. A failed pull
+            <p class="text-secondary small">This device runs from a local checkout. Updating pulls the
+              latest FoodAssistant source, refreshes dependencies if they changed, and restarts the app. A failed pull
               leaves the running version untouched.</p>
+            <div class="test-result mb-2" id="update-avail"></div>
+            <button class="btn btn-outline-secondary btn-sm" id="update-check-btn" onclick="checkSatelliteUpdate(this)">
+              <i class="bi bi-cloud-arrow-down me-1"></i>Check for updates
+            </button>
             <button class="btn btn-outline-primary btn-sm" id="update-btn" onclick="checkForUpdates()">
-              <i class="bi bi-arrow-repeat me-1"></i>Check for updates
+              <i class="bi bi-arrow-repeat me-1"></i>Update now
             </button>
             <div class="test-result" id="update-result"></div>
             <pre class="small text-secondary mt-2 d-none" id="update-log" style="white-space:pre-wrap; max-height:220px; overflow:auto;"></pre>
@@ -4031,6 +4035,38 @@ async function syncFromUpstream() {
   }
 }
 
+// Satellite: passively detect whether a newer version exists, without touching
+// the local git checkout. admin/check-update reads APP_VERSION from the main
+// branch over HTTPS and compares it to this device's running version, so it
+// reports availability even when the bridge OTA would report "already up to
+// date" because of a stale local checkout (FoodAssistant-r7e6). The actual
+// pull/restart stays on the separate "Update now" button.
+async function checkSatelliteUpdate(btn) {
+  const el = document.getElementById('update-avail');
+  let orig;
+  if (btn) { orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…'; }
+  if (el) el.innerHTML = '<span class="text-secondary"><i class="bi bi-hourglass-split me-1"></i>Checking for a newer version…</span>';
+  try {
+    const r = await fetch('admin/check-update');
+    const d = await r.json();
+    if (!el) return;
+    if (!d.ok) {
+      el.innerHTML = '<span class="text-secondary"><i class="bi bi-dash-circle me-1"></i>' +
+        (d.error || 'Update check unavailable') + ' (running v' + d.current + ').</span>';
+    } else if (d.update_available) {
+      el.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-circle-fill me-1"></i>' +
+        'Update available: <strong>' + d.latest + '</strong> (you have v' + d.current + '). Press Update now to apply it.</span>';
+    } else {
+      el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' +
+        'You are on the latest version (v' + d.current + ').</span>';
+    }
+  } catch (e) {
+    if (el) el.innerHTML = '<span class="text-secondary">Update check failed.</span>';
+  } finally {
+    if (btn) { btn.disabled = false; btn.innerHTML = orig; }
+  }
+}
+
 // Satellite: pull the latest source and restart the app via the host bridge.
 // The request can take a couple of minutes when dependencies change, so disable
 // the button and show progress. The result includes a short before/after commit
@@ -4327,6 +4363,10 @@ async function wizSaveAll() {
   {% if not is_satellite %}
   tunnelModeChanged();
   _initTunnelStatus();
+  {% else %}
+  // Surface an available update on a Pi Remote as soon as Settings opens, so the
+  // device shows new software is ready without the user pressing anything.
+  if (typeof checkSatelliteUpdate === 'function') checkSatelliteUpdate(null);
   {% endif %}
 
   // Settings form only: update auth hint on load

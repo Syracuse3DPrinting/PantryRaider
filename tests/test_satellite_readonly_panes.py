@@ -96,6 +96,29 @@ def test_non_satellite_panes_stay_editable(client, monkeypatch):
     assert not _attr_present(html, "barcode_autocheck_shopping", "disabled")
 
 
+def test_satellite_updates_card_detects_availability(client, monkeypatch):
+    """A Pi Remote must passively detect a newer version (FoodAssistant-r7e6).
+    The satellite Updates card wires a network-based check (admin/check-update,
+    independent of the local git checkout) and auto-runs it on load, alongside
+    the separate "Update now" OTA button."""
+    html = _render_setup(client, monkeypatch, satellite=True)
+    assert 'onclick="checkSatelliteUpdate(this)"' in html
+    assert 'id="update-avail"' in html
+    # The availability check runs on load and the OTA stays on its own button.
+    assert "checkSatelliteUpdate(null)" in html
+    assert 'onclick="checkForUpdates()"' in html
+    assert ">Update now" in html
+
+
+def test_non_satellite_updates_card_keeps_manual_check(client, monkeypatch):
+    """The non-satellite card uses the manual checkUpdate button and shows the
+    copy-paste update commands, not the satellite OTA wiring."""
+    html = _render_setup(client, monkeypatch, satellite=False)
+    assert 'onclick="checkUpdate(this)"' in html
+    assert "checkSatelliteUpdate(null)" not in html
+    assert 'onclick="checkForUpdates()"' not in html
+
+
 def _attr_present(html: str, element_id: str, attr: str) -> bool:
     """True when the element with id="<element_id>" carries the given bare
     attribute (readonly/disabled) before its tag closes. The check stays local
