@@ -83,11 +83,11 @@
 {% macro secret_input(id, placeholder) -%}
 <div class="input-group">
   <input type="password" class="form-control font-monospace" id="{{ id }}" autocomplete="new-password"
-         placeholder="{{ '•••• saved — leave blank to keep' if has[id] else placeholder }}">
+         placeholder="{{ '•••• saved — leave blank to keep' if has[id] else placeholder }}" {% if features.satellite %}readonly{% endif %}>
   <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('{{ id }}')" title="Show/hide">
     <i class="bi bi-eye"></i>
   </button>
-  {% if has[id] %}
+  {% if has[id] and not features.satellite %}
   <button class="btn btn-outline-danger" type="button" onclick="clearSecret('{{ id }}')" title="Forget the saved value on next save">
     <i class="bi bi-trash3"></i>
   </button>
@@ -118,10 +118,12 @@
     </div>
     {% endfor %}
   </div>
+  {% if not features.satellite %}
   <button class="btn btn-outline-secondary btn-sm" type="button"
           onclick="addExtraKey('{{ provider }}')">
     <i class="bi bi-plus-lg me-1"></i>Add another key
   </button>
+  {% endif %}
   <div class="form-text">Extra keys are tried in order when the primary key is
     rate-limited or rejected.</div>
 </div>
@@ -133,14 +135,14 @@
    effective value whether a listed model or a custom one is chosen. #}
 {% macro ai_model_field(provider, current) -%}
 <select class="form-select ai-model-select" id="{{ provider }}_model_sel"
-        data-provider="{{ provider }}" onchange="aiModelSelChanged('{{ provider }}')">
+        data-provider="{{ provider }}" onchange="aiModelSelChanged('{{ provider }}')" {% if features.satellite %}disabled{% endif %}>
   {% for m in ai_models.get(provider, []) %}
   <option value="{{ m.id }}">{{ m.id }} — {{ m.note }}</option>
   {% endfor %}
   <option value="__custom__">Custom model…</option>
 </select>
 <input type="text" class="form-control font-monospace mt-2 d-none" id="{{ provider }}_model"
-       value="{{ current }}" placeholder="exact model id (e.g. {{ (ai_models.get(provider, [{'id':''}])[0]).id }})">
+       value="{{ current }}" placeholder="exact model id (e.g. {{ (ai_models.get(provider, [{'id':''}])[0]).id }})" {% if features.satellite %}readonly{% endif %}>
 <div class="form-text ai-model-note" id="{{ provider }}_model_note"></div>
 {%- endmacro %}
 
@@ -1083,7 +1085,7 @@
               Keys entered here are saved per provider so you can switch freely.</p>
             <div class="mb-3">
               <label class="form-label">Provider</label>
-              <select class="form-select" id="vision_provider" onchange="showProvider()">
+              <select class="form-select" id="vision_provider" onchange="showProvider()" {% if features.satellite %}disabled{% endif %}>
                 <option value="gemini" {{ 'selected' if s.vision_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
                 <option value="openai" {{ 'selected' if s.vision_provider == 'openai' else '' }}>OpenAI (cloud)</option>
                 <option value="anthropic" {{ 'selected' if s.vision_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
@@ -1132,7 +1134,7 @@
               <div class="mb-3">
                 <label class="form-label">Ollama URL</label>
                 <input type="url" class="form-control" id="ollama_base_url"
-                       placeholder="http://ollama:11434" value="{{ s.ollama_base_url }}">
+                       placeholder="http://ollama:11434" value="{{ s.ollama_base_url }}" {% if features.satellite %}readonly{% endif %}>
                 <div class="form-text">Run with <code>docker compose --profile with-ollama up -d</code>, then pull a vision model.</div>
               </div>
               <div class="mb-3">
@@ -1153,7 +1155,7 @@
               LLM enrichment cleans up the name, category, storage, and shelf life per scan — one small text call.</p>
             <div class="mb-3">
               <label class="form-label">Mode</label>
-              <select class="form-select" id="barcode_enrichment">
+              <select class="form-select" id="barcode_enrichment" {% if features.satellite %}disabled{% endif %}>
                 <option value="llm" {{ 'selected' if s.barcode_enrichment == 'llm' else '' }}>LLM enrichment (recommended)</option>
                 <option value="off" {{ 'selected' if s.barcode_enrichment == 'off' else '' }}>Heuristics only (no LLM call)</option>
               </select>
@@ -1161,7 +1163,7 @@
             <div class="mb-3">
               <div class="form-check form-switch">
                 <input class="form-check-input" type="checkbox" id="barcode_llm_fallback"
-                       {{ 'checked' if s.barcode_llm_fallback else '' }}>
+                       {{ 'checked' if s.barcode_llm_fallback else '' }} {% if features.satellite %}disabled{% endif %}>
                 <label class="form-check-label" for="barcode_llm_fallback">
                   LLM fallback for unknown barcodes
                 </label>
@@ -1172,7 +1174,7 @@
             </div>
             <div class="mb-3">
               <label class="form-label">Provider Override <span class="text-secondary small">(optional)</span></label>
-              <select class="form-select" id="enrich_provider" onchange="onEnrichProviderChange()">
+              <select class="form-select" id="enrich_provider" onchange="onEnrichProviderChange()" {% if features.satellite %}disabled{% endif %}>
                 <option value="" {{ 'selected' if not s.enrich_provider else '' }}>Same as vision provider</option>
                 <option value="gemini" {{ 'selected' if s.enrich_provider == 'gemini' else '' }}>Google Gemini</option>
                 <option value="openai" {{ 'selected' if s.enrich_provider == 'openai' else '' }}>OpenAI</option>
@@ -1187,9 +1189,9 @@
                  selected enrichment provider (FoodAssistant-r4nz). The empty option keeps the
                  provider's default; Custom reveals the free-text override. The text input keeps
                  id="enrich_model" so the save path reads the effective value either way. #}
-              <select class="form-select ai-model-select" id="enrich_model_sel" onchange="enrichModelSelChanged()"></select>
+              <select class="form-select ai-model-select" id="enrich_model_sel" onchange="enrichModelSelChanged()" {% if features.satellite %}disabled{% endif %}></select>
               <input type="text" class="form-control font-monospace mt-2 d-none" id="enrich_model"
-                     placeholder="exact model id (e.g. claude-haiku-4-5)" value="{{ s.enrich_model }}">
+                     placeholder="exact model id (e.g. claude-haiku-4-5)" value="{{ s.enrich_model }}" {% if features.satellite %}readonly{% endif %}>
               <div class="form-text ai-model-note" id="enrich_model_note">Text-only, so a small model works well (claude-haiku-4-5, gpt-4o-mini, llama3.2:3b).</div>
             </div>
             <button class="btn btn-outline-info btn-sm" onclick="testEnrich()">
@@ -1198,10 +1200,14 @@
             <div class="test-result" id="enrich-result"></div>
           </div>
 
+          {% if features.satellite %}
+          <div class="form-text"><i class="bi bi-hdd-network me-1"></i>AI settings are managed on the main server and synced here automatically. Edit them there, then Sync.</div>
+          {% else %}
           <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneAi(this)">
             <i class="bi bi-check-lg me-1"></i>Save AI
           </button>
           <div class="test-result mt-2" id="ai-save-result"></div>
+          {% endif %}
         </div>
 
         <!-- Recipes -->
@@ -1212,7 +1218,7 @@
             <div class="section-title"><i class="bi bi-journal-richtext text-primary"></i> Mealie — Recipe Manager
               <span class="badge bg-secondary badge-req">Optional</span></div>
             <p class="text-secondary small">Enables the Recipes, Cook, Meal Plan, and Shopping pages.</p>
-            {% if is_pi %}
+            {% if is_pi and not features.satellite %}
             <div class="mb-3">
               <button class="btn btn-outline-info btn-sm" type="button" onclick="startMealie(this)">
                 <i class="bi bi-play me-1"></i>Start Mealie on this device
@@ -1230,7 +1236,7 @@
               <label class="form-label">Mealie URL <span class="text-secondary small">(internal — used for API calls)</span></label>
               <div class="input-group">
                 <input type="url" class="form-control" id="mealie_base_url"
-                       placeholder="http://192.168.1.10:9285" value="{{ s.mealie_base_url or suggested_mealie_url }}">
+                       placeholder="http://192.168.1.10:9285" value="{{ s.mealie_base_url or suggested_mealie_url }}" {% if features.satellite %}readonly{% endif %}>
                 <a class="btn btn-outline-secondary" id="mealie-open-link" href="{{ suggested_mealie_url or s.mealie_base_url or '#' }}" target="_blank" title="Open Mealie in new tab">
                   <i class="bi bi-box-arrow-up-right"></i>
                 </a>
@@ -1239,7 +1245,7 @@
             <div class="mb-3">
               <label class="form-label">Mealie Public URL <span class="text-secondary small">(optional — used for browser links)</span></label>
               <input type="url" class="form-control" id="mealie_public_url"
-                     placeholder="https://mealie.example.com" value="{{ s.mealie_public_url }}">
+                     placeholder="https://mealie.example.com" value="{{ s.mealie_public_url }}" {% if features.satellite %}readonly{% endif %}>
               <div class="form-text">External address used when the UI links you to Mealie. Empty = internal URL.</div>
             </div>
             <div class="mb-3">
@@ -1251,7 +1257,7 @@
             </button>
             <div class="test-result" id="mealie-result"></div>
             <div class="form-check form-switch mt-2">
-              <input class="form-check-input" type="checkbox" id="barcode_autocheck_shopping" {% if s.barcode_autocheck_shopping %}checked{% endif %}>
+              <input class="form-check-input" type="checkbox" id="barcode_autocheck_shopping" {% if s.barcode_autocheck_shopping %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
               <label class="form-check-label" for="barcode_autocheck_shopping">
                 Auto-check Mealie shopping list when item is scanned and committed
               </label>
@@ -1264,7 +1270,7 @@
               your Mealie library. Picked recipes are saved into Mealie.</p>
             <div class="mb-3">
               <label class="form-label">Source</label>
-              <select class="form-select" id="recipe_source" onchange="showRecipeSource()">
+              <select class="form-select" id="recipe_source" onchange="showRecipeSource()" {% if features.satellite %}disabled{% endif %}>
                 <option value="themealdb" {{ 'selected' if s.recipe_source == 'themealdb' else '' }}>TheMealDB (free, default)</option>
                 <option value="spoonacular" {{ 'selected' if s.recipe_source == 'spoonacular' else '' }}>Spoonacular (API key required)</option>
                 <option value="off" {{ 'selected' if s.recipe_source == 'off' else '' }}>Off — Mealie recipes only</option>
@@ -1298,7 +1304,7 @@
             <div class="mb-3">
               <label class="form-label">Pantry Staples <span class="text-secondary small">(comma-separated)</span></label>
               <textarea class="form-control" id="staple_items" rows="3"
-                        placeholder="empty = built-in list: eggs, butter, flour, sugar, salt, pepper, oil, milk, garlic, onion, vinegar, honey, mustard, ketchup, mayonnaise, soy sauce, common dried spices">{{ s.staple_items }}</textarea>
+                        placeholder="empty = built-in list: eggs, butter, flour, sugar, salt, pepper, oil, milk, garlic, onion, vinegar, honey, mustard, ketchup, mayonnaise, soy sauce, common dried spices" {% if features.satellite %}readonly{% endif %}>{{ s.staple_items }}</textarea>
               <div class="form-text">Items assumed on hand even when not in inventory — used by the
                 "With Pantry Staples" tier of recipe suggestions.</div>
             </div>
@@ -1306,7 +1312,7 @@
               <label class="form-label"><i class="bi bi-stars me-1"></i>AI Recipe Preferences
                 <span class="text-secondary small">(optional)</span></label>
               <textarea class="form-control" id="cook_ai_context" rows="3"
-                        placeholder="e.g. I prefer Italian and Mexican food. I don't eat pork. My family loves spicy dishes. Avoid nuts due to allergies.">{{ s.cook_ai_context }}</textarea>
+                        placeholder="e.g. I prefer Italian and Mexican food. I don't eat pork. My family loves spicy dishes. Avoid nuts due to allergies." {% if features.satellite %}readonly{% endif %}>{{ s.cook_ai_context }}</textarea>
               <div class="form-text">Sent to the AI when generating recipe suggestions on the Cook page
                 ("Ask AI"). Describe tastes, restrictions, or cuisines you enjoy.</div>
             </div>
@@ -1317,10 +1323,12 @@
                 <span class="text-secondary small">(optional)</span></label>
               <div class="form-text mt-0 mb-2">Tell the AI what you can cook with. Common items are
                 pre-selected; turn off anything you don't have and add the rest.</div>
+              {% if not features.satellite %}
               <div class="d-flex gap-2 mb-2">
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applianceSelectAll(true)">Select all</button>
                 <button type="button" class="btn btn-outline-secondary btn-sm" onclick="applianceSelectAll(false)">Clear</button>
               </div>
+              {% endif %}
               {% for group, title in [('major', 'Major appliances'), ('minor', 'Smaller tools and cookware')] %}
               <div class="mb-2">
                 <div class="text-secondary small text-uppercase mb-1">{{ title }}</div>
@@ -1330,7 +1338,7 @@
                     <div class="form-check">
                       <input class="form-check-input appliance-chk" type="checkbox"
                              id="appliance_{{ a.key }}" value="{{ a.key }}"
-                             {{ 'checked' if a.checked else '' }}>
+                             {{ 'checked' if a.checked else '' }} {% if features.satellite %}disabled{% endif %}>
                       <label class="form-check-label small" for="appliance_{{ a.key }}">{{ a.label }}</label>
                     </div>
                   </div>
@@ -1342,26 +1350,30 @@
             <div class="row g-2">
               <div class="col-sm-4">
                 <label class="form-label">Perishable window <span class="text-secondary small">(days)</span></label>
-                <input type="number" class="form-control" id="perishable_days" min="1" max="60" value="{{ s.perishable_days }}">
+                <input type="number" class="form-control" id="perishable_days" min="1" max="60" value="{{ s.perishable_days }}" {% if features.satellite %}readonly{% endif %}>
                 <div class="form-text">Non-refrigerated items expiring within this count as perishable.</div>
               </div>
               <div class="col-sm-4">
                 <label class="form-label">Expiring soon <span class="text-secondary small">(days)</span></label>
-                <input type="number" class="form-control" id="expiring_soon_days" min="1" max="30" value="{{ s.expiring_soon_days }}">
+                <input type="number" class="form-control" id="expiring_soon_days" min="1" max="30" value="{{ s.expiring_soon_days }}" {% if features.satellite %}readonly{% endif %}>
                 <div class="form-text">"Uses expiring" highlight threshold.</div>
               </div>
               <div class="col-sm-4">
                 <label class="form-label">Suggestions per tier</label>
-                <input type="number" class="form-control" id="suggest_per_tier" min="1" max="20" value="{{ s.suggest_per_tier }}">
+                <input type="number" class="form-control" id="suggest_per_tier" min="1" max="20" value="{{ s.suggest_per_tier }}" {% if features.satellite %}readonly{% endif %}>
                 <div class="form-text">Cards shown in each Cook tier.</div>
               </div>
             </div>
           </div>
 
+          {% if features.satellite %}
+          <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Recipe settings are managed on the main server and synced here automatically. Edit them there, then Sync.</div>
+          {% else %}
           <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneRecipes(this)">
             <i class="bi bi-check-lg me-1"></i>Save Recipes
           </button>
           <div class="test-result mt-2" id="recipes-save-result"></div>
+          {% endif %}
         </div>
 
         <!-- Interface -->
