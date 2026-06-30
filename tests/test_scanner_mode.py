@@ -143,11 +143,21 @@ def test_gtin_check_digit_validation():
     assert gtin_check_digit_ok("ABC123") is True
 
 
-def test_corrupt_full_length_barcode_is_rejected(client):
+def test_misread_barcode_still_queues_not_silently_rejected(client, monkeypatch):
+    """A misread (bad check digit) must NOT be silently dropped: the headless
+    scanner UI cannot show a rejection, so dropping it makes scanning look
+    broken. It queues (as Unknown) for the user to fix (FoodAssistant-pmry)."""
     scanner_mode.set_mode("inventory")
+    from app.routers import pending as pending_router
+
+    async def _lookup(barcode, db):
+        from app.services.barcode import BarcodeNotFound
+        raise BarcodeNotFound(barcode)
+
+    monkeypatch.setattr(pending_router, "lookup_barcode", _lookup)
     r = client.post("/pending/scan", json={"barcode": "078000035484"})  # bad check digit
     assert r.status_code == 200
-    assert r.json()["status"] == "rejected"
+    assert r.json().get("status") != "rejected"
 
 
 def test_valid_upc_is_accepted(client, monkeypatch):

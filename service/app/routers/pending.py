@@ -175,17 +175,13 @@ async def scan_barcode(body: ScanRequest, request: Request, db: Session = Depend
              "barcode": barcode[:_MAX_BARCODE_LEN] + "…", "length": len(barcode)},
             status_code=200,
         )
-    # Reject a full-length GTIN whose check digit does not validate: that is a
-    # misread or partial scan (a dropped/garbled digit), not a real product, so
-    # queueing it would just create a bogus pending item to clean up. Only
-    # applies to 8/12/13/14-digit numeric codes; everything else passes through
-    # (FoodAssistant-pmry).
-    if not gtin_check_digit_ok(barcode):
-        return JSONResponse(
-            {"status": "rejected", "reason": "barcode check digit failed (likely a misread)",
-             "barcode": barcode},
-            status_code=200,
-        )
+    # NOTE: we deliberately do NOT reject a code whose GTIN check digit fails.
+    # The headless scanner UI just POSTs and navigates, so a rejection is silent,
+    # which makes scanning look completely broken when a scanner produces an
+    # occasional misread. A code that fails lookup still queues as "Unknown" for
+    # the user to fix on the Pending page, which is far better than a scan
+    # disappearing. gtin_check_digit_ok() is kept for callers that can surface
+    # the result to the user (FoodAssistant-pmry).
 
     # Scanner mode routes the same physical scan to a different action
     # (FoodAssistant-8jbk). "inventory" (the default) falls through to the
