@@ -86,14 +86,19 @@
 <body>
 
 {# Shared macro: password/secret input with show-toggle and clear button #}
+{# A secret is read-only on a satellite ONLY when the main server manages it
+   (it is pulled each sync, see SATELLITE_PULL_FIELDS). The satellite's own
+   device-local secrets (its upstream API key, web password, X-API-Key, kiosk
+   PIN) must stay editable so the device can be paired or re-keyed locally. #}
 {% macro secret_input(id, placeholder) -%}
+{% set managed = features.satellite and id in satellite_managed %}
 <div class="input-group">
   <input type="password" class="form-control font-monospace" id="{{ id }}" autocomplete="new-password"
-         placeholder="{{ '•••• saved — leave blank to keep' if has[id] else placeholder }}" {% if features.satellite %}readonly{% endif %}>
+         placeholder="{{ '•••• saved — leave blank to keep' if has[id] else placeholder }}" {% if managed %}readonly{% endif %}>
   <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('{{ id }}')" title="Show/hide">
     <i class="bi bi-eye"></i>
   </button>
-  {% if has[id] and not features.satellite %}
+  {% if has[id] and not managed %}
   <button class="btn btn-outline-danger" type="button" onclick="clearSecret('{{ id }}')" title="Forget the saved value on next save">
     <i class="bi bi-trash3"></i>
   </button>

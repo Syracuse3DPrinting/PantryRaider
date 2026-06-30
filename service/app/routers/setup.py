@@ -497,6 +497,10 @@ async def setup_page(request: Request):
         "is_pi_appliance": settings.is_pi_appliance(),
         # For the Updates card's release-notes link.
         "github_repo": GITHUB_REPO,
+        # Secrets the main server manages (pulled each sync). On a satellite these
+        # render read-only; the device-local secrets (upstream key, password, PIN)
+        # stay editable so the device can be paired or re-keyed (FoodAssistant).
+        "satellite_managed": SATELLITE_PULL_FIELDS,
         "board_model": board_model(),
         # When True the board is a Pi too weak for the local stack, so Pi Hosted
         # was dropped from the picker; the template shows a short why-line.

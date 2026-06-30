@@ -122,6 +122,22 @@ def test_non_satellite_updates_card_has_server_update_now(client, monkeypatch):
     assert "docker compose pull" in html                    # command fallback kept
 
 
+def test_satellite_device_local_secrets_stay_editable(client, monkeypatch):
+    """A satellite must be able to edit its OWN device-local secrets (the upstream
+    API key it uses to reach the server, its web password, X-API-Key, and kiosk
+    PIN) so it can be paired or re-keyed locally, even though server-managed
+    secrets (AI, Grocy, Mealie) are read-only (FoodAssistant)."""
+    html = _render_setup(client, monkeypatch, satellite=True)
+    # Device-local: editable.
+    assert not _attr_present(html, "upstream_api_key", "readonly")
+    assert not _attr_present(html, "auth_password", "readonly")
+    assert not _attr_present(html, "api_key", "readonly")
+    assert not _attr_present(html, "kiosk_pin", "readonly")
+    # Server-managed: still read-only.
+    assert _attr_present(html, "gemini_api_key", "readonly")
+    assert _attr_present(html, "mealie_api_key", "readonly")
+
+
 def test_pi_hosted_gets_the_in_app_ota(client, monkeypatch):
     """Pi Hosted appliances must also get the one-button in-app updater
     (FoodAssistant-tu0i), not just Pi Remote: both run the host bridge."""
