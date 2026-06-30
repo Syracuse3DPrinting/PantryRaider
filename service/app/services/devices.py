@@ -84,12 +84,17 @@ def _is_online(last_seen: str | None) -> bool:
 
 
 def _serialize(dev: SatelliteDevice) -> dict:
+    from ..config import APP_VERSION
+    from ..version_compare import compare_to
     return {
         "device_id": dev.device_id,
         "hostname": dev.hostname,
         "ip": dev.ip,
         "deployment_mode": dev.deployment_mode,
         "version": dev.version,
+        # Standardised update status against the server's own version, so the
+        # Devices page can flag which satellites are behind (FoodAssistant-ny8r).
+        "update_status": compare_to(dev.version or "", APP_VERSION),
         "label": dev.label,
         "source": dev.source,
         "pending_command": dev.pending_command,

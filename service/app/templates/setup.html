@@ -6092,7 +6092,11 @@ function deviceRowHtml(d) {
     ? `<a href="http://${escapeHtml(d.ip)}${devPort}/" target="_blank" rel="noopener">${escapeHtml(d.ip)}</a>`
     : '<span class="text-secondary">--</span>';
   const mode = d.deployment_mode ? escapeHtml(d.deployment_mode) : '--';
-  const version = d.version ? escapeHtml(d.version) : '--';
+  // Update status against this server's version (FoodAssistant-ny8r).
+  const vbadge = { behind: ' <span class="badge bg-warning text-dark">update available</span>',
+                   current: ' <span class="badge bg-success">up to date</span>',
+                   ahead: ' <span class="badge bg-info text-dark">ahead</span>' }[d.update_status] || '';
+  const version = (d.version ? escapeHtml(d.version) : '--') + vbadge;
   const seen = d.last_seen ? escapeHtml(d.last_seen) : '--';
   const id = escapeHtml(d.device_id || '').replace(/'/g, "\\'");
   return `<tr>

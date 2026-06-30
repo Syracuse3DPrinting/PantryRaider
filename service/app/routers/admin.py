@@ -17,26 +17,13 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 logger = logging.getLogger(__name__)
 
 
-def _normalize(v: str) -> tuple:
-    """Turn a version string like 'v1.2.3' into a comparable tuple (1, 2, 3)."""
-    parts = v.lstrip("vV").split(".")
-    out = []
-    for p in parts:
-        num = "".join(c for c in p if c.isdigit())
-        out.append(int(num) if num else 0)
-    return tuple(out)
+from ..version_compare import normalize as _normalize, is_version_tag as _is_version_tag  # noqa: E402
 
 
 @router.get("/version")
 async def version():
     """Current running version (no network call)."""
     return {"version": APP_VERSION}
-
-
-def _is_version_tag(name: str) -> bool:
-    """Looks like a version tag, e.g. v1.0.0 or 1.2."""
-    body = name.lstrip("vV")
-    return bool(body) and body[0].isdigit()
 
 
 @router.get("/check-update")
