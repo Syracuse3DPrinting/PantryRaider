@@ -1307,16 +1307,34 @@ async def scan_ip_cameras(payload: CameraScanPayload = CameraScanPayload()):
     cidr = (payload.cidr or "").strip() or camera_scan.best_lan_cidr()
     if not cidr:
         return {"ok": False, "error": "Could not determine the local network; enter a CIDR like 192.168.1.0/24."}
-    results = await anyio.to_thread.run_sync(lambda: camera_scan.scan_for_cameras(cidr))
-    if results and isinstance(results[0], dict) and results[0].get("error"):
-        return {"ok": False, "error": results[0]["error"]}
+    result = await anyio.to_thread.run_sync(lambda: camera_scan.scan_for_cameras(cidr))
+    if result.get("error"):
+        return {"ok": False, "error": result["error"]}
+    cameras = result.get("cameras", [])
+    responded = result.get("responded", 0)
+    scanned = result.get("scanned", 0)
     # When we had to guess and the guess is a Docker bridge subnet, tell the user
     # to enter their real LAN (the app runs in a container, FoodAssistant-d9rx).
     hint = ""
     if not (payload.cidr or "").strip() and camera_scan.looks_dockerish(cidr):
         hint = (f"{cidr} looks like a Docker network, not your LAN. Enter your "
                 f"home network instead, e.g. 192.168.1.0/24.")
-    return {"ok": True, "cidr": cidr, "cameras": results, "hint": hint}
+    # Diagnostic note so 'no cameras' is actionable: nothing answering at all on a
+    # subnet the user is sure has cameras usually means this container cannot
+    # route to the LAN (run with host networking, or add by IP).
+    note = ""
+    if not cameras:
+        if responded == 0:
+            note = (f"Scanned {scanned} hosts on {cidr} and nothing answered on camera "
+                    "ports. If cameras are definitely on this network, this app is running "
+                    "in a Docker container and probably cannot reach your LAN. Run it with "
+                    "host networking (network_mode: host), or add the camera by IP above.")
+        else:
+            note = (f"Found {responded} host(s) with camera-like ports open, but none "
+                    "exposed a recognized snapshot path. Add one by IP above using the "
+                    "closest brand template.")
+    return {"ok": True, "cidr": cidr, "cameras": cameras, "responded": responded,
+            "scanned": scanned, "hint": hint, "note": note}
 
 
 @router.get("/cameras/scan-default")

@@ -23,8 +23,10 @@ import ipaddress
 
 # Ports a network camera commonly answers on. 554 is RTSP (not browser-viewable);
 # the rest are HTTP(S) front-ends that may expose a JPEG snapshot or MJPEG stream.
-CAMERA_PORTS = (554, 80, 8080, 8000, 88, 8081, 81)
-_HTTP_PORTS = (80, 8080, 8000, 88, 8081, 81)
+CAMERA_PORTS = (554, 8554, 80, 81, 88, 8000, 8080, 8081, 443, 8443, 9000, 37777)
+_HTTP_PORTS = (80, 81, 88, 8000, 8080, 8081, 9000)
+_HTTPS_PORTS = (443, 8443)
+_RTSP_PORTS = (554, 8554)
 
 # Snapshot paths used across common camera brands. Tried in order; the first that
 # returns an image wins. Kept short so a host is probed quickly.
@@ -62,51 +64,69 @@ def _port_open(ip: str, port: int, timeout: float) -> bool:
         return False
 
 
-def _find_snapshot(ip: str, http_port: int, timeout: float,
-                   fetch=None) -> str | None:
-    """Return the first working snapshot URL on ``ip:http_port``, or None.
+def _probe_http(ip: str, port: int, scheme: str, timeout: float,
+                fetch=None) -> tuple[str, bool]:
+    """Probe snapshot paths on ``scheme://ip:port``.
 
-    ``fetch`` is injectable for tests; it takes a URL and returns an httpx-like
-    response (or raises). Defaults to a plain httpx GET."""
+    Returns (snapshot_url, auth_required). A 200 image wins immediately; a
+    401/403 on any path is recorded as auth_required, since password-protected
+    cameras are still cameras (the user can add credentials). ``fetch`` is
+    injectable for tests."""
     def _default_fetch(url: str):
-        return httpx.get(url, timeout=timeout)
+        return httpx.get(url, timeout=timeout, verify=False, follow_redirects=True)
     fetch = fetch or _default_fetch
-    host = f"http://{ip}:{http_port}" if http_port != 80 else f"http://{ip}"
+    default_port = 80 if scheme == "http" else 443
+    base = f"{scheme}://{ip}" if port == default_port else f"{scheme}://{ip}:{port}"
+    auth = False
     for path in SNAPSHOT_PATHS:
-        url = host + path
+        url = base + path
         try:
             resp = fetch(url)
         except Exception:
             continue
-        if getattr(resp, "status_code", 0) == 200 and _looks_like_image(resp):
-            return url
-    return None
+        code = getattr(resp, "status_code", 0)
+        if code == 200 and _looks_like_image(resp):
+            return url, False
+        if code in (401, 403):
+            auth = True
+    return "", auth
 
 
 def probe_camera(ip: str, timeout: float = 0.4, fetch=None) -> dict | None:
-    """Probe one host for a camera. Returns a candidate dict or None.
+    """Probe one host. Returns a dict when ANY camera port is open, else None.
 
-    A candidate carries the ip, the open camera ports, a working ``snapshot_url``
-    when one was found, and ``rtsp`` True when only port 554 answered (so the UI
-    can flag that it needs a snapshot/MJPEG path or a bridge)."""
+    The dict carries ``report`` (True when this is likely a camera: a snapshot
+    was found, it answers RTSP, or a snapshot path needed auth) plus the open
+    ports, snapshot_url, rtsp/auth flags, and a ``kind`` for the UI. Returning
+    even non-camera responders lets the scan report how many hosts answered on
+    camera ports, which distinguishes 'no cameras' from 'cannot reach the LAN'."""
     open_ports = [p for p in CAMERA_PORTS if _port_open(ip, p, timeout)]
     if not open_ports:
         return None
-    snapshot_url = None
-    for hp in (p for p in open_ports if p in _HTTP_PORTS):
-        snapshot_url = _find_snapshot(ip, hp, timeout, fetch=fetch)
-        if snapshot_url:
+    snapshot_url = ""
+    auth = False
+    for p in open_ports:
+        scheme = "http" if p in _HTTP_PORTS else ("https" if p in _HTTPS_PORTS else "")
+        if not scheme:
+            continue
+        url, a = _probe_http(ip, p, scheme, timeout, fetch=fetch)
+        auth = auth or a
+        if url:
+            snapshot_url = url
             break
-    rtsp_only = 554 in open_ports and not any(p in _HTTP_PORTS for p in open_ports)
-    # A bare HTTP server with no recognised snapshot path is probably not a
-    # camera; only report HTTP hosts when we actually found an image.
-    if not snapshot_url and not rtsp_only:
-        return None
+    rtsp = any(p in _RTSP_PORTS for p in open_ports)
+    report = bool(snapshot_url) or rtsp or auth
+    kind = ("snapshot" if snapshot_url else
+            "auth" if auth else
+            "rtsp" if rtsp else "open")
     return {
         "ip": ip,
         "ports": open_ports,
-        "snapshot_url": snapshot_url or "",
-        "rtsp": 554 in open_ports,
+        "snapshot_url": snapshot_url,
+        "rtsp": rtsp,
+        "auth_required": auth,
+        "report": report,
+        "kind": kind,
         "name": f"Camera at {ip}",
     }
 
@@ -161,16 +181,20 @@ def best_lan_cidr() -> str | None:
         return None
 
 
-def scan_for_cameras(cidr: str, timeout: float = 0.4, concurrency: int = 64,
-                     fetch=None) -> list[dict]:
-    """Scan a CIDR for IP cameras. Returns candidate dicts (or a single
-    ``{"error": ...}`` element for a bad/oversized CIDR)."""
+def scan_for_cameras(cidr: str, timeout: float = 0.4, concurrency: int = 128,
+                     fetch=None) -> dict:
+    """Scan a CIDR for IP cameras.
+
+    Returns ``{"cameras": [...], "responded": int, "scanned": int}`` or
+    ``{"error": ...}``. ``responded`` counts hosts that answered on any camera
+    port (even non-cameras), so the caller can tell 'no cameras here' from 'this
+    container cannot reach the LAN'."""
     try:
         net = ipaddress.ip_network(cidr, strict=False)
     except ValueError as exc:
-        return [{"error": f"invalid network: {exc}"}]
+        return {"error": f"invalid network: {exc}"}
     if net.num_addresses > MAX_HOSTS:
-        return [{"error": f"network too large (max {MAX_HOSTS} hosts); use a /22 or smaller"}]
+        return {"error": f"network too large (max {MAX_HOSTS} hosts); use a /22 or smaller"}
     skip = _local_ips()
     hosts = [str(h) for h in net.hosts() if str(h) not in skip]
 
@@ -180,10 +204,11 @@ def scan_for_cameras(cidr: str, timeout: float = 0.4, concurrency: int = 64,
         except Exception:
             return None
 
-    found: list[dict] = []
+    responders: list[dict] = []
     with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
         for result in pool.map(_safe, hosts):
             if result:
-                found.append(result)
-    found.sort(key=lambda c: tuple(int(o) for o in c["ip"].split(".")))
-    return found
+                responders.append(result)
+    cameras = [r for r in responders if r.get("report")]
+    cameras.sort(key=lambda c: tuple(int(o) for o in c["ip"].split(".")))
+    return {"cameras": cameras, "responded": len(responders), "scanned": len(hosts)}

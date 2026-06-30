@@ -1648,8 +1648,9 @@
                 <i class="bi bi-search me-1"></i>Scan network for cameras
               </button>
               <input type="text" class="form-control form-control-sm" id="cam-scan-cidr" style="max-width:200px"
-                     placeholder="192.168.1.0/24 (optional)" autocomplete="off">
+                     placeholder="192.168.1.0/24 (optional)" autocomplete="off" oninput="_camUpdateScanHint()">
             </div>
+            <div id="cam-scan-hint" class="form-text text-warning mt-1 d-none"></div>
             <div class="test-result mt-2" id="cam-ip-result"></div>
             <div id="cam-scan-results" class="mt-2"></div>
           </div>
@@ -5644,16 +5645,37 @@ function _camPresetChanged() {
 
 // Pre-fill the scan box with the server's best LAN guess so it is visible and
 // correctable before scanning (FoodAssistant-d9rx).
+// True for Docker's private bridge range (172.16-31.x), which is not the LAN.
+function _camIsDockerish(cidr) {
+  return /^\s*172\.(1[6-9]|2[0-9]|3[01])\./.test(cidr || '');
+}
+
+// Show or hide the "this is a Docker subnet, not your LAN" note based on the
+// current box value, so it updates live as the user types (FoodAssistant-d9rx).
+function _camUpdateScanHint() {
+  const el = document.getElementById('cam-scan-cidr');
+  const hint = document.getElementById('cam-scan-hint');
+  if (!el || !hint) return;
+  if (_camIsDockerish(el.value)) {
+    hint.innerHTML = '<i class="bi bi-exclamation-triangle me-1"></i>' + el.value.trim() +
+      ' is this app’s Docker network, not your LAN. Change it to your home network ' +
+      '(e.g. 192.168.1.0/24) before scanning.';
+    hint.classList.remove('d-none');
+  } else {
+    hint.classList.add('d-none');
+  }
+}
+
 async function _camPrefillScanCidr() {
   const el = document.getElementById('cam-scan-cidr');
-  if (!el || el.value.trim()) return;
-  try {
-    const d = await fetch('setup/cameras/scan-default').then(r => r.json());
-    if (d && d.cidr) {
-      el.value = d.cidr;
-      if (d.dockerish) el.title = 'This looks like a Docker subnet; change it to your LAN if needed.';
-    }
-  } catch (e) { /* leave it blank */ }
+  if (!el) return;
+  if (!el.value.trim()) {
+    try {
+      const d = await fetch('setup/cameras/scan-default').then(r => r.json());
+      if (d && d.cidr) el.value = d.cidr;
+    } catch (e) { /* leave it blank */ }
+  }
+  _camUpdateScanHint();
 }
 
 // Scan the LAN for IP cameras and list them with Preview + Add, like the HA
@@ -5677,7 +5699,10 @@ async function _camScanLan(btn) {
       ? `<div class="alert alert-warning py-1 px-2 small mb-2">${data.hint}</div>` : '';
     const cams = data.cameras || [];
     if (!cams.length) {
-      out.innerHTML = hint + '<span class="text-secondary small">No cameras found on ' + data.cidr + '.</span>';
+      const note = data.note
+        ? `<div class="alert alert-info py-1 px-2 small mb-0">${data.note}</div>`
+        : '<span class="text-secondary small">No cameras found on ' + data.cidr + '.</span>';
+      out.innerHTML = hint + note;
       return;
     }
     out.innerHTML = hint;
@@ -5689,7 +5714,9 @@ async function _camScanLan(btn) {
       const label = document.createElement('span');
       label.className = 'small';
       const detail = cam.snapshot_url ? 'snapshot found' :
-        (cam.rtsp ? 'RTSP only (needs a snapshot/MJPEG path or a bridge)' : 'open ports ' + cam.ports.join(', '));
+        cam.auth_required ? 'needs login (password-protected) — add by IP with credentials' :
+        cam.rtsp ? 'RTSP only (needs a snapshot/MJPEG path or a bridge)' :
+        'open ports ' + cam.ports.join(', ');
       label.textContent = cam.ip + ' — ' + detail;
       const btns = document.createElement('div');
       btns.className = 'd-flex gap-1';

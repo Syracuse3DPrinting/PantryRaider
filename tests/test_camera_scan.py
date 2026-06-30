@@ -24,7 +24,7 @@ def test_looks_like_image_by_magic_and_ctype():
     assert not camera_scan._looks_like_image(_Resp(content=b"<html>", ctype="text/html"))
 
 
-def test_find_snapshot_returns_first_working_path(monkeypatch):
+def test_probe_http_returns_first_working_path_and_auth(monkeypatch):
     good = "http://10.0.0.5/snap.jpg"
 
     def fetch(url):
@@ -32,9 +32,13 @@ def test_find_snapshot_returns_first_working_path(monkeypatch):
             return _Resp(200)
         return _Resp(404, content=b"", ctype="text/html")
 
-    monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: True)
-    url = camera_scan._find_snapshot("10.0.0.5", 80, 0.1, fetch=fetch)
-    assert url == good
+    url, auth = camera_scan._probe_http("10.0.0.5", 80, "http", 0.1, fetch=fetch)
+    assert url == good and auth is False
+
+    # All paths 401 -> no url, but auth flagged.
+    url2, auth2 = camera_scan._probe_http(
+        "10.0.0.9", 80, "http", 0.1, fetch=lambda u: _Resp(401, b"", "text/html"))
+    assert url2 == "" and auth2 is True
 
 
 def test_probe_camera_with_http_snapshot(monkeypatch):
@@ -47,26 +51,55 @@ def test_probe_camera_with_http_snapshot(monkeypatch):
     cam = camera_scan.probe_camera("10.0.0.5", fetch=fetch)
     assert cam and cam["ip"] == "10.0.0.5"
     assert cam["snapshot_url"].endswith("/snapshot.jpg")
-    assert cam["rtsp"] is False
+    assert cam["report"] is True and cam["kind"] == "snapshot"
 
 
 def test_probe_camera_rtsp_only(monkeypatch):
     monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: p == 554)
     cam = camera_scan.probe_camera("10.0.0.6", fetch=lambda u: _Resp(404))
     assert cam and cam["rtsp"] is True and cam["snapshot_url"] == ""
+    assert cam["report"] is True and cam["kind"] == "rtsp"
 
 
-def test_probe_camera_plain_http_not_reported(monkeypatch):
-    # An HTTP host with no recognised snapshot path is not a camera.
+def test_probe_camera_auth_protected_is_reported(monkeypatch):
+    # A password-protected snapshot (401) is still a camera worth listing.
+    monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: p == 80)
+    cam = camera_scan.probe_camera("10.0.0.8",
+                                   fetch=lambda u: _Resp(401, b"", "text/html"))
+    assert cam and cam["auth_required"] is True
+    assert cam["report"] is True and cam["kind"] == "auth"
+
+
+def test_probe_camera_plain_http_responds_but_not_reported(monkeypatch):
+    # An HTTP host with no snapshot and no auth is a responder but not a camera,
+    # so it counts toward "responded" but is filtered out of the camera list.
     monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: p == 80)
     cam = camera_scan.probe_camera("10.0.0.7",
                                    fetch=lambda u: _Resp(200, b"<html>", "text/html"))
-    assert cam is None
+    assert cam is not None and cam["report"] is False
+
+
+def test_scan_returns_diagnostics(monkeypatch):
+    # One real camera + one bare web host: cameras has 1, responded counts both.
+    def fake_probe(ip, timeout, fetch=None):
+        if ip.endswith(".5"):
+            return {"ip": ip, "ports": [80], "snapshot_url": "http://x/s.jpg",
+                    "rtsp": False, "auth_required": False, "report": True,
+                    "kind": "snapshot", "name": ip}
+        if ip.endswith(".6"):
+            return {"ip": ip, "ports": [80], "snapshot_url": "", "rtsp": False,
+                    "auth_required": False, "report": False, "kind": "open", "name": ip}
+        return None
+    monkeypatch.setattr(camera_scan, "probe_camera", fake_probe)
+    out = camera_scan.scan_for_cameras("10.0.0.0/29")
+    assert len(out["cameras"]) == 1
+    assert out["responded"] == 2
+    assert out["scanned"] >= 1
 
 
 def test_scan_rejects_bad_cidr():
     out = camera_scan.scan_for_cameras("not-a-cidr")
-    assert out and out[0].get("error")
+    assert out.get("error")
 
 
 def test_looks_dockerish():
