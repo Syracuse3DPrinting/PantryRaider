@@ -32,13 +32,35 @@ def test_probe_http_returns_first_working_path_and_auth(monkeypatch):
             return _Resp(200)
         return _Resp(404, content=b"", ctype="text/html")
 
-    url, auth = camera_scan._probe_http("10.0.0.5", 80, "http", 0.1, fetch=fetch)
+    url, auth, brand, res = camera_scan._probe_http("10.0.0.5", 80, "http", 0.1, fetch=fetch)
     assert url == good and auth is False
 
     # All paths 401 -> no url, but auth flagged.
-    url2, auth2 = camera_scan._probe_http(
+    url2, auth2, _b2, _r2 = camera_scan._probe_http(
         "10.0.0.9", 80, "http", 0.1, fetch=lambda u: _Resp(401, b"", "text/html"))
     assert url2 == "" and auth2 is True
+
+
+def test_probe_http_reports_brand_for_a_known_path():
+    good = "http://10.0.0.5/axis-cgi/jpg/image.cgi"
+    fetch = lambda u: (_Resp(200) if u == good else _Resp(404, b"", "text/html"))
+    url, auth, brand, res = camera_scan._probe_http("10.0.0.5", 80, "http", 0.1, fetch=fetch)
+    assert url == good and brand == "Axis"
+
+
+def test_probe_with_auth_finds_snapshot_and_embeds_credentials(monkeypatch):
+    monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: p == 80)
+    fetch = lambda u: (_Resp(200) if u.endswith("/snapshot.jpg") else _Resp(401, b"", "text/html"))
+    out = camera_scan.probe_with_auth("10.0.0.5", "admin", "pw", fetch=fetch)
+    assert out["ok"] is True
+    assert out["snapshot_url"] == "http://admin:pw@10.0.0.5/snapshot.jpg"
+
+
+def test_probe_with_auth_reports_failure(monkeypatch):
+    monkeypatch.setattr(camera_scan, "_port_open", lambda ip, p, t: p == 80)
+    out = camera_scan.probe_with_auth("10.0.0.5", "admin", "bad",
+                                      fetch=lambda u: _Resp(401, b"", "text/html"))
+    assert out["ok"] is False and out["error"]
 
 
 def test_probe_camera_with_http_snapshot(monkeypatch):

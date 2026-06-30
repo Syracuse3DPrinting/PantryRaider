@@ -28,20 +28,36 @@ _HTTP_PORTS = (80, 81, 88, 8000, 8080, 8081, 9000)
 _HTTPS_PORTS = (443, 8443)
 _RTSP_PORTS = (554, 8554)
 
-# Snapshot paths used across common camera brands. Tried in order; the first that
-# returns an image wins. Kept short so a host is probed quickly.
-SNAPSHOT_PATHS = (
-    "/snapshot.jpg",
-    "/snap.jpg",
-    "/image.jpg",
-    "/jpg/image.jpg",
-    "/cgi-bin/snapshot.cgi",
-    "/axis-cgi/jpg/image.cgi",                       # Axis
-    "/ISAPI/Streaming/channels/101/picture",         # Hikvision
-    "/cgi-bin/api.cgi?cmd=Snap&channel=0",           # Reolink
-    "/onvif-http/snapshot",                           # generic ONVIF
-    "/tmpfs/auto.jpg",                                # Dahua/Amcrest
+# Snapshot paths used across common camera brands, each tagged with the brand it
+# implies. Tried in order; the first that returns an image wins. The brand label
+# is shown in the scan results so the user can recognise their camera
+# (FoodAssistant-ij6w). Kept short so a host is probed quickly.
+SNAPSHOT_PATHS_BRANDS = (
+    ("/snapshot.jpg",                          ""),
+    ("/snap.jpg",                              ""),
+    ("/image.jpg",                             ""),
+    ("/jpg/image.jpg",                         ""),
+    ("/cgi-bin/snapshot.cgi",                  ""),
+    ("/axis-cgi/jpg/image.cgi",                "Axis"),
+    ("/ISAPI/Streaming/channels/101/picture",  "Hikvision"),
+    ("/cgi-bin/api.cgi?cmd=Snap&channel=0",    "Reolink"),
+    ("/onvif-http/snapshot",                   "ONVIF"),
+    ("/tmpfs/auto.jpg",                        "Dahua/Amcrest"),
 )
+# Backward-compatible flat list of paths (some callers/tests import this).
+SNAPSHOT_PATHS = tuple(p for p, _b in SNAPSHOT_PATHS_BRANDS)
+
+
+def _image_size(data: bytes) -> str:
+    """Best-effort "WxH" of a JPEG/PNG snapshot, or "" if it cannot be read."""
+    try:
+        from io import BytesIO
+        from PIL import Image
+        with Image.open(BytesIO(data)) as im:
+            w, h = im.size
+        return f"{w}x{h}" if w and h else ""
+    except Exception:
+        return ""
 
 MAX_HOSTS = 1024
 
@@ -65,20 +81,21 @@ def _port_open(ip: str, port: int, timeout: float) -> bool:
 
 
 def _probe_http(ip: str, port: int, scheme: str, timeout: float,
-                fetch=None) -> tuple[str, bool]:
+                fetch=None) -> tuple[str, bool, str, str]:
     """Probe snapshot paths on ``scheme://ip:port``.
 
-    Returns (snapshot_url, auth_required). A 200 image wins immediately; a
-    401/403 on any path is recorded as auth_required, since password-protected
-    cameras are still cameras (the user can add credentials). ``fetch`` is
-    injectable for tests."""
+    Returns (snapshot_url, auth_required, brand, resolution). A 200 image wins
+    immediately, with the brand implied by the matching path and the image
+    resolution where it can be read; a 401/403 on any path is recorded as
+    auth_required, since password-protected cameras are still cameras (the user
+    can add credentials). ``fetch`` is injectable for tests."""
     def _default_fetch(url: str):
         return httpx.get(url, timeout=timeout, verify=False, follow_redirects=True)
     fetch = fetch or _default_fetch
     default_port = 80 if scheme == "http" else 443
     base = f"{scheme}://{ip}" if port == default_port else f"{scheme}://{ip}:{port}"
     auth = False
-    for path in SNAPSHOT_PATHS:
+    for path, brand in SNAPSHOT_PATHS_BRANDS:
         url = base + path
         try:
             resp = fetch(url)
@@ -86,10 +103,11 @@ def _probe_http(ip: str, port: int, scheme: str, timeout: float,
             continue
         code = getattr(resp, "status_code", 0)
         if code == 200 and _looks_like_image(resp):
-            return url, False
+            res = _image_size(getattr(resp, "content", b"") or b"")
+            return url, False, brand, res
         if code in (401, 403):
             auth = True
-    return "", auth
+    return "", auth, "", ""
 
 
 def probe_camera(ip: str, timeout: float = 0.4, fetch=None) -> dict | None:
@@ -105,14 +123,18 @@ def probe_camera(ip: str, timeout: float = 0.4, fetch=None) -> dict | None:
         return None
     snapshot_url = ""
     auth = False
+    brand = ""
+    resolution = ""
     for p in open_ports:
         scheme = "http" if p in _HTTP_PORTS else ("https" if p in _HTTPS_PORTS else "")
         if not scheme:
             continue
-        url, a = _probe_http(ip, p, scheme, timeout, fetch=fetch)
+        url, a, b, res = _probe_http(ip, p, scheme, timeout, fetch=fetch)
         auth = auth or a
         if url:
             snapshot_url = url
+            brand = b
+            resolution = res
             break
     rtsp = any(p in _RTSP_PORTS for p in open_ports)
     report = bool(snapshot_url) or rtsp or auth
@@ -125,10 +147,53 @@ def probe_camera(ip: str, timeout: float = 0.4, fetch=None) -> dict | None:
         "snapshot_url": snapshot_url,
         "rtsp": rtsp,
         "auth_required": auth,
+        "brand": brand,
+        "resolution": resolution,
         "report": report,
         "kind": kind,
         "name": f"Camera at {ip}",
     }
+
+
+def probe_with_auth(ip: str, username: str = "", password: str = "",
+                    timeout: float = 1.5, fetch=None) -> dict:
+    """Re-probe a single host's snapshot paths using HTTP credentials.
+
+    Used when a scan reports a password-protected camera: with the user's login
+    we can find a working snapshot path, read the resolution and brand, and hand
+    back a snapshot URL with the credentials embedded so it works from a browser
+    or the Stream Deck. Tries Digest then Basic auth (cameras use both). Returns
+    ``{"ok", "snapshot_url", "brand", "resolution", "error"}``."""
+    open_ports = [p for p in CAMERA_PORTS if _port_open(ip, p, min(timeout, 0.6))]
+    http_ports = [p for p in open_ports if p in _HTTP_PORTS or p in _HTTPS_PORTS]
+    if not http_ports:
+        return {"ok": False, "error": "No HTTP port open on this host."}
+
+    def _auth_fetch(auth_obj):
+        def _f(url: str):
+            return httpx.get(url, timeout=timeout, verify=False,
+                             follow_redirects=True, auth=auth_obj)
+        return _f
+
+    creds = f"{username}:{password}@" if username else ""
+    for p in http_ports:
+        scheme = "http" if p in _HTTP_PORTS else "https"
+        default_port = 80 if scheme == "http" else 443
+        base_host = ip if p == default_port else f"{ip}:{p}"
+        for auth_obj in (httpx.DigestAuth(username, password) if username else None,
+                         (username, password) if username else None):
+            f = fetch or _auth_fetch(auth_obj)
+            url, a, brand, res = _probe_http(ip, p, scheme, timeout, fetch=f)
+            if url:
+                # Embed the credentials in the URL so the saved camera works
+                # without a separate login step.
+                path = url.split(base_host, 1)[-1] if base_host in url else ""
+                cred_url = f"{scheme}://{creds}{base_host}{path}" if creds else url
+                return {"ok": True, "snapshot_url": cred_url,
+                        "brand": brand, "resolution": res, "error": ""}
+            if fetch is not None:
+                break  # tests inject a single fetch; do not loop auth schemes
+    return {"ok": False, "error": "No snapshot path worked with those credentials."}
 
 
 def _candidate_ips() -> set[str]:

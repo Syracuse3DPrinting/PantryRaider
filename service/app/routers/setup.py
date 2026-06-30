@@ -1699,6 +1699,30 @@ async def scan_ip_cameras(payload: CameraScanPayload = CameraScanPayload()):
             "scanned": scanned, "hint": hint, "note": note}
 
 
+class CameraProbePayload(BaseModel):
+    ip: str = ""
+    username: str = ""
+    password: str = ""
+
+
+@router.post("/cameras/probe")
+async def probe_ip_camera(payload: CameraProbePayload):
+    """Re-probe one scanned camera with login credentials (FoodAssistant-ij6w).
+
+    For a password-protected camera the scan can only report that it needs a
+    login; with the user's credentials this finds a working snapshot path, reads
+    the brand and resolution, and returns a snapshot URL with the credentials
+    embedded so it previews and saves without a separate login step."""
+    import anyio
+    from ..services import camera_scan
+    ip = (payload.ip or "").strip()
+    if not ip:
+        return {"ok": False, "error": "No camera IP given."}
+    result = await anyio.to_thread.run_sync(
+        lambda: camera_scan.probe_with_auth(ip, payload.username, payload.password))
+    return result
+
+
 @router.get("/cameras/scan-default")
 async def scan_default_cidr():
     """The CIDR the camera scan would default to, so the UI can pre-fill and

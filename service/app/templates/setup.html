@@ -6624,6 +6624,99 @@ async function _camPrefillScanCidr() {
 
 // Scan the LAN for IP cameras and list them with Preview + Add, like the HA
 // camera discovery (FoodAssistant-d9rx).
+// Build one scan-result row: the IP plus any detected brand/resolution, a
+// Preview and Add when a snapshot was found, and an inline login form (user +
+// password) for a password-protected or snapshot-less camera that re-probes
+// with credentials to find a working snapshot (FoodAssistant-ij6w).
+function _camScanRow(cam) {
+  const item = document.createElement('div');
+  item.className = 'list-group-item py-2';
+  const top = document.createElement('div');
+  top.className = 'd-flex justify-content-between align-items-center flex-wrap gap-2';
+
+  const label = document.createElement('span');
+  label.className = 'small';
+  const bits = [];
+  if (cam.brand) bits.push(cam.brand);
+  if (cam.resolution) bits.push(cam.resolution);
+  const detail = cam.snapshot_url ? 'snapshot found' :
+    cam.auth_required ? 'needs login (password-protected)' :
+    cam.rtsp ? 'RTSP only (needs a snapshot/MJPEG path or a bridge)' :
+    'open ports ' + cam.ports.join(', ');
+  label.innerHTML = '<strong>' + cam.ip + '</strong>' +
+    (bits.length ? ' <span class="badge bg-secondary">' + bits.join(' · ') + '</span>' : '') +
+    ' <span class="text-secondary">— ' + detail + '</span>';
+
+  const btns = document.createElement('div');
+  btns.className = 'd-flex gap-1';
+  // State that the Add/Preview buttons read; a successful login probe updates it.
+  const state = { snapshot_url: cam.snapshot_url || '', name: cam.name };
+
+  const prev = document.createElement('button');
+  prev.type = 'button'; prev.className = 'btn btn-sm btn-outline-info';
+  prev.innerHTML = '<i class="bi bi-eye"></i> Preview';
+  prev.onclick = () => _camPreview({ name: state.name, snapshot_url: state.snapshot_url });
+  if (!state.snapshot_url) prev.classList.add('d-none');
+  btns.appendChild(prev);
+
+  const add = document.createElement('button');
+  add.type = 'button'; add.className = 'btn btn-sm btn-outline-success';
+  add.innerHTML = '<i class="bi bi-plus-lg"></i> Add';
+  add.onclick = () => {
+    _sdAddCameraRow({ name: state.name, snapshot_url: state.snapshot_url || '', stream_url: '' });
+    add.disabled = true; add.className = 'btn btn-sm btn-outline-secondary';
+    add.innerHTML = '<i class="bi bi-check2"></i> Added';
+  };
+  btns.appendChild(add);
+
+  // Offer a login form for cameras we could not snapshot anonymously.
+  let loginBtn = null;
+  if (!cam.snapshot_url) {
+    loginBtn = document.createElement('button');
+    loginBtn.type = 'button'; loginBtn.className = 'btn btn-sm btn-outline-secondary';
+    loginBtn.innerHTML = '<i class="bi bi-key"></i> Add login';
+    btns.appendChild(loginBtn);
+  }
+  top.appendChild(label); top.appendChild(btns);
+  item.appendChild(top);
+
+  if (!cam.snapshot_url) {
+    const form = document.createElement('div');
+    form.className = 'row g-1 align-items-center mt-2 d-none';
+    form.innerHTML =
+      '<div class="col-auto"><input type="text" class="form-control form-control-sm cam-login-user" placeholder="username" autocomplete="off" style="max-width:140px"></div>' +
+      '<div class="col-auto"><input type="password" class="form-control form-control-sm cam-login-pass" placeholder="password" autocomplete="new-password" style="max-width:140px"></div>' +
+      '<div class="col-auto"><button type="button" class="btn btn-sm btn-outline-info cam-login-test"><i class="bi bi-box-arrow-in-right"></i> Test &amp; preview</button></div>' +
+      '<div class="col-12"><div class="small mt-1 cam-login-msg"></div></div>';
+    item.appendChild(form);
+    loginBtn.onclick = () => form.classList.toggle('d-none');
+    form.querySelector('.cam-login-test').onclick = async (ev) => {
+      const b = ev.currentTarget;
+      const user = form.querySelector('.cam-login-user').value.trim();
+      const pass = form.querySelector('.cam-login-pass').value;
+      const msg = form.querySelector('.cam-login-msg');
+      const o = b.innerHTML; b.disabled = true;
+      b.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+      msg.innerHTML = '';
+      try {
+        const d = await fetch('setup/cameras/probe', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ip: cam.ip, username: user, password: pass }),
+        }).then(r => r.json());
+        if (!d.ok) { msg.innerHTML = '<span class="text-danger">' + (d.error || 'No snapshot found.') + '</span>'; return; }
+        state.snapshot_url = d.snapshot_url;
+        const extra = [d.brand, d.resolution].filter(Boolean).join(' · ');
+        msg.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Snapshot found' + (extra ? ' (' + extra + ')' : '') + '. Preview or Add it.</span>';
+        prev.classList.remove('d-none');
+        _camPreview({ name: state.name, snapshot_url: state.snapshot_url });
+      } catch (e) {
+        msg.innerHTML = '<span class="text-danger">' + e + '</span>';
+      } finally { b.disabled = false; b.innerHTML = o; }
+    };
+  }
+  return item;
+}
+
 async function _camScanLan(btn) {
   const out = document.getElementById('cam-scan-results');
   const cidr = document.getElementById('cam-scan-cidr')?.value.trim() || '';
@@ -6652,38 +6745,7 @@ async function _camScanLan(btn) {
     out.innerHTML = hint;
     const list = document.createElement('div');
     list.className = 'list-group';
-    cams.forEach(cam => {
-      const item = document.createElement('div');
-      item.className = 'list-group-item d-flex justify-content-between align-items-center py-1 flex-wrap gap-2';
-      const label = document.createElement('span');
-      label.className = 'small';
-      const detail = cam.snapshot_url ? 'snapshot found' :
-        cam.auth_required ? 'needs login (password-protected) — add by IP with credentials' :
-        cam.rtsp ? 'RTSP only (needs a snapshot/MJPEG path or a bridge)' :
-        'open ports ' + cam.ports.join(', ');
-      label.textContent = cam.ip + ' — ' + detail;
-      const btns = document.createElement('div');
-      btns.className = 'd-flex gap-1';
-      if (cam.snapshot_url) {
-        const prev = document.createElement('button');
-        prev.type = 'button'; prev.className = 'btn btn-sm btn-outline-info';
-        prev.innerHTML = '<i class="bi bi-eye"></i> Preview';
-        prev.onclick = () => _camPreview({ name: cam.name, snapshot_url: cam.snapshot_url });
-        btns.appendChild(prev);
-      }
-      const add = document.createElement('button');
-      add.type = 'button'; add.className = 'btn btn-sm btn-outline-success';
-      add.innerHTML = '<i class="bi bi-plus-lg"></i> Add';
-      add.onclick = () => {
-        _sdAddCameraRow({ name: cam.name, snapshot_url: cam.snapshot_url || '',
-                          stream_url: cam.snapshot_url ? '' : '' });
-        add.disabled = true; add.className = 'btn btn-sm btn-outline-secondary';
-        add.innerHTML = '<i class="bi bi-check2"></i> Added';
-      };
-      btns.appendChild(add);
-      item.appendChild(label); item.appendChild(btns);
-      list.appendChild(item);
-    });
+    cams.forEach(cam => { list.appendChild(_camScanRow(cam)); });
     out.innerHTML = hint;   // keep the Docker-subnet warning above the results
     out.appendChild(list);
   } catch (e) {
