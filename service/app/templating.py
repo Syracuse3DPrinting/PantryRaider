@@ -2,7 +2,7 @@
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
-from .config import settings, theme_info, ui_scale_factor, APP_VERSION
+from .config import settings, theme_info, ui_scale_factor, resolve_custom_colors, APP_VERSION
 from .hardware import is_raspberry_pi
 from .ingress import template_globals
 from .navigation import visible_tabs, auto_hidden_groups, build_nav_tree
@@ -22,21 +22,35 @@ def theme_context(request: Request) -> dict:
                         kiosk_readonly_when_locked is set and no PIN session exists.
     """
     info = theme_info(settings.ui_theme)
+    # Resolve the active custom palette (live "custom" swatches or a saved
+    # "custom:<id>" theme). None for built-in themes. base.html emits its inline
+    # override <style> whenever custom_theme_active is true, using these values.
+    cc = resolve_custom_colors(settings.ui_theme)
+    custom_active = cc is not None
+    if cc is None:
+        cc = {
+            "base": settings.custom_theme_base,
+            "primary": settings.custom_theme_primary,
+            "accent": settings.custom_theme_accent,
+            "bg": settings.custom_theme_bg,
+            "surface": settings.custom_theme_surface,
+            "text": settings.custom_theme_text,
+        }
     return {
         "ui_theme": settings.ui_theme,
         "theme_mode": info["mode"],
         "theme_css": info["stylesheet"],
         "theme_overlay": info.get("overlay"),
-        # Custom theme builder (FoodAssistant-hatd). Exposed on every render so
-        # base.html can emit an inline <style> from the stored swatches when
-        # ui_theme == "custom". Harmless for other themes (base.html only reads
-        # them in that branch).
-        "custom_theme_base": settings.custom_theme_base,
-        "custom_theme_primary": settings.custom_theme_primary,
-        "custom_theme_accent": settings.custom_theme_accent,
-        "custom_theme_bg": settings.custom_theme_bg,
-        "custom_theme_surface": settings.custom_theme_surface,
-        "custom_theme_text": settings.custom_theme_text,
+        # Custom theme builder (FoodAssistant-hatd, named themes -nw49). Exposed
+        # on every render so base.html can emit an inline <style> from the active
+        # palette when a custom theme (live or saved) is selected.
+        "custom_theme_active": custom_active,
+        "custom_theme_base": cc["base"],
+        "custom_theme_primary": cc["primary"],
+        "custom_theme_accent": cc["accent"],
+        "custom_theme_bg": cc["bg"],
+        "custom_theme_surface": cc["surface"],
+        "custom_theme_text": cc["text"],
         "ui_scale": settings.ui_scale,
         "ui_scale_factor": ui_scale_factor(settings.ui_scale),
         "display_rotation": settings.display_rotation,

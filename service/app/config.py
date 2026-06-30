@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.23"
+APP_VERSION = "0.7.24"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -180,11 +180,74 @@ def theme_info(name: str) -> dict:
     ``custom_theme_base`` ("light"/"dark") so data-bs-theme matches the chosen
     base, rather than the placeholder mode in the THEMES table.
     """
-    info = dict(THEMES.get(name, THEMES[_DEFAULT_THEME]))
+    if name == "custom" or (isinstance(name, str) and name.startswith("custom:")):
+        # A custom theme (the live editor "custom", or a saved "custom:<id>")
+        # has no vendored stylesheet/overlay; its colours come from swatches.
+        colors = resolve_custom_colors(name)
+        base = colors.get("base", "dark") if colors else "dark"
+        return {"label": "Custom", "mode": base if base in ("light", "dark") else "dark",
+                "stylesheet": None, "overlay": None}
+    return dict(THEMES.get(name, THEMES[_DEFAULT_THEME]))
+
+
+# -- Named custom themes (FoodAssistant-nw49) -------------------------------
+
+_CUSTOM_COLOR_KEYS = ("primary", "accent", "bg", "surface", "text")
+
+
+def _custom_themes_list() -> list[dict]:
+    raw = getattr(settings, "custom_themes", []) or []
+    return [t for t in raw if isinstance(t, dict) and t.get("id")]
+
+
+def custom_theme_by_id(theme_id: str) -> dict | None:
+    """Return the saved custom theme with this id, or None."""
+    for t in _custom_themes_list():
+        if t.get("id") == theme_id:
+            return t
+    return None
+
+
+def resolve_custom_colors(name: str | None = None) -> dict | None:
+    """Colours (base + five swatches) for the active custom theme.
+
+    For ``ui_theme == "custom"`` this is the live swatch buffer; for
+    ``"custom:<id>"`` it is the named saved theme's stored colours. Returns
+    None when ``name`` is not a custom theme, so callers can branch cheaply.
+    """
+    if name is None:
+        name = getattr(settings, "ui_theme", "")
     if name == "custom":
-        base = getattr(settings, "custom_theme_base", "dark")
-        info["mode"] = base if base in ("light", "dark") else "dark"
-    return info
+        return {
+            "base":    getattr(settings, "custom_theme_base", "dark"),
+            "primary": settings.custom_theme_primary,
+            "accent":  settings.custom_theme_accent,
+            "bg":      settings.custom_theme_bg,
+            "surface": settings.custom_theme_surface,
+            "text":    settings.custom_theme_text,
+        }
+    if isinstance(name, str) and name.startswith("custom:"):
+        saved = custom_theme_by_id(name.split(":", 1)[1])
+        if saved:
+            return {
+                "base":    saved.get("base", "dark"),
+                "primary": saved.get("primary", settings.custom_theme_primary),
+                "accent":  saved.get("accent", settings.custom_theme_accent),
+                "bg":      saved.get("bg", settings.custom_theme_bg),
+                "surface": saved.get("surface", settings.custom_theme_surface),
+                "text":    saved.get("text", settings.custom_theme_text),
+            }
+    return None
+
+
+def active_custom_name() -> str:
+    """Display name of the active saved custom theme, or '' when none/legacy."""
+    name = getattr(settings, "ui_theme", "")
+    if isinstance(name, str) and name.startswith("custom:"):
+        saved = custom_theme_by_id(name.split(":", 1)[1])
+        if saved:
+            return str(saved.get("name", ""))
+    return ""
 
 
 def ui_scale_factor(name: str) -> float:
@@ -209,6 +272,7 @@ _SAVEABLE = [
     "custom_storage_categories", "ui_theme",
     "custom_theme_base", "custom_theme_primary", "custom_theme_accent",
     "custom_theme_bg", "custom_theme_surface", "custom_theme_text",
+    "custom_themes",
     "ui_scale", "display_rotation",
     "display_type",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
@@ -679,6 +743,14 @@ class Settings(BaseSettings):
     custom_theme_surface: str = "#161b22"
     custom_theme_text: str = "#e6edf3"
 
+    # Saved, named custom themes (FoodAssistant-nw49). Each entry is a dict:
+    # {"id", "name", "base", "primary", "accent", "bg", "surface", "text"}. A
+    # theme is selected by setting ui_theme to "custom:<id>"; the live swatches
+    # above remain the working/editor buffer and back the legacy bare "custom"
+    # theme. resolve_custom_colors() picks the right colour set for the active
+    # ui_theme so templates do not need to branch.
+    custom_themes: list = []
+
     # UI scale. One of the keys in UI_SCALES; applied as a document zoom on the
     # kiosk display only, so the interface fits a small or large hardware panel
     # without changing what other browsers see.
@@ -1027,9 +1099,23 @@ class Settings(BaseSettings):
                         except Exception:
                             pass
                         break
-        # Reject an unknown theme rather than persisting a broken value.
+        # Reject an unknown theme rather than persisting a broken value. A
+        # "custom:<id>" value is valid when that named theme exists, either in
+        # this same save (data["custom_themes"]) or already on disk.
         if data.get("ui_theme") is not None and data["ui_theme"] not in THEMES:
-            data["ui_theme"] = _DEFAULT_THEME
+            ut = data["ui_theme"]
+            ok = False
+            if isinstance(ut, str) and ut.startswith("custom:"):
+                tid = ut.split(":", 1)[1]
+                pools = []
+                if isinstance(data.get("custom_themes"), list):
+                    pools.append(data["custom_themes"])
+                if isinstance(existing.get("custom_themes"), list):
+                    pools.append(existing["custom_themes"])
+                ok = any(isinstance(t, dict) and t.get("id") == tid
+                         for pool in pools for t in pool)
+            if not ok:
+                data["ui_theme"] = _DEFAULT_THEME
         # Hash the login password and kiosk PIN at rest (FoodAssistant-ufwz) so a
         # leaked settings.json or backup never exposes the secret. A value that
         # is already hashed (a re-save) is left alone to avoid double hashing.

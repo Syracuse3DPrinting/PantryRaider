@@ -127,6 +127,7 @@ app.add_middleware(
 # Paths that bypass both setup-redirect and auth checks
 _SETUP_BYPASS = {
     "/setup", "/setup/save", "/setup/theme", "/setup/scale", "/setup/mode",
+    "/setup/custom-theme", "/setup/custom-theme/delete",
     "/setup/storage-categories",
     "/setup/test/grocy", "/setup/test/vision", "/setup/test/remote",
     "/setup/test/provider", "/setup/test/mealie", "/setup/test/recipes",

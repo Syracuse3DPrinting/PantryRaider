@@ -30,7 +30,7 @@
   {% if theme_overlay %}
   <link href="{{ theme_overlay }}" rel="stylesheet">
   {% endif %}
-  {% if ui_theme == 'custom' %}
+  {% if custom_theme_active %}
   {# Custom theme builder (FoodAssistant-hatd). Inline override layered after the
      base Bootstrap stylesheet, mirroring how an overlay theme works but built
      from the user's saved swatches rather than a vendored file. Maps the five

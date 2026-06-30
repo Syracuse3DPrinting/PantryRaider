@@ -271,3 +271,23 @@ def all_tabs() -> list[dict]:
                      "custom": bool(t.get("custom")),
                      "parent": _parent_for(t, parents)})
     return rows
+
+
+def default_tabs() -> list[dict]:
+    """The pristine built-in tab layout, ignoring any saved customization.
+
+    Registry order, the default folder grouping (DEFAULT_NAV_PARENTS), nothing
+    hidden, and no user-added custom tabs. Used by the Settings nav editor's
+    "Reset to defaults" control so it can rebuild from a known baseline rather
+    than the current (possibly broken) saved arrangement.
+    """
+    rows = []
+    for t in NAV_TABS:
+        rows.append({**t,
+                     "hidden": False,
+                     "available": _requirement_met(t),
+                     "shown": _requirement_met(t),
+                     "custom": False,
+                     "heading": False,
+                     "parent": DEFAULT_NAV_PARENTS.get(t["key"], "")})
+    return rows

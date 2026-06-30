@@ -18,6 +18,37 @@
   {% if theme_overlay %}
   <link href="{{ theme_overlay }}" rel="stylesheet">
   {% endif %}
+  {% if custom_theme_active %}
+  {# Custom theme override for this standalone page, mirroring base.html so a
+     selected custom theme (live or saved) actually retints the Settings page
+     itself, not just the /ui pages (FoodAssistant-nw49). #}
+  <style>
+    :root,
+    [data-bs-theme="{{ theme_mode }}"] {
+      --bs-primary: {{ custom_theme_primary }};
+      --bs-link-color: {{ custom_theme_primary }};
+      --bs-link-hover-color: {{ custom_theme_primary }};
+      --bs-secondary: {{ custom_theme_accent }};
+      --bs-success: {{ custom_theme_accent }};
+      --bs-body-bg: {{ custom_theme_bg }};
+      --bs-body-color: {{ custom_theme_text }};
+      --bs-emphasis-color: {{ custom_theme_text }};
+      --bs-secondary-bg: {{ custom_theme_surface }};
+      --bs-tertiary-bg: {{ custom_theme_surface }};
+      --bs-border-color: {{ custom_theme_surface }};
+      --bs-card-bg: {{ custom_theme_surface }};
+      --bs-card-cap-bg: {{ custom_theme_surface }};
+      --bs-modal-bg: {{ custom_theme_surface }};
+      --bs-dropdown-bg: {{ custom_theme_surface }};
+      --bs-list-group-bg: {{ custom_theme_surface }};
+      --bs-input-bg: {{ custom_theme_surface }};
+    }
+    body { background-color: var(--bs-body-bg); color: var(--bs-body-color); }
+    .btn-primary { background-color: {{ custom_theme_primary }}; border-color: {{ custom_theme_primary }}; }
+    .btn-success { background-color: {{ custom_theme_accent }}; border-color: {{ custom_theme_accent }}; }
+    .nav-link.active, .float-nav-link.active { color: {{ custom_theme_primary }}; }
+  </style>
+  {% endif %}
   <link href="static/vendor/bootstrap-icons.min.css" rel="stylesheet">
   <link rel="icon" type="image/svg+xml" href="static/icons/favicon.svg">
   <link rel="icon" type="image/png" sizes="32x32" href="static/icons/favicon-32.png">
@@ -888,7 +919,7 @@
 
           {# --- Devices & hardware: scanners, satellites, the appliance --- #}
           {{ menu_header('Devices & Hardware') }}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-hardware" type="button">
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-hardware" type="button" onclick="loadHardwareDetect()">
             <i class="bi bi-upc-scan me-2"></i>Hardware
           </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-homeassistant" type="button">
@@ -903,12 +934,6 @@
           </button>
           {% endif %}
           {% if is_pi %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-display" type="button" onclick="loadDisplayStatus(); loadHardwareStatus()">
-            <i class="bi bi-display me-2"></i>Display
-          </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-streamdeck" type="button" onclick="loadHardwareStatus(); loadHardwareDetect(); _sdLoadProfiles()">
-            <i class="bi bi-grid-3x3-gap me-2"></i>Stream Deck
-          </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-network" type="button" onclick="loadNetworkStatus()">
             <i class="bi bi-wifi me-2"></i>Network
           </button>
@@ -917,8 +942,11 @@
           {# --- Personalization: the commonly-changed, taste-level settings,
                  separated from the set-and-forget Settings above. ---------- #}
           {{ menu_header('Personalization', 'p') }}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-interface" type="button">
-            <i class="bi bi-layout-sidebar me-2"></i>Interface
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-theme" type="button">
+            <i class="bi bi-palette me-2"></i>Theme
+          </button>
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-navigation" type="button">
+            <i class="bi bi-layout-sidebar me-2"></i>Navigation
           </button>
           <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-recipes" type="button">
             <i class="bi bi-sliders me-2"></i>Recipe Preferences
@@ -927,6 +955,16 @@
           <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-storage" type="button">
             <i class="bi bi-grid-3x3-gap me-2"></i>Storage Categories
           </button>
+          {% endif %}
+          {% if is_pi %}
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-display" type="button" onclick="loadDisplayStatus(); loadHardwareStatus()">
+            <i class="bi bi-display me-2"></i>Display
+          </button>
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-streamdeck" type="button" onclick="loadHardwareStatus(); _sdLoadProfiles()">
+            <i class="bi bi-grid-3x3-gap me-2"></i>Stream Deck
+          </button>
+          {% endif %}
+          {% if not features.satellite %}
           <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-weather" type="button">
             <i class="bi bi-cloud-sun me-2"></i>Stream Deck Weather
           </button>
@@ -1476,8 +1514,8 @@
         </div>
 
         <!-- Interface -->
-        <div class="tab-pane fade" id="pane-interface">
-          <p class="pane-intro">How the app's navigation looks and which pages appear.</p>
+        <div class="tab-pane fade" id="pane-theme">
+          <p class="pane-intro">The colour theme for the whole app.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-palette text-success"></i> Theme</div>
@@ -1491,61 +1529,89 @@
                 {% for key, t in themes.items() %}
                 <option value="{{ key }}" {{ 'selected' if s.ui_theme == key else '' }}>{{ t.label }}</option>
                 {% endfor %}
+                {% if custom_themes %}
+                <optgroup label="Your custom themes">
+                  {% for ct in custom_themes %}
+                  <option value="custom:{{ ct.id }}" {{ 'selected' if s.ui_theme == 'custom:' ~ ct.id else '' }}>{{ ct.name }}</option>
+                  {% endfor %}
+                </optgroup>
+                {% endif %}
               </select>
               <div class="form-text" id="theme-hint">Theme applies immediately.</div>
             </div>
 
-            {# Custom theme builder (FoodAssistant-hatd). Always shown, with a
-               note that the swatches only take effect once "Custom" is the
-               selected theme. Five curated colours plus a light/dark base, kept
-               deliberately small so any palette stays cohesive. Saved together
-               with the rest of the Interface pane via savePaneInterface. #}
+            {# Custom theme builder (FoodAssistant-hatd, named themes -nw49). The
+               swatches double as the editor for the active custom theme. Give it
+               a name and Save to add it to the dropdown above; saving applies it
+               straight away. Five curated colours plus a light/dark base, kept
+               deliberately small so any palette stays cohesive. #}
             <div class="mt-3 pt-3 border-top" id="custom-theme-builder">
-              <div class="fw-semibold mb-1"><i class="bi bi-brush text-success me-1"></i>Custom theme</div>
-              <p class="text-secondary small mb-2">Pick your own colours. These apply when the theme above is set to
-                <em>Custom</em>. Choose a light or dark base, then tweak the five swatches.</p>
-              <div class="mb-2">
-                <label class="form-label small mb-1" for="custom_theme_base">Base</label>
-                <select class="form-select form-select-sm" id="custom_theme_base" style="max-width:220px">
-                  <option value="dark"  {{ 'selected' if s.custom_theme_base == 'dark' else '' }}>Dark</option>
-                  <option value="light" {{ 'selected' if s.custom_theme_base == 'light' else '' }}>Light</option>
-                </select>
+              <div class="fw-semibold mb-1"><i class="bi bi-brush text-success me-1"></i>Build a custom theme</div>
+              <p class="text-secondary small mb-2">Pick your own colours, give the theme a name, then Save. It joins the
+                list above and applies immediately. Choose a light or dark base, then tweak the five swatches.</p>
+              <div class="row g-2 align-items-end mb-2" style="max-width:520px">
+                <div class="col-7">
+                  <label class="form-label small mb-1" for="custom_theme_name">Theme name</label>
+                  <input type="text" class="form-control form-control-sm" id="custom_theme_name"
+                         placeholder="My kitchen theme" value="{{ active_custom_name }}" maxlength="40">
+                </div>
+                <div class="col-5">
+                  <label class="form-label small mb-1" for="custom_theme_base">Base</label>
+                  <select class="form-select form-select-sm" id="custom_theme_base">
+                    <option value="dark"  {{ 'selected' if active_custom.base == 'dark' else '' }}>Dark</option>
+                    <option value="light" {{ 'selected' if active_custom.base == 'light' else '' }}>Light</option>
+                  </select>
+                </div>
               </div>
               <div class="d-flex flex-wrap gap-3">
                 <div>
                   <label class="form-label small mb-1 d-block" for="custom_theme_primary">Primary</label>
                   <input type="color" class="form-control form-control-color" id="custom_theme_primary"
-                         value="{{ s.custom_theme_primary }}" title="Primary (buttons, links, active)">
+                         value="{{ active_custom.primary }}" title="Primary (buttons, links, active)">
                 </div>
                 <div>
                   <label class="form-label small mb-1 d-block" for="custom_theme_accent">Accent</label>
                   <input type="color" class="form-control form-control-color" id="custom_theme_accent"
-                         value="{{ s.custom_theme_accent }}" title="Accent (success, secondary)">
+                         value="{{ active_custom.accent }}" title="Accent (success, secondary)">
                 </div>
                 <div>
                   <label class="form-label small mb-1 d-block" for="custom_theme_bg">Background</label>
                   <input type="color" class="form-control form-control-color" id="custom_theme_bg"
-                         value="{{ s.custom_theme_bg }}" title="Page background">
+                         value="{{ active_custom.bg }}" title="Page background">
                 </div>
                 <div>
                   <label class="form-label small mb-1 d-block" for="custom_theme_surface">Surface</label>
                   <input type="color" class="form-control form-control-color" id="custom_theme_surface"
-                         value="{{ s.custom_theme_surface }}" title="Cards, inputs, chrome">
+                         value="{{ active_custom.surface }}" title="Cards, inputs, chrome">
                 </div>
                 <div>
                   <label class="form-label small mb-1 d-block" for="custom_theme_text">Text</label>
                   <input type="color" class="form-control form-control-color" id="custom_theme_text"
-                         value="{{ s.custom_theme_text }}" title="Body text">
+                         value="{{ active_custom.text }}" title="Body text">
                 </div>
               </div>
-              <div class="form-text">Saved with the button below. Set the theme to <em>Custom</em> to see them.</div>
+              <div class="mt-3 d-flex flex-wrap gap-2">
+                <button type="button" class="btn btn-outline-success btn-sm" onclick="saveCustomTheme(this)">
+                  <i class="bi bi-check-lg me-1"></i>Save custom theme
+                </button>
+                {% if s.ui_theme.startswith('custom:') %}
+                <button type="button" class="btn btn-outline-danger btn-sm" onclick="deleteCustomTheme(this)">
+                  <i class="bi bi-trash me-1"></i>Delete this theme
+                </button>
+                {% endif %}
+              </div>
+              <div class="test-result mt-2" id="custom-theme-result"></div>
             </div>
           </div>
+        </div>
+
+        <div class="tab-pane fade" id="pane-navigation">
+          <p class="pane-intro">How the app's navigation looks and which pages appear.</p>
 
           {# Display scale/orientation live in the Display pane, which only
              appears on devices with an attached panel (is_pi). They have no
              effect on a headless server or a phone/laptop browser, so they are
-             intentionally not duplicated into this generic Interface menu. #}
+             intentionally not duplicated into this generic menu. #}
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-layout-sidebar text-success"></i> Navigation Tabs</div>
@@ -1555,6 +1621,12 @@
               has no page of its own. Hide the tabs you don't use with the switch. Tabs for services that aren't
               configured (e.g. Mealie pages) hide automatically, and every page stays reachable by direct URL.</p>
             <div class="vstack gap-1" id="nav-editor"></div>
+            <div class="mt-2">
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetNavEditor(this)" title="Restore the default tab order, grouping, and visibility">
+                <i class="bi bi-arrow-counterclockwise me-1"></i>Reset to defaults
+              </button>
+              <span class="form-text ms-2">Restores the original tabs, order, and folders. Save to keep it.</span>
+            </div>
             <div class="border-top mt-3 pt-3">
               <div class="fw-semibold small mb-2"><i class="bi bi-folder-plus me-1"></i>Add a heading (folder)</div>
               <div class="row g-2 align-items-end">
@@ -1604,8 +1676,8 @@
             <div class="form-text">When on, a finished kitchen timer is shown only by highlighting it in the timer window, with no audible chime. This setting is per device, so each kiosk can be loud or silent.</div>
           </div>
 
-          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneInterface(this)">
-            <i class="bi bi-check-lg me-1"></i>Save Theme &amp; Navigation
+          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNavigation(this)">
+            <i class="bi bi-check-lg me-1"></i>Save Navigation
           </button>
           <div class="test-result mt-2 mb-3" id="interface-save-result"></div>
 
@@ -2305,7 +2377,29 @@ docker compose up -d</code></pre>
           <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHardware(this)">
             <i class="bi bi-check-lg me-1"></i>Save Hardware
           </button>
-          <div class="test-result mt-2" id="hardware-save-result"></div>
+          <div class="test-result mt-2 mb-3" id="hardware-save-result"></div>
+
+          {% if is_pi %}
+          {# Live attached-hardware detection from the appliance host bridge
+             (FoodAssistant-bbz8): this belongs with Hardware, not Stream Deck. #}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
+            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
+            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-display me-1"></i>Display</span>
+                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
+                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+            </div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
+              <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
+          </div>
+          {% endif %}
         </div>
 
         {% if is_pi %}
@@ -2588,25 +2682,6 @@ docker compose up -d</code></pre>
             </ul>
           </div>
 
-          <!-- Attached hardware moved to the bottom so the editor is reachable
-               without scrolling past it (FoodAssistant-cqbs). -->
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
-            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
-            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-display me-1"></i>Display</span>
-                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
-                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-            </div>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
-              <i class="bi bi-arrow-repeat me-1"></i>Refresh
-            </button>
-          </div>
         </div>
 
         <!-- Network (Pi appliance only) -->
@@ -2678,6 +2753,8 @@ docker compose up -d</code></pre>
 <script src="static/vendor/bootstrap.bundle.min.js"></script>
 <script>
 const TABS = {{ tabs | tojson }};
+// Pristine built-in layout for the nav editor's Reset to defaults (FoodAssistant-oret).
+window.TABS_DEFAULT = {{ tabs_default | tojson }};
 const HAS_AUTH_PASSWORD = {{ 'true' if has.auth_password else 'false' }};
 const IS_CONFIGURED = {{ 'true' if configured else 'false' }};
 // Server-side API base for a co-hosted Grocy. Always loopback so the app
@@ -3460,6 +3537,21 @@ function navDragStart(ev, i) {
   ev.dataTransfer.effectAllowed = 'move';
   try { ev.dataTransfer.setData('text/plain', String(i)); } catch (e) {}
 }
+// Which folder key (if any) dropping the dragged row onto this target should
+// nest it under. Returns '' when the drop is a plain reorder. Dropping onto a
+// top-level parent nests under it; dropping onto a row that is ALREADY inside a
+// folder nests under that same folder, so the whole folder region (parent row
+// and its children) is a valid "drop in here" target. Headings never nest.
+function nestTargetKey(target, dragged) {
+  if (!target || !dragged || dragged.heading) return '';
+  if (target.key === dragged.key) return '';
+  // Nesting is one level deep: a row that already has children cannot also
+  // become someone's child.
+  if (navState.some(t => t.parent === dragged.key)) return '';
+  if (isParentable(target)) return target.key;          // dropped on the folder row itself
+  if (target.parent && target.parent !== dragged.key) return target.parent; // dropped on a sibling inside a folder
+  return '';
+}
 function navDragOver(ev, i) {
   ev.preventDefault();
   ev.dataTransfer.dropEffect = 'move';
@@ -3468,11 +3560,12 @@ function navDragOver(ev, i) {
     .forEach(r => r.classList.remove('nav-drop-into', 'nav-drop-before'));
   const target = navState[i];
   const dragged = navState[navDragIdx];
-  // Hovering the right portion of a parentable, non-heading-collision row nests.
+  // Conventional tree affordance: the middle band of a row nests, the top and
+  // bottom edges reorder. Much easier to hit than the old right-edge sliver.
   const r = row.getBoundingClientRect();
-  const intoZone = (ev.clientX - r.left) > r.width * 0.45;
-  if (dragged && !dragged.heading && target && isParentable(target) &&
-      target.key !== dragged.key && intoZone) {
+  const y = (ev.clientY - r.top) / r.height;
+  const edge = y < 0.28 || y > 0.72;            // near an edge -> reorder
+  if (!edge && nestTargetKey(target, dragged)) {
     row.classList.add('nav-drop-into');
   } else {
     row.classList.add('nav-drop-before');
@@ -3488,13 +3581,16 @@ function navDrop(ev, i) {
   if (navDragIdx === null || navDragIdx === i) return;
   const dragged = navState[navDragIdx];
   const target = navState[i];
-  if (into && dragged && !dragged.heading && target && isParentable(target) &&
-      target.key !== dragged.key) {
-    // Nest under the target and place directly after it.
-    dragged.parent = target.key;
+  const nestKey = into ? nestTargetKey(target, dragged) : '';
+  if (nestKey) {
+    // Nest under the resolved folder and place directly after that folder's
+    // last current child so it lands inside the group, not above it.
+    dragged.parent = nestKey;
     navState.splice(navDragIdx, 1);
-    const ti = navState.indexOf(target);
-    navState.splice(ti + 1, 0, dragged);
+    const parent = tabByKey(nestKey);
+    let insertAt = navState.indexOf(parent) + 1;
+    while (insertAt < navState.length && navState[insertAt].parent === nestKey) insertAt++;
+    navState.splice(insertAt, 0, dragged);
   } else {
     // Plain reorder to the target slot, back at top level.
     dragged.parent = '';
@@ -3741,21 +3837,87 @@ function savePaneRecipePrefs(btn) {
   }, btn, 'recipe-prefs-save-result');
 }
 
-function savePaneInterface(btn) {
+// Navigation pane save: the tab editor, the quiet-mode switch, and (on the
+// Theme pane being separate now) nothing theme related. Theme changes persist
+// through applyTheme()/saveCustomTheme() instead.
+function savePaneNavigation(btn) {
   return savePane({
-    ui_theme:    optVal('ui_theme'),
-    ui_scale:    optVal('ui_scale'),
-    // Custom theme builder (FoodAssistant-hatd): the swatches persist alongside
-    // the theme selection, so picking "Custom" and saving makes them active.
-    custom_theme_base:    optVal('custom_theme_base'),
-    custom_theme_primary: optVal('custom_theme_primary'),
-    custom_theme_accent:  optVal('custom_theme_accent'),
-    custom_theme_bg:      optVal('custom_theme_bg'),
-    custom_theme_surface: optVal('custom_theme_surface'),
-    custom_theme_text:    optVal('custom_theme_text'),
-    quiet_mode:           chk('quiet_mode'),
+    quiet_mode: chk('quiet_mode'),
     ...navPayload(),
   }, btn, 'interface-save-result');
+}
+
+// Save the custom-theme builder as a NAMED theme (FoodAssistant-nw49). Posts the
+// name + base + five swatches; the server stores it in custom_themes (keyed by a
+// slug of the name), makes it the active theme, and we reload to apply it.
+async function saveCustomTheme(btn) {
+  const out = document.getElementById('custom-theme-result');
+  const name = (document.getElementById('custom_theme_name')?.value || '').trim();
+  if (!name) {
+    if (out) out.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>Give the theme a name.</span>';
+    document.getElementById('custom_theme_name')?.focus();
+    return;
+  }
+  const payload = {
+    name,
+    base:    optVal('custom_theme_base') || 'dark',
+    primary: optVal('custom_theme_primary'),
+    accent:  optVal('custom_theme_accent'),
+    bg:      optVal('custom_theme_bg'),
+    surface: optVal('custom_theme_surface'),
+    text:    optVal('custom_theme_text'),
+  };
+  const orig = btn.innerHTML; btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving…';
+  if (out) out.innerHTML = '<span class="text-secondary">Saving...</span>';
+  try {
+    const r = await fetch('setup/custom-theme', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(payload),
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Save failed');
+    location.reload();
+  } catch (e) {
+    btn.disabled = false; btn.innerHTML = orig;
+    if (out) out.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</span>`;
+  }
+}
+
+// Delete the currently-active saved custom theme and fall back to the default
+// theme. Only rendered when a "custom:<id>" theme is active.
+async function deleteCustomTheme(btn) {
+  const out = document.getElementById('custom-theme-result');
+  if (!confirm('Delete this saved custom theme?')) return;
+  const orig = btn.innerHTML; btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Deleting…';
+  try {
+    const r = await fetch('setup/custom-theme/delete', {
+      method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}',
+    });
+    const d = await r.json();
+    if (!d.ok) throw new Error(d.error || 'Delete failed');
+    location.reload();
+  } catch (e) {
+    btn.disabled = false; btn.innerHTML = orig;
+    if (out) out.innerHTML = `<span class="text-danger"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</span>`;
+  }
+}
+
+// Reset the nav editor to the built-in default order/grouping/visibility
+// (FoodAssistant-oret). Rebuilds navState from the pristine defaults that the
+// server passes as TABS_DEFAULT, then re-renders. Save persists it.
+function resetNavEditor(btn) {
+  if (!confirm('Reset the navigation tabs to their defaults? Custom tabs and headings you added will be removed.')) return;
+  navState = (window.TABS_DEFAULT || TABS).map(t => ({
+    key: t.key, label: t.label, icon: t.icon,
+    hidden: !!t.hidden, available: t.available !== false,
+    custom: !!t.custom, heading: !!t.heading,
+    parent: t.parent || '', url: t.href || '',
+  }));
+  renderNavEditor();
+  const out = document.getElementById('interface-save-result');
+  if (out) out.innerHTML = '<span class="text-secondary"><i class="bi bi-info-circle me-1"></i>Reset to defaults. Click Save Navigation to keep it.</span>';
 }
 
 function savePaneSecurity(btn) {

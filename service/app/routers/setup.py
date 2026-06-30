@@ -25,12 +25,13 @@ from ..config import (
     AI_MODELS, SATELLITE_PULL_FIELDS,
     KITCHEN_APPLIANCES, KITCHEN_APPLIANCE_KEYS,
     browser_host, device_hostname,
+    resolve_custom_colors, active_custom_name, custom_theme_by_id,
 )
 from ..database import SessionLocal
 from ..dependencies import reset_providers
 from ..hardware import is_raspberry_pi, board_model, supports_local_stack
 from ..models.db_models import StreamDeckProfile
-from ..navigation import all_tabs, normalize_custom_tabs, NAV_TABS, CUSTOM_PREFIX
+from ..navigation import all_tabs, default_tabs, normalize_custom_tabs, NAV_TABS, CUSTOM_PREFIX
 from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
 
@@ -499,9 +500,19 @@ async def setup_page(request: Request):
         "extra_api_key_names": (settings.extra_api_key_names if isinstance(settings.extra_api_key_names, list) else []),
         "ai_models": AI_MODELS,
         "tabs": all_tabs(),
+        "tabs_default": default_tabs(),
         "version": APP_VERSION,
         "custom_categories": custom_categories(),
         "themes": THEMES,
+        # Saved named custom themes for the Theme dropdown, plus the colour set
+        # and name to seed the builder from the active theme (FoodAssistant-nw49).
+        "custom_themes": [t for t in (settings.custom_themes or []) if isinstance(t, dict) and t.get("id")],
+        "active_custom": resolve_custom_colors(settings.ui_theme) or {
+            "base": settings.custom_theme_base, "primary": settings.custom_theme_primary,
+            "accent": settings.custom_theme_accent, "bg": settings.custom_theme_bg,
+            "surface": settings.custom_theme_surface, "text": settings.custom_theme_text,
+        },
+        "active_custom_name": active_custom_name(),
         "ui_scales": UI_SCALES,
         "display_rotations": DISPLAY_ROTATIONS,
         "display_types": DISPLAY_TYPES,
@@ -588,6 +599,78 @@ async def save_theme(payload: ThemePayload):
     if is_raspberry_pi() and settings.has_streamdeck:
         from ..services.satellite import _push_streamdeck_settings
         _push_streamdeck_settings()
+    return {"ok": True}
+
+
+_HEX_RE = re.compile(r"^#[0-9a-fA-F]{6}$")
+
+
+def _theme_slug(name: str) -> str:
+    """Stable id from a display name: lowercased, non-alphanumerics to '_'."""
+    slug = re.sub(r"[^a-z0-9]+", "_", name.strip().lower()).strip("_")
+    return slug or "theme"
+
+
+class CustomThemePayload(BaseModel):
+    name: str = ""
+    base: str = "dark"
+    primary: str = ""
+    accent: str = ""
+    bg: str = ""
+    surface: str = ""
+    text: str = ""
+
+
+@router.post("/custom-theme")
+async def save_custom_theme(payload: CustomThemePayload):
+    """Save (or update) a named custom theme and make it active.
+
+    Stores it in settings.custom_themes keyed by a slug of the name, then sets
+    ui_theme to "custom:<id>". Resaving with the same name updates that theme.
+    """
+    name = (payload.name or "").strip()
+    if not name:
+        return {"ok": False, "error": "Give the theme a name."}
+    base = payload.base if payload.base in ("light", "dark") else "dark"
+    colors = {}
+    fallback = {
+        "primary": settings.custom_theme_primary, "accent": settings.custom_theme_accent,
+        "bg": settings.custom_theme_bg, "surface": settings.custom_theme_surface,
+        "text": settings.custom_theme_text,
+    }
+    for k in ("primary", "accent", "bg", "surface", "text"):
+        v = (getattr(payload, k) or "").strip()
+        if v and not _HEX_RE.match(v):
+            return {"ok": False, "error": f"{k.title()} must be a #rrggbb colour."}
+        colors[k] = v or fallback[k]
+    theme_id = _theme_slug(name)
+    entry = {"id": theme_id, "name": name, "base": base, **colors}
+    existing = [t for t in (settings.custom_themes or []) if isinstance(t, dict) and t.get("id")]
+    replaced = False
+    for i, t in enumerate(existing):
+        if t.get("id") == theme_id:
+            existing[i] = entry
+            replaced = True
+            break
+    if not replaced:
+        existing.append(entry)
+    settings.save({"custom_themes": existing, "ui_theme": f"custom:{theme_id}"})
+    if is_raspberry_pi() and settings.has_streamdeck:
+        from ..services.satellite import _push_streamdeck_settings
+        _push_streamdeck_settings()
+    return {"ok": True, "id": theme_id}
+
+
+@router.post("/custom-theme/delete")
+async def delete_custom_theme():
+    """Delete the currently-active saved custom theme; fall back to the default."""
+    name = getattr(settings, "ui_theme", "")
+    if not (isinstance(name, str) and name.startswith("custom:")):
+        return {"ok": False, "error": "No saved custom theme is active."}
+    theme_id = name.split(":", 1)[1]
+    remaining = [t for t in (settings.custom_themes or [])
+                 if isinstance(t, dict) and t.get("id") and t.get("id") != theme_id]
+    settings.save({"custom_themes": remaining, "ui_theme": _DEFAULT_THEME})
     return {"ok": True}
 
 

@@ -51,9 +51,11 @@ def _render(client, monkeypatch, *, satellite: bool) -> str:
 def test_personalization_heading_and_links(client, monkeypatch):
     html = _render(client, monkeypatch, satellite=False)
     assert "Personalization" in html
-    # Interface link/pane moved under Personalization but keeps its pane id.
-    assert 'data-bs-target="#pane-interface"' in html
-    assert 'id="pane-interface"' in html
+    # Interface was split into separate Theme and Navigation panes under
+    # Personalization (FoodAssistant-py1o).
+    for pane in ("pane-theme", "pane-navigation"):
+        assert f'data-bs-target="#{pane}"' in html
+        assert f'id="{pane}"' in html
     # New Personalization panes exist with stable ids for hash nav.
     for pane in (
         "pane-personalization-recipes",
@@ -69,7 +71,7 @@ def test_moved_recipe_prefs_inputs_render_in_personalization(client, monkeypatch
     recipe-prefs pane and are saved by its own button (non-satellite)."""
     html = _render(client, monkeypatch, satellite=False)
     pane = html.split('id="pane-personalization-recipes"', 1)[1].split(
-        'id="pane-interface"', 1
+        'id="pane-theme"', 1
     )[0]
     # Suggestion tuning + appliances moved here.
     for field in ("staple_items", "cook_ai_context", "kitchen-appliances",
@@ -111,7 +113,7 @@ def test_satellite_recipe_prefs_pane_is_read_only(client, monkeypatch):
     assert 'id="pane-personalization-storage"' not in html
     assert 'id="pane-personalization-weather"' not in html
     pane = html.split('id="pane-personalization-recipes"', 1)[1].split(
-        'id="pane-interface"', 1
+        'id="pane-theme"', 1
     )[0]
     assert 'onclick="savePaneRecipePrefs(this)"' not in pane
     assert "Recipe settings are managed on the main server" in pane
