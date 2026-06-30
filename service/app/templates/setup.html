@@ -4454,15 +4454,21 @@ async function updateServerNow(btn) {
   try {
     const r = await fetch('setup/update-server', { method: 'POST' });
     const d = await r.json();
-    if (out) {
-      out.className = 'test-result ' + (d.ok ? 'text-success' : 'text-danger');
-      out.textContent = d.ok ? (d.message || 'Update triggered.') : (d.error || 'Update failed.');
+    if (d.ok) {
+      // Watchtower will recreate this container, dropping the connection, so
+      // poll for the app to come back and report the new version.
+      await _pollForRestart(out);
+    } else if (out) {
+      out.className = 'test-result text-danger';
+      out.textContent = d.error || 'Update failed.';
     }
   } catch (e) {
-    if (out) { out.className = 'test-result text-danger'; out.textContent = 'Could not reach the server.'; }
+    // The recreate dropped the connection before responding: poll for the app.
+    await _pollForRestart(out);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = orig;
   }
-  btn.disabled = false;
-  btn.innerHTML = orig;
 }
 
 // Updates: persist the global auto-update flag (FoodAssistant-k2kk).
@@ -4558,6 +4564,42 @@ async function checkSatelliteUpdate(btn) {
 // The request can take a couple of minutes when dependencies change, so disable
 // the button and show progress. The result includes a short before/after commit
 // summary and the full update log.
+// An in-app update restarts the app (Pi bridge OTA) or recreates this container
+// (server Watchtower), so the request connection drops mid-flight, which the
+// browser reports as "Failed to fetch" / could not reach the server. That is
+// expected and usually means the update is underway, so instead of showing an
+// error we poll /health until the app is back and report the new version.
+window.__APP_VERSION = "{{ version }}";
+async function _pollForRestart(outEl) {
+  const before = window.__APP_VERSION || '';
+  if (outEl) {
+    outEl.className = 'test-result text-secondary';
+    outEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Update in progress. The app is restarting, waiting for it to come back...';
+  }
+  const deadline = Date.now() + 240000;  // up to 4 minutes
+  await new Promise(r => setTimeout(r, 5000));  // let the old process drop first
+  while (Date.now() < deadline) {
+    try {
+      const r = await fetch('health', { cache: 'no-store' });
+      if (r.ok) {
+        const d = await r.json().catch(() => ({}));
+        const v = d.version || '';
+        if (v && v !== before) {
+          if (outEl) { outEl.className = 'test-result text-success'; outEl.textContent = 'Updated to v' + v + '. Reloading...'; }
+          setTimeout(() => location.reload(), 1500);
+          return;
+        }
+        if (v) {
+          if (outEl) { outEl.className = 'test-result text-secondary'; outEl.textContent = 'The app is back on v' + v + ' (it may already have been up to date).'; }
+          return;
+        }
+      }
+    } catch (e) { /* still restarting; keep waiting */ }
+    await new Promise(r => setTimeout(r, 3000));
+  }
+  if (outEl) { outEl.className = 'test-result text-warning'; outEl.textContent = 'The app did not come back within a few minutes. Check the device and reload the page.'; }
+}
+
 async function checkForUpdates() {
   const out = document.getElementById('update-result');
   const logEl = document.getElementById('update-log');
@@ -4568,23 +4610,26 @@ async function checkForUpdates() {
   try {
     const r = await fetch('setup/update', { method: 'POST' });
     const d = await r.json();
+    if (logEl && d.log) { logEl.textContent = d.log; logEl.classList.remove('d-none'); }
+    if (d.ok && d.before && d.after && d.before !== d.after) {
+      // Updated: the app restarted, so poll for it to come back and reload.
+      await _pollForRestart(out);
+      return;
+    }
     if (out) {
       out.className = 'test-result ' + (d.ok ? 'text-success' : 'text-danger');
       if (d.ok) {
-        if (d.before && d.after && d.before === d.after) {
-          out.textContent = 'Already up to date (' + d.after + ').';
-        } else if (d.restarted) {
-          out.textContent = 'Updated ' + (d.before || '?') + ' → ' + (d.after || '?') + ' and restarted.';
-        } else {
-          out.textContent = 'Updated' + (d.after ? ' to ' + d.after : '') + '.';
-        }
+        out.textContent = (d.before && d.after && d.before === d.after)
+          ? 'Already up to date (' + d.after + ').'
+          : 'Updated' + (d.after ? ' to ' + d.after : '') + '.';
       } else {
         out.textContent = d.error || 'Update failed.';
       }
     }
-    if (logEl && d.log) { logEl.textContent = d.log; logEl.classList.remove('d-none'); }
   } catch (e) {
-    if (out) { out.className = 'test-result text-danger'; out.textContent = String(e); }
+    // The connection dropped, almost always because the update restarted the
+    // app. Poll for it to come back rather than reporting a fetch error.
+    await _pollForRestart(out);
   } finally {
     if (btn) { btn.disabled = false; }
   }
