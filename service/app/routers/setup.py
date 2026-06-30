@@ -1304,13 +1304,28 @@ async def scan_ip_cameras(payload: CameraScanPayload = CameraScanPayload()):
     blocking sweep in a thread so the event loop stays free."""
     import anyio
     from ..services import camera_scan
-    cidr = (payload.cidr or "").strip() or camera_scan.default_cidr()
+    cidr = (payload.cidr or "").strip() or camera_scan.best_lan_cidr()
     if not cidr:
         return {"ok": False, "error": "Could not determine the local network; enter a CIDR like 192.168.1.0/24."}
     results = await anyio.to_thread.run_sync(lambda: camera_scan.scan_for_cameras(cidr))
     if results and isinstance(results[0], dict) and results[0].get("error"):
         return {"ok": False, "error": results[0]["error"]}
-    return {"ok": True, "cidr": cidr, "cameras": results}
+    # When we had to guess and the guess is a Docker bridge subnet, tell the user
+    # to enter their real LAN (the app runs in a container, FoodAssistant-d9rx).
+    hint = ""
+    if not (payload.cidr or "").strip() and camera_scan.looks_dockerish(cidr):
+        hint = (f"{cidr} looks like a Docker network, not your LAN. Enter your "
+                f"home network instead, e.g. 192.168.1.0/24.")
+    return {"ok": True, "cidr": cidr, "cameras": results, "hint": hint}
+
+
+@router.get("/cameras/scan-default")
+async def scan_default_cidr():
+    """The CIDR the camera scan would default to, so the UI can pre-fill and
+    show it before scanning (FoodAssistant-d9rx)."""
+    from ..services import camera_scan
+    cidr = camera_scan.best_lan_cidr() or ""
+    return {"cidr": cidr, "dockerish": camera_scan.looks_dockerish(cidr) if cidr else False}
 
 
 @router.post("/ha/cameras")

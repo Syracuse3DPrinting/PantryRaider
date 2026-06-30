@@ -111,6 +111,56 @@ def probe_camera(ip: str, timeout: float = 0.4, fetch=None) -> dict | None:
     }
 
 
+def _candidate_ips() -> set[str]:
+    """All non-loopback IPv4 addresses this host can see (outbound + hostname)."""
+    from .lan_scan import _outbound_ip
+    ips: set[str] = set()
+    out = _outbound_ip()
+    if out:
+        ips.add(out)
+    try:
+        for info in socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET):
+            ips.add(info[4][0])
+    except OSError:
+        pass
+    return {ip for ip in ips if not ip.startswith("127.")}
+
+
+def _rank_ip(ip: str) -> int:
+    """Lower rank = more likely to be a real home/office LAN. Docker's default
+    bridge lives in 172.16/12, so that range is ranked last."""
+    if ip.startswith("192.168."):
+        return 0
+    if ip.startswith("10."):
+        return 1
+    if ip.startswith("172."):
+        return 3  # Docker default bridge range: least likely the user's LAN
+    return 2
+
+
+def looks_dockerish(cidr: str) -> bool:
+    """Heuristic: a 172.16-31.x subnet is most likely a Docker bridge, not the LAN."""
+    try:
+        first = cidr.split("/", 1)[0]
+        a, b = (int(first.split(".")[0]), int(first.split(".")[1]))
+    except (ValueError, IndexError):
+        return False
+    return a == 172 and 16 <= b <= 31
+
+
+def best_lan_cidr() -> str | None:
+    """Best guess at the host's real LAN /24, preferring 192.168/10 over a Docker
+    172.x interface (FoodAssistant-d9rx). Returns None when nothing is found."""
+    cands = _candidate_ips()
+    if not cands:
+        return None
+    ip = sorted(cands, key=lambda x: (_rank_ip(x), x))[0]
+    try:
+        return str(ipaddress.ip_network(f"{ip}/24", strict=False))
+    except ValueError:
+        return None
+
+
 def scan_for_cameras(cidr: str, timeout: float = 0.4, concurrency: int = 64,
                      fetch=None) -> list[dict]:
     """Scan a CIDR for IP cameras. Returns candidate dicts (or a single

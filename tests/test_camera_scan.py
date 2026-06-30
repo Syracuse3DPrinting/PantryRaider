@@ -67,3 +67,25 @@ def test_probe_camera_plain_http_not_reported(monkeypatch):
 def test_scan_rejects_bad_cidr():
     out = camera_scan.scan_for_cameras("not-a-cidr")
     assert out and out[0].get("error")
+
+
+def test_looks_dockerish():
+    assert camera_scan.looks_dockerish("172.19.0.0/24") is True
+    assert camera_scan.looks_dockerish("172.17.0.0/16") is True
+    assert camera_scan.looks_dockerish("192.168.1.0/24") is False
+    assert camera_scan.looks_dockerish("10.0.0.0/24") is False
+    assert camera_scan.looks_dockerish("172.200.0.0/24") is False  # not the private range
+
+
+def test_best_lan_cidr_prefers_real_lan_over_docker(monkeypatch):
+    # With both a Docker 172.x and a real 192.168.x interface visible, pick the LAN.
+    monkeypatch.setattr(camera_scan, "_candidate_ips",
+                        lambda: {"172.19.0.5", "192.168.1.40"})
+    assert camera_scan.best_lan_cidr() == "192.168.1.0/24"
+    # 10.x is preferred over 172.x too.
+    monkeypatch.setattr(camera_scan, "_candidate_ips", lambda: {"172.19.0.5", "10.1.2.3"})
+    assert camera_scan.best_lan_cidr() == "10.1.2.0/24"
+    # Only Docker visible (a bridge-networked container): we still return it, and
+    # the endpoint flags it as dockerish so the UI tells the user to correct it.
+    monkeypatch.setattr(camera_scan, "_candidate_ips", lambda: {"172.19.0.5"})
+    assert camera_scan.best_lan_cidr() == "172.19.0.0/24"

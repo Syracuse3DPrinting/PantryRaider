@@ -839,7 +839,7 @@
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-homeassistant" type="button">
             <i class="bi bi-house-gear me-2"></i>Home Assistant
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-cameras" type="button" onclick="_camPresetChanged()">
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-cameras" type="button" onclick="_camPresetChanged(); _camPrefillScanCidr()">
             <i class="bi bi-camera-video me-2"></i>Cameras
           </button>
           {% if not features.satellite %}
@@ -5642,6 +5642,20 @@ function _camPresetChanged() {
   if (pathEl && p.showPath) pathEl.value = p.streamPath || '';
 }
 
+// Pre-fill the scan box with the server's best LAN guess so it is visible and
+// correctable before scanning (FoodAssistant-d9rx).
+async function _camPrefillScanCidr() {
+  const el = document.getElementById('cam-scan-cidr');
+  if (!el || el.value.trim()) return;
+  try {
+    const d = await fetch('setup/cameras/scan-default').then(r => r.json());
+    if (d && d.cidr) {
+      el.value = d.cidr;
+      if (d.dockerish) el.title = 'This looks like a Docker subnet; change it to your LAN if needed.';
+    }
+  } catch (e) { /* leave it blank */ }
+}
+
 // Scan the LAN for IP cameras and list them with Preview + Add, like the HA
 // camera discovery (FoodAssistant-d9rx).
 async function _camScanLan(btn) {
@@ -5656,8 +5670,17 @@ async function _camScanLan(btn) {
       body: JSON.stringify({ cidr }),
     }).then(r => r.json());
     if (!data.ok) { out.innerHTML = `<span class="text-danger small">${data.error || 'Scan failed.'}</span>`; return; }
+    // Reflect the network that was scanned back into the box so the user can
+    // see and correct it (e.g. when we guessed a Docker subnet).
+    if (data.cidr) document.getElementById('cam-scan-cidr').value = data.cidr;
+    const hint = data.hint
+      ? `<div class="alert alert-warning py-1 px-2 small mb-2">${data.hint}</div>` : '';
     const cams = data.cameras || [];
-    if (!cams.length) { out.innerHTML = '<span class="text-secondary small">No cameras found on ' + data.cidr + '.</span>'; return; }
+    if (!cams.length) {
+      out.innerHTML = hint + '<span class="text-secondary small">No cameras found on ' + data.cidr + '.</span>';
+      return;
+    }
+    out.innerHTML = hint;
     const list = document.createElement('div');
     list.className = 'list-group';
     cams.forEach(cam => {
@@ -5690,7 +5713,7 @@ async function _camScanLan(btn) {
       item.appendChild(label); item.appendChild(btns);
       list.appendChild(item);
     });
-    out.innerHTML = '';
+    out.innerHTML = hint;   // keep the Docker-subnet warning above the results
     out.appendChild(list);
   } catch (e) {
     out.innerHTML = `<span class="text-danger small">${e}</span>`;
