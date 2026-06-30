@@ -16,11 +16,13 @@
   --bs-tertiary-bg:       #e7e0c8;
   --bs-tertiary-bg-rgb:   231, 224, 200;
 
-  /* Text (base00 / base01) */
+  /* Text (base00 / base01). Solarized is a deliberately low-contrast palette,
+     so the muted text tiers use solid darker greys (not faded body colour) to
+     clear WCAG AA on the warm #fdf6e3 background. */
   --bs-body-color:        #586e75;
   --bs-body-color-rgb:    88, 110, 117;
-  --bs-secondary-color:   rgba(88, 110, 117, 0.70);
-  --bs-tertiary-color:    rgba(88, 110, 117, 0.45);
+  --bs-secondary-color:   #4a5d63;
+  --bs-tertiary-color:    #586e75;
   --bs-emphasis-color:    #073642;
 
   /* Solarized accents */
@@ -63,10 +65,11 @@
   --bs-border-color:        #ded8c3;
   --bs-border-color-translucent: rgba(88, 110, 117, 0.18);
 
-  /* Links */
-  --bs-link-color:        #268bd2;
-  --bs-link-color-rgb:    38, 139, 210;
-  --bs-link-hover-color:  #1a5e90;
+  /* Links (darkened from the #268bd2 accent so link text clears AA on the
+     light parchment background; the brighter accent stays on buttons/borders) */
+  --bs-link-color:        #0f5a8a;
+  --bs-link-color-rgb:    15, 90, 138;
+  --bs-link-hover-color:  #0a4060;
 
   /* Cards / components */
   --bs-card-bg:           #fdf6e3;
@@ -209,13 +212,15 @@ body {
   color: #073642;
 }
 
-/* Badges */
-.text-bg-primary   { background-color: var(--sol-blue)    !important; color: #fdf6e3 !important; }
-.text-bg-secondary { background-color: var(--sol-cyan)    !important; color: #fdf6e3 !important; }
-.text-bg-success   { background-color: var(--sol-green)   !important; color: #fdf6e3 !important; }
-.text-bg-info      { background-color: var(--sol-violet)  !important; color: #fdf6e3 !important; }
-.text-bg-warning   { background-color: var(--sol-yellow)  !important; color: #fdf6e3 !important; }
-.text-bg-danger    { background-color: var(--sol-red)     !important; color: #fdf6e3 !important; }
+/* Badges. The Solarized accents are mid-tone, so white text on the raw accent
+   fails AA at badge sizes; the badge backgrounds are darkened a step (the
+   brighter accents stay on buttons/borders) so white text clears AA. */
+.text-bg-primary   { background-color: #1a6ba8 !important; color: #fdf6e3 !important; }
+.text-bg-secondary { background-color: #17726b !important; color: #fdf6e3 !important; }
+.text-bg-success   { background-color: #647300 !important; color: #fdf6e3 !important; }
+.text-bg-info      { background-color: #5b60b0 !important; color: #fdf6e3 !important; }
+.text-bg-warning   { background-color: #806100 !important; color: #fdf6e3 !important; }
+.text-bg-danger    { background-color: #c92420 !important; color: #fdf6e3 !important; }
 
 /* Alerts */
 .alert-success {

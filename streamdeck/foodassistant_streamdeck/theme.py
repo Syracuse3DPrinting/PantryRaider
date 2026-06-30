@@ -86,6 +86,26 @@ THEME_PALETTES: dict[str, dict[str, str]] = {
         "danger": "#c2502e", "info": "#6fae9b", "accent": "#8fbf9f",
         "timer": "#9ccc5a", "muted": "#2a4533",
     },
+    "ios-light": {
+        "primary": "#007aff", "success": "#248a3d", "warn": "#b25000",
+        "danger": "#d70015", "info": "#5856d6", "accent": "#007aff",
+        "timer": "#248a3d", "muted": "#d1d1d6",
+    },
+    "ios-dark": {
+        "primary": "#0a84ff", "success": "#30d158", "warn": "#ff9f0a",
+        "danger": "#ff453a", "info": "#5e5ce6", "accent": "#0a84ff",
+        "timer": "#30d158", "muted": "#38383a",
+    },
+    "outrun": {
+        "primary": "#ff2e97", "success": "#29ffc6", "warn": "#ffd23f",
+        "danger": "#ff3864", "info": "#9d4edd", "accent": "#2de2e6",
+        "timer": "#29ffc6", "muted": "#34306b",
+    },
+    "vaporwave": {
+        "primary": "#ff6ad5", "success": "#94f0c2", "warn": "#fff07c",
+        "danger": "#ff5d8f", "info": "#c774e8", "accent": "#5ce1e6",
+        "timer": "#94f0c2", "muted": "#463473",
+    },
     # Custom theme builder (FoodAssistant-hatd). The web UI lets a user pick their
     # own primary/accent/surface colours (Settings -> Interface). The deck reads
     # this table locally and only receives the theme NAME via the satellite sync,

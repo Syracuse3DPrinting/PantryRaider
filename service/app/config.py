@@ -51,6 +51,14 @@ THEMES = {
                    "overlay": "static/vendor/themes/midnight.css"},
     "forest":     {"label": "Forest (soft green dark)", "mode": "dark", "stylesheet": None,
                    "overlay": "static/vendor/themes/forest.css"},
+    "ios-light":  {"label": "iOS Light (clean, Apple-like)", "mode": "light", "stylesheet": None,
+                   "overlay": "static/vendor/themes/ios-light.css"},
+    "ios-dark":   {"label": "iOS Dark (clean, Apple-like)", "mode": "dark", "stylesheet": None,
+                   "overlay": "static/vendor/themes/ios-dark.css"},
+    "outrun":     {"label": "Outrun (neon dark)", "mode": "dark", "stylesheet": None,
+                   "overlay": "static/vendor/themes/outrun.css"},
+    "vaporwave":  {"label": "Vaporwave (neon dark)", "mode": "dark", "stylesheet": None,
+                   "overlay": "static/vendor/themes/vaporwave.css"},
     # The custom theme has no static stylesheet or overlay file: its colours come
     # from the user-edited swatches stored in Settings (custom_theme_*). base.html
     # emits an inline <style> from those values, layered after base Bootstrap, so
