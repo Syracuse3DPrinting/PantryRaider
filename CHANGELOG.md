@@ -10,7 +10,11 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-06-30
+
 ### Added
+- **Quiet mode and a timer chime.** A finished kitchen timer now plays a short chime in the on-screen timer window so it carries across the room. A per-device Quiet mode toggle (Settings, Interface) silences it, leaving the highlighted timer row as the only signal, so one kiosk can be loud and another silent.
+- **Release notes link and a manual server update.** The Settings Updates card links to the GitHub release notes on every deployment mode. A non-Pi server, which runs Watchtower on a daily poll, gains an Update now button that triggers Watchtower immediately so an available image is applied at once instead of waiting for the next poll, with the copy-paste commands kept as a fallback.
 - **Recommended kitchen products (Shop tab).** A new Shop page recommends common kitchen products (appliances, cookware, gadgets, storage) as Amazon links. Items you have not marked as owned in your kitchen appliance list, and any equipment your active recipe needs but you lack, are pinned to the top; the rest are popular general picks. Add your own Amazon Associates tag under Settings > Recipes to monetize the links (qualifying purchases earn a commission); the tag is shared to satellites. The page carries the required Amazon Associate disclosure, and links open in a new tab. This is not an AI feature, so it works without any provider configured.
 - **Drag-and-drop navigation editor with folders.** The Settings nav editor replaces the per-row parent dropdown with a tree you can rearrange: drag a row to reorder it, drop it onto a top-level tab (or use the indent button) to nest it, and outdent to bring it back. Because the kiosk is touch-only, every row also has move up, move down, indent, and outdent buttons. A new Add a heading control creates a folder (a label and icon with no page of its own) that groups other tabs into a dropdown; an empty folder stays hidden until it has children, and every page remains reachable.
 - **Pending duplicate hint.** When a scanned item is already in Grocy inventory, the Pending page shows a small "Already in inventory (duplicate)" info badge on that row. It is informational only: the item can still be committed, and an item scanned on a different day lands as its own Grocy stock entry (Grocy keys entries by best-before date) so each keeps its own expiration.
@@ -75,6 +79,11 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 - **Stream Deck weather and forecast keys cycle.** Pressing the weather key cycles through stats and the forecast key cycles through days, each returning to its default after a short idle.
 - **AI Declarations moved.** The standalone AI Declarations page is gone; the same content now lives in a section of the About page and in `docs/AI_DECLARATIONS.md`.
 - **Cook icon unified.** Cook uses a flame icon consistently across the web UI and the Stream Deck.
+- **Pi setup matches the board.** On a low-RAM or older Raspberry Pi (a Pi 3, Zero, or under about 4 GB of RAM), the setup wizard now offers Pi Remote only and hides Pi Hosted, since a full local stack (Grocy plus optional Mealie and Ollama) needs more than those boards have. A capable Pi 4 or 5 still offers both, and uncertain detection never over-restricts a box.
+
+### Security
+- **Web-UI password and kiosk PIN hashed at rest.** The login password and kiosk PIN are now stored as salted scrypt hashes instead of plaintext, so a leaked settings.json or backup does not expose them. Existing plaintext values still work and are upgraded to a hash on the next successful login. API keys and the TOTP secret stay as they are, since they are bearer secrets that must be presented verbatim.
+- **Community health and supply-chain hardening.** Added SECURITY.md (a private vulnerability disclosure policy), CONTRIBUTING.md, CODE_OF_CONDUCT.md, issue and pull request templates, a Dependabot config (pip, GitHub Actions, Docker), a pre-commit config running ruff, test-coverage reporting in CI, and pinned every GitHub Actions reference to a commit SHA.
 
 ### Build
 - **Hash-locked dependency file for reproducible builds.** A new `service/requirements.lock` resolves the full transitive dependency tree with `--generate-hashes`, so installs can be verified against known checksums. It also pins the previously floating `anthropic` dependency to a concrete version. The lockfile is additive: the Docker image still installs from `service/requirements.txt`. The README documents how to regenerate it with uv or pip-tools.
