@@ -49,3 +49,26 @@ def compare_to(device_version: str, server_version: str) -> str:
     if dv > sv:
         return "ahead"
     return "current"
+
+
+def _pad(t: tuple, n: int = 3) -> tuple:
+    """Right-pad a version tuple with zeros to at least ``n`` parts."""
+    return tuple(list(t) + [0] * (n - len(t)))[:max(n, len(t))]
+
+
+def diff_level(device_version: str, server_version: str) -> str:
+    """How far a device's version is from the server's, for a traffic-light badge.
+
+    Returns "unknown" (no version), "same" (identical major.minor.patch, green),
+    "patch" (only the patch differs, yellow), or "major_minor" (the major or minor
+    differs, red). Pre-1.0 the minor acts as the feature line, so a 0.6 vs 0.7
+    gap is treated as major_minor.
+    """
+    if not device_version:
+        return "unknown"
+    dv, sv = _pad(normalize(device_version)), _pad(normalize(server_version))
+    if dv == sv:
+        return "same"
+    if dv[0] != sv[0] or dv[1] != sv[1]:
+        return "major_minor"
+    return "patch"

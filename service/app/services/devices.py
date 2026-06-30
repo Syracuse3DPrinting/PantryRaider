@@ -85,7 +85,7 @@ def _is_online(last_seen: str | None) -> bool:
 
 def _serialize(dev: SatelliteDevice) -> dict:
     from ..config import APP_VERSION
-    from ..version_compare import compare_to
+    from ..version_compare import compare_to, diff_level
     return {
         "device_id": dev.device_id,
         "hostname": dev.hostname,
@@ -95,6 +95,9 @@ def _serialize(dev: SatelliteDevice) -> dict:
         # Standardised update status against the server's own version, so the
         # Devices page can flag which satellites are behind (FoodAssistant-ny8r).
         "update_status": compare_to(dev.version or "", APP_VERSION),
+        # Traffic-light severity: same (green) / patch (yellow) / major_minor
+        # (red) versus the server version (FoodAssistant-469o).
+        "version_diff": diff_level(dev.version or "", APP_VERSION),
         "label": dev.label,
         "source": dev.source,
         "pending_command": dev.pending_command,

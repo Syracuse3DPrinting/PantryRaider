@@ -735,6 +735,21 @@
 {% if configured %}
 <div class="setup-wrap" id="settings-root">
 
+  {% if features.satellite %}
+  <!-- Pi Remote indicator so it is obvious this is a satellite, not the main
+       server's settings (FoodAssistant-batt). Most backend config is mirrored
+       read-only from the main server. -->
+  <div class="alert alert-info d-flex align-items-center gap-2 mt-3 mb-0" role="alert">
+    <i class="bi bi-hdd-network fs-5"></i>
+    <div>
+      <strong>This is a Pi Remote (satellite).</strong>
+      It mirrors a main FoodAssistant server. Backend settings (Grocy, Mealie, AI,
+      weather) are managed on the main server and shown here read-only. This device
+      keeps its own display, Stream Deck, and security settings.
+    </div>
+  </div>
+  {% endif %}
+
   <!-- AP fallback banner: shown when the device is in hotspot setup mode -->
   <div id="ap-fallback-banner" class="alert alert-warning alert-dismissible fade show d-none" role="alert">
     <i class="bi bi-wifi me-2"></i><strong>Running in Wi-Fi setup mode.</strong>
@@ -1464,6 +1479,11 @@
 
         <!-- Home Assistant -->
         <div class="tab-pane fade" id="pane-homeassistant">
+          <div class="alert alert-secondary d-flex align-items-center gap-2 mt-2">
+            <i class="bi bi-info-circle"></i>
+            <div><strong>Home Assistant is optional.</strong> If you don't run a Home Assistant
+              server, skip this whole tab. Everything else works without it.</div>
+          </div>
           <p class="pane-intro">Connect a Home Assistant instance to drive its entities from the Stream Deck keys and to discover cameras. The URL and token are stored on the main server, so a second Pi remote inherits them.</p>
 
           <div class="section-card">
@@ -6092,10 +6112,13 @@ function deviceRowHtml(d) {
     ? `<a href="http://${escapeHtml(d.ip)}${devPort}/" target="_blank" rel="noopener">${escapeHtml(d.ip)}</a>`
     : '<span class="text-secondary">--</span>';
   const mode = d.deployment_mode ? escapeHtml(d.deployment_mode) : '--';
-  // Update status against this server's version (FoodAssistant-ny8r).
-  const vbadge = { behind: ' <span class="badge bg-warning text-dark">update available</span>',
-                   current: ' <span class="badge bg-success">up to date</span>',
-                   ahead: ' <span class="badge bg-info text-dark">ahead</span>' }[d.update_status] || '';
+  // Traffic-light version status vs this server (FoodAssistant-469o):
+  // green = same, yellow = patch differs, red = major/minor differs.
+  const vbadge = {
+    same:        ' <span class="badge bg-success" title="Same version as the server">current</span>',
+    patch:       ' <span class="badge bg-warning text-dark" title="Different patch version">patch differs</span>',
+    major_minor: ' <span class="badge bg-danger" title="Different major/minor version">update needed</span>',
+  }[d.version_diff] || '';
   const version = (d.version ? escapeHtml(d.version) : '--') + vbadge;
   const seen = d.last_seen ? escapeHtml(d.last_seen) : '--';
   const id = escapeHtml(d.device_id || '').replace(/'/g, "\\'");

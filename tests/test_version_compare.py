@@ -8,8 +8,17 @@ SERVICE = Path(__file__).resolve().parents[1] / "service"
 sys.path.insert(0, str(SERVICE))
 
 from app.version_compare import (  # noqa: E402
-    normalize, is_version_tag, is_newer, compare_to,
+    normalize, is_version_tag, is_newer, compare_to, diff_level,
 )
+
+
+def test_diff_level_traffic_light():
+    assert diff_level("", "0.6.5") == "unknown"
+    assert diff_level("0.6.5", "0.6.5") == "same"          # green
+    assert diff_level("0.6.4", "0.6.5") == "patch"         # yellow
+    assert diff_level("0.6.7", "0.6.5") == "patch"         # patch ahead is still patch
+    assert diff_level("0.7.0", "0.6.5") == "major_minor"   # red (minor differs)
+    assert diff_level("1.0.0", "0.6.5") == "major_minor"   # red (major differs)
 
 
 def test_normalize_strips_v_prefix():
