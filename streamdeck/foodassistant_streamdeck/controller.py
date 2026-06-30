@@ -91,6 +91,15 @@ class Controller:
         self.keypad_page_idx: int = 0
         self.pin_buffer: PinBuffer = PinBuffer()
         self.pin_status: str = ""
+        # Dynamic shopping quick-check page (542t). ``shopping_check_mode`` swaps
+        # the visible page for one whose keys are the top items on the Mealie
+        # shopping list; pressing a key checks that item off. ``shopping_check_page``
+        # is the built page and ``shopping_check_items`` maps each item key's name
+        # to its full item dict, so a press knows what to check off. Populated
+        # when the page is opened and refreshed on the poll loop while it is up.
+        self.shopping_check_mode: bool = False
+        self.shopping_check_page: list[Optional[ActionSpec]] = []
+        self.shopping_check_items: dict[str, dict] = {}
         self.status: dict[str, int] = {
             "expiring": 0, "pending": 0, "shopping": 0, "ready": 0,
         }
@@ -312,6 +321,8 @@ class Controller:
     def _current(self) -> list[Optional[ActionSpec]]:
         if self.keypad_mode:
             return self.keypad_pages[self.keypad_page_idx % len(self.keypad_pages)]
+        if self.shopping_check_mode:
+            return self.shopping_check_page
         return self.pages[self.page % len(self.pages)]
 
     def _draw_page(self) -> None:
@@ -396,11 +407,16 @@ class Controller:
                     color = base_color
                     alert = False
                     count = None
-                elif spec.kind in ("shopping_add", "macro", "ha_service"):
-                    # Quick-add, macro, and media (ha_service) keys are stateless
-                    # faces: they show their configured label and colour and do
-                    # their work on press (dispatched through actions.run_action),
-                    # so there is no live count or alert to compute here.
+                elif spec.kind in (
+                    "shopping_add", "macro", "ha_service",
+                    "shopping_check", "shopping_check_page",
+                ):
+                    # Quick-add, macro, media (ha_service), and the shopping
+                    # quick-check keys (the entry key plus each dynamic per-item
+                    # key) are stateless faces: they show their configured label
+                    # and colour and do their work on press (dispatched through
+                    # actions.run_action), so there is no live count or alert to
+                    # compute here.
                     label = spec.label
                     color = base_color
                     alert = False
@@ -599,6 +615,75 @@ class Controller:
             self.pin_buffer.clear()
             self.pin_status = "Wrong"
             self._draw_page()
+
+    # -- shopping quick-check page (542t) ----------------------------------
+
+    def _build_shopping_check_page(self, payload: dict) -> None:
+        """Rebuild the quick-check page and item map from a shopping payload.
+
+        Maps the top unchecked items onto item keys (one per slot up to the
+        page's capacity), records each key's full item dict so a press can check
+        it off, and lays the keys out with a trailing Back key. Pure of I/O: the
+        caller fetches the payload.
+        """
+        cap = layout.shopping_check_capacity(self.key_count)
+        key_specs = actions.shopping_check_key_specs(payload, cap)
+        item_specs, items = actions.shopping_check_action_specs(key_specs)
+        self.shopping_check_items = items
+        self.shopping_check_page = layout.build_shopping_check_page(
+            item_specs, self.key_count
+        )
+
+    async def _enter_shopping_check(self) -> None:
+        """Switch the deck into the shopping quick-check page.
+
+        Fetches the current shopping list, builds the item keys, and swaps the
+        visible page. An empty or unreachable list still opens the page (just a
+        Back key) so the press never feels dead."""
+        payload = {"items": []}
+        if self.client is not None:
+            payload = await actions.fetch_shopping_items(
+                self.client, self.config.base_url
+            )
+        self._build_shopping_check_page(payload)
+        self.shopping_check_mode = True
+        self._draw_page()
+
+    def _exit_shopping_check(self) -> None:
+        """Leave the quick-check page and return to the normal layout."""
+        self.shopping_check_mode = False
+        self.shopping_check_items = {}
+        self.shopping_check_page = []
+        self._draw_page()
+
+    async def _refresh_shopping_check(self) -> None:
+        """Re-fetch the shopping list and rebuild the quick-check page in place.
+
+        Called after a check-off and on the poll loop while the page is up, so
+        the keys stay in step with the list (a checked item drops out, a newly
+        added one appears). Best-effort: a failure leaves the last page up."""
+        if not self.shopping_check_mode or self.client is None:
+            return
+        payload = await actions.fetch_shopping_items(
+            self.client, self.config.base_url
+        )
+        self._build_shopping_check_page(payload)
+        self._draw_page()
+
+    async def _shopping_check_press(self, name: str) -> str:
+        """Check off the item bound to a quick-check key, then refresh the page.
+
+        Returns a short face. An unknown key (its item already gone) is a safe
+        no-op. After a successful check the page is rebuilt so the item drops
+        out and the rest shuffle up."""
+        item = self.shopping_check_items.get(name)
+        if item is None or self.client is None:
+            return "Gone"
+        face = await actions.check_shopping_item(
+            self.client, self.config.base_url, item
+        )
+        await self._refresh_shopping_check()
+        return face
 
     def _timer_press(self, name: str, long_press: bool = False) -> None:
         if name not in self.timers:
@@ -1114,6 +1199,8 @@ class Controller:
             ha_entity_refresh=self._refresh_ha_entities,
             keypad_enter=self._enter_keypad,
             keypad_press=self._keypad_press,
+            shopping_check_enter=self._enter_shopping_check,
+            shopping_check_press=self._shopping_check_press,
         )
         try:
             msg = await actions.run_action(spec, ctx, long_press=long_press)
@@ -1309,6 +1396,11 @@ class Controller:
     def _page_next(self) -> None:
         if self.keypad_mode:
             self.keypad_page_idx = (self.keypad_page_idx + 1) % len(self.keypad_pages)
+        elif self.shopping_check_mode:
+            # The quick-check page has no further pages; its only paging key is
+            # the Back key, so a next is treated as an exit too.
+            self._exit_shopping_check()
+            return
         else:
             self.page = (self.page + 1) % len(self.pages)
         self._draw_page()
@@ -1316,6 +1408,10 @@ class Controller:
     def _page_prev(self) -> None:
         if self.keypad_mode:
             self.keypad_page_idx = (self.keypad_page_idx - 1) % len(self.keypad_pages)
+        elif self.shopping_check_mode:
+            # The Back key on the quick-check page returns to the normal layout.
+            self._exit_shopping_check()
+            return
         else:
             self.page = (self.page - 1) % len(self.pages)
         self._draw_page()
@@ -1393,6 +1489,10 @@ class Controller:
         await self._refresh_camera_snapshot()
         # Refresh the active scanner mode for any scan_mode key, same cadence.
         await self._refresh_scanner_mode()
+        # While the shopping quick-check page is up, keep its item keys in step
+        # with the live list (checked items drop out, new ones appear), same
+        # cadence. Skipped entirely when the page is not showing.
+        await self._refresh_shopping_check()
 
     def _tick_timers(self) -> bool:
         """Advance all active timers. Returns True if any expired this tick."""

@@ -388,10 +388,14 @@ class _Resp:
 class _FakeClient:
     """Minimal async stand-in for httpx.AsyncClient."""
 
-    def __init__(self, get_map=None, post_map=None):
+    def __init__(self, get_map=None, post_map=None, put_map=None):
         self.get_map = get_map or {}
         self.post_map = post_map or {}
+        self.put_map = put_map or {}
         self.calls = []
+        # Captured request bodies, keyed by (method, suffix-or-url), so a test can
+        # assert what was sent (e.g. the checked flag on a shopping item PUT).
+        self.bodies = []
 
     async def get(self, url, **kwargs):
         self.calls.append(("GET", url))
@@ -402,7 +406,16 @@ class _FakeClient:
 
     async def post(self, url, **kwargs):
         self.calls.append(("POST", url))
+        self.bodies.append(("POST", url, kwargs.get("json")))
         for suffix, resp in self.post_map.items():
+            if url.endswith(suffix):
+                return resp
+        return _Resp(404, {})
+
+    async def put(self, url, **kwargs):
+        self.calls.append(("PUT", url))
+        self.bodies.append(("PUT", url, kwargs.get("json")))
+        for suffix, resp in self.put_map.items():
             if url.endswith(suffix):
                 return resp
         return _Resp(404, {})
@@ -565,6 +578,160 @@ def test_shopping_add_action_posts_item_and_refreshes():
     # The configured item is what was posted.
     posted = [c for c in client.calls if c[0] == "POST"]
     assert posted and posted[0][1].endswith("/mealie/shopping/items")
+
+
+# -- shopping quick-check page (FoodAssistant-542t) ------------------------
+
+
+def test_shopping_item_name_prefers_display_then_food_then_note():
+    assert actions.shopping_item_name(
+        {"display": "2 Carrots", "food": {"name": "Carrot"}, "note": "carrots"}
+    ) == "2 Carrots"
+    assert actions.shopping_item_name(
+        {"food": {"name": "Carrot"}, "note": "carrots"}
+    ) == "Carrot"
+    assert actions.shopping_item_name({"note": "milk"}) == "milk"
+    assert actions.shopping_item_name({}) == ""
+    assert actions.shopping_item_name("nope") == ""
+
+
+def test_shopping_check_key_specs_maps_unchecked_items_in_order():
+    payload = {
+        "items": [
+            {"id": "a", "note": "Milk"},
+            {"id": "b", "note": "Bread", "checked": True},
+            {"id": "c", "display": "2 Eggs"},
+        ]
+    }
+    specs = actions.shopping_check_key_specs(payload, slots=4)
+    assert len(specs) == 4
+    # Checked item "Bread" is dropped; the rest keep payload order.
+    assert specs[0]["label"] == "Milk" and specs[0]["item_id"] == "a"
+    assert specs[1]["label"] == "2 Eggs" and specs[1]["item_id"] == "c"
+    assert specs[1]["item"]["id"] == "c"
+    # Trailing slots are inert placeholders.
+    assert specs[2]["item_id"] is None and specs[2]["item"] is None
+    assert specs[3]["item_id"] is None
+
+
+def test_shopping_check_key_specs_truncates_long_name():
+    payload = {"items": [{"id": "x", "note": "Extra Virgin Cold Pressed Olive Oil"}]}
+    specs = actions.shopping_check_key_specs(payload, slots=1)
+    assert len(specs[0]["label"]) <= actions.SHOPPING_CHECK_LABEL_MAX
+
+
+def test_shopping_check_key_specs_tolerates_empty_and_malformed():
+    assert actions.shopping_check_key_specs({}, slots=2) == [
+        {"label": "", "item_id": None, "item": None},
+        {"label": "", "item_id": None, "item": None},
+    ]
+    assert actions.shopping_check_key_specs("nope", slots=0) == []
+
+
+def test_shopping_check_action_specs_binds_items_to_named_keys():
+    key_specs = actions.shopping_check_key_specs(
+        {"items": [{"id": "a", "note": "Milk"}, {"id": "c", "note": "Eggs"}]},
+        slots=4,
+    )
+    specs, items = actions.shopping_check_action_specs(key_specs)
+    # Only the two real items become keys; placeholders are skipped.
+    assert [s.name for s in specs] == ["shopping_check_0", "shopping_check_1"]
+    assert all(s.kind == "shopping_check" for s in specs)
+    assert specs[0].label == "Milk"
+    # The item map lets a press recover the full item by the key's name.
+    assert items["shopping_check_0"]["id"] == "a"
+    assert items["shopping_check_1"]["id"] == "c"
+
+
+def test_fetch_shopping_items_returns_payload_or_empty():
+    client = _FakeClient(
+        get_map={"/mealie/shopping": _Resp(200, {"items": [{"id": "a"}]})}
+    )
+    out = asyncio.run(actions.fetch_shopping_items(client, "http://x"))
+    assert out == {"items": [{"id": "a"}]}
+    # On any failure it degrades to an empty item list, never crashes.
+    assert asyncio.run(
+        actions.fetch_shopping_items(_FakeClient(), "http://x")
+    ) == {"items": []}
+
+
+def test_check_shopping_item_puts_checked_true():
+    client = _FakeClient(
+        put_map={"/mealie/shopping/items/a": _Resp(200, {"ok": True})}
+    )
+    face = asyncio.run(
+        actions.check_shopping_item(client, "http://x", {"id": "a", "note": "Milk"})
+    )
+    assert face == "Checked"
+    assert ("PUT", "http://x/mealie/shopping/items/a") in client.calls
+    # The full item is PUT back with checked flipped True.
+    body = next(b for b in client.bodies if b[0] == "PUT")[2]
+    assert body["checked"] is True and body["note"] == "Milk"
+
+
+def test_check_shopping_item_empty_and_failure_faces():
+    # No item, or an item with no id, is nothing to check: an "Empty" face.
+    assert asyncio.run(actions.check_shopping_item(_FakeClient(), "http://x", {})) == "Empty"
+    assert asyncio.run(
+        actions.check_shopping_item(_FakeClient(), "http://x", "nope")
+    ) == "Empty"
+    # A non-200 (no matching PUT route) surfaces a readable failure, not a crash.
+    assert asyncio.run(
+        actions.check_shopping_item(_FakeClient(), "http://x", {"id": "a"})
+    ) == "Failed"
+
+
+def test_shopping_check_page_action_enters_via_context():
+    entered = {"n": 0}
+
+    async def enter():
+        entered["n"] += 1
+
+    ctx, _ = _ctx(_FakeClient())
+    ctx.shopping_check_enter = enter
+    msg = asyncio.run(actions.run_action(actions.ACTIONS["shopping_check"], ctx))
+    assert msg == "check"
+    assert entered["n"] == 1
+
+
+def test_shopping_check_key_press_dispatches_to_context():
+    pressed = []
+
+    async def press(name):
+        pressed.append(name)
+        return "Checked"
+
+    ctx, _ = _ctx(_FakeClient())
+    ctx.shopping_check_press = press
+    spec = actions.ActionSpec(
+        name="shopping_check_2", label="Milk", color="#0f766e",
+        kind="shopping_check",
+    )
+    msg = asyncio.run(actions.run_action(spec, ctx))
+    assert msg == "Checked"
+    assert pressed == ["shopping_check_2"]
+
+
+def test_shopping_check_entry_spec_and_grouping():
+    spec = actions.ACTIONS["shopping_check"]
+    assert spec.kind == "shopping_check_page"
+    cat = {a["name"]: a for a in actions.catalog()}
+    assert cat["shopping_check"]["group"] == "Actions"
+
+
+def test_shopping_check_page_layout_reserves_back_key():
+    from foodassistant_streamdeck import layout
+    assert layout.shopping_check_capacity(15) == 14
+    item_specs = [
+        actions.ActionSpec(name=f"shopping_check_{i}", label=f"i{i}",
+                           color="#0f766e", kind="shopping_check")
+        for i in range(3)
+    ]
+    page = layout.build_shopping_check_page(item_specs, 15)
+    assert len(page) == 15
+    assert [s.name for s in page[:3]] == ["shopping_check_0", "shopping_check_1", "shopping_check_2"]
+    assert page[3] is None  # unused item slot
+    assert page[-1] is actions.ACTIONS["page_prev"]  # Back key
 
 
 def test_macro_runs_each_child_action_in_order():
@@ -3085,3 +3252,80 @@ def test_overrides_skip_unplaced_and_ignore_id():
     assert specs[2].kind == "timer"
     assert specs[2].label == "Tea"
     assert specs[2].timer_minutes == 10
+
+
+# -- shopping quick-check controller flow (FoodAssistant-542t) --------------
+
+
+def _shopping_client(items, put_ok=True):
+    """A fake client serving a shopping list and accepting check-off PUTs."""
+    put_map = {}
+    if put_ok:
+        for it in items:
+            put_map[f"/mealie/shopping/items/{it['id']}"] = _Resp(200, {"ok": True})
+    return _FakeClient(
+        get_map={"/mealie/shopping": _Resp(200, {"list": {"id": "L1"}, "items": items})},
+        put_map=put_map,
+    )
+
+
+def test_enter_shopping_check_builds_item_keys():
+    ctrl, deck, loop = _make_controller()
+    items = [{"id": "a", "note": "Milk"}, {"id": "b", "note": "Bread"}]
+    ctrl.client = _shopping_client(items)
+    loop.run_until_complete(ctrl._enter_shopping_check())
+    assert ctrl.shopping_check_mode
+    page = ctrl._current()
+    assert len(page) == ctrl.key_count
+    # First two slots are the item keys; the last is the Back key.
+    assert page[0].kind == "shopping_check" and page[0].label == "Milk"
+    assert page[1].label == "Bread"
+    assert page[-1] is actions.ACTIONS["page_prev"]
+    assert ctrl.shopping_check_items["shopping_check_0"]["id"] == "a"
+    loop.close()
+
+
+def test_shopping_check_press_checks_off_and_refreshes():
+    ctrl, deck, loop = _make_controller()
+    items = [{"id": "a", "note": "Milk"}, {"id": "b", "note": "Bread"}]
+    client = _shopping_client(items)
+    ctrl.client = client
+    loop.run_until_complete(ctrl._enter_shopping_check())
+    face = loop.run_until_complete(ctrl._shopping_check_press("shopping_check_0"))
+    assert face == "Checked"
+    # The full Milk item was PUT back checked True.
+    put = next(b for b in client.bodies if b[0] == "PUT")
+    assert put[1].endswith("/mealie/shopping/items/a") and put[2]["checked"] is True
+    loop.close()
+
+
+def test_shopping_check_press_unknown_key_is_safe():
+    ctrl, deck, loop = _make_controller()
+    ctrl.client = _shopping_client([{"id": "a", "note": "Milk"}])
+    loop.run_until_complete(ctrl._enter_shopping_check())
+    face = loop.run_until_complete(ctrl._shopping_check_press("shopping_check_9"))
+    assert face == "Gone"
+    loop.close()
+
+
+def test_back_key_exits_shopping_check_mode():
+    ctrl, deck, loop = _make_controller()
+    ctrl.client = _shopping_client([{"id": "a", "note": "Milk"}])
+    loop.run_until_complete(ctrl._enter_shopping_check())
+    assert ctrl.shopping_check_mode
+    # The Back key dispatches page_prev, which exits the page in this mode.
+    ctrl._page_prev()
+    assert not ctrl.shopping_check_mode
+    assert ctrl.shopping_check_items == {}
+    # Back on the normal layout the current page is a real page again.
+    assert ctrl._current() is ctrl.pages[ctrl.page]
+    loop.close()
+
+
+def test_refresh_shopping_check_noop_when_not_open():
+    ctrl, deck, loop = _make_controller()
+    ctrl.client = _shopping_client([{"id": "a", "note": "Milk"}])
+    # Not in the mode: the refresh is a cheap no-op that touches no client.
+    loop.run_until_complete(ctrl._refresh_shopping_check())
+    assert ctrl.client.calls == []
+    loop.close()

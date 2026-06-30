@@ -156,6 +156,39 @@ def build_keypad_pages(key_count: int) -> list[list[Optional[ActionSpec]]]:
     return pages
 
 
+def shopping_check_capacity(key_count: int) -> int:
+    """How many shopping items the quick-check page can show at once.
+
+    The final key is reserved for a Back/exit key that returns to the normal
+    layout, so the page offers ``key_count - 1`` item slots. A degenerate
+    one-key deck still keeps a single Back key (zero item slots).
+    """
+    if key_count < 1:
+        raise ValueError("key_count must be positive")
+    return max(0, key_count - 1)
+
+
+def build_shopping_check_page(
+    item_specs: list[ActionSpec], key_count: int
+) -> list[Optional[ActionSpec]]:
+    """Lay out the dynamic shopping quick-check page across one deck page.
+
+    ``item_specs`` are the per-item ActionSpecs (kind ``shopping_check``) the
+    controller built from the current shopping list, already trimmed to at most
+    ``shopping_check_capacity(key_count)``. They fill the page in reading order;
+    any unused item slots are left blank, and the final key is always a Back key
+    (a ``page_prev`` spec) the controller treats as the exit. Returns a flat list
+    of exactly ``key_count`` slots (ActionSpec or None).
+    """
+    if key_count < 1:
+        raise ValueError("key_count must be positive")
+    cap = shopping_check_capacity(key_count)
+    page: list[Optional[ActionSpec]] = list(item_specs[:cap])
+    page += [None] * (cap - len(page))
+    page.append(ACTIONS["page_prev"])
+    return page
+
+
 def _specs(names: list[str]) -> list[ActionSpec]:
     return [ACTIONS[n] for n in names if n in ACTIONS]
 

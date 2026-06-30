@@ -232,6 +232,111 @@ def recipe_timer_key_specs(
     return specs
 
 
+# Longest item name a shopping-check key shows on its face before truncation, so
+# a long product name stays glanceable on a single key during a quick unpack.
+SHOPPING_CHECK_LABEL_MAX: int = 12
+
+
+def shopping_item_name(item: dict) -> str:
+    """Best-effort display name for a Mealie shopping-list item.
+
+    Mealie items carry a free-text ``note`` (the typed line), and structured
+    items also carry a ``display`` string and a ``food`` object with a ``name``.
+    Prefer the most human form, falling back through the others, so a key face
+    reads naturally whether the item was typed or pulled from a recipe. Pure, so
+    it is unit-testable without any network.
+    """
+    if not isinstance(item, dict):
+        return ""
+    food = item.get("food") or {}
+    name = (food.get("name") if isinstance(food, dict) else "") or ""
+    display = item.get("display") or ""
+    note = item.get("note") or ""
+    for candidate in (display, name, note):
+        text = str(candidate or "").strip()
+        if text:
+            return text
+    return ""
+
+
+def shopping_check_key_specs(
+    payload: dict,
+    slots: int,
+    default_labels: Optional[list[str]] = None,
+) -> list[dict]:
+    """Map a /mealie/shopping payload onto up to ``slots`` check-key descriptors.
+
+    Returns a list of exactly ``slots`` dicts, one per check key, each shaped
+    ``{"label": str, "item_id": Optional[str], "item": Optional[dict]}``. Only
+    unchecked items are offered (already-checked-off items drop out), in the
+    payload's own order, so the keys mirror the top of the list the way the web
+    UI shows it. The first N slots carry a cleaned, face-safe item name plus the
+    item id and the full item dict (needed to PUT the check-off back); any
+    remaining slots are empty placeholders with ``item_id`` None and a stock
+    fallback label so they render as a neutral, inert key.
+
+    ``default_labels`` supplies the stock per-slot label for the empty trailing
+    slots; a missing or short list falls back to a blank label. The function is
+    pure: no clock, no I/O, so it is fully unit-testable. An empty or malformed
+    payload yields all-empty placeholders.
+    """
+    slots = max(0, int(slots))
+    default_labels = list(default_labels or [])
+    items = []
+    if isinstance(payload, dict):
+        raw = payload.get("items")
+        if isinstance(raw, list):
+            items = [i for i in raw if isinstance(i, dict) and not i.get("checked")]
+    specs: list[dict] = []
+    for i in range(slots):
+        fallback = default_labels[i] if i < len(default_labels) else ""
+        if i < len(items):
+            item = items[i]
+            label = clean_timer_label(
+                shopping_item_name(item), SHOPPING_CHECK_LABEL_MAX
+            ) or "Item"
+            specs.append({
+                "label": label,
+                "item_id": str(item.get("id") or "") or None,
+                "item": item,
+            })
+        else:
+            specs.append({"label": fallback, "item_id": None, "item": None})
+    return specs
+
+
+SHOPPING_CHECK_KEY_COLOR: str = "#0f766e"
+
+
+def shopping_check_action_specs(
+    key_specs: list[dict],
+) -> tuple[list[ActionSpec], dict[str, dict]]:
+    """Turn shopping_check_key_specs output into deck ActionSpecs plus an item map.
+
+    Returns ``(specs, items)`` where ``specs`` is one ActionSpec (kind
+    ``shopping_check``) per real item slot, in order, and ``items`` maps each
+    spec's name to the full item dict so the controller can check the right item
+    off when that key is pressed. Placeholder slots (no bound item) are skipped,
+    so the caller pads the page with blanks. Names are stable per slot index
+    (``shopping_check_0`` ..) so a redraw keeps the binding. Pure, so it is
+    unit-testable without any device.
+    """
+    specs: list[ActionSpec] = []
+    items: dict[str, dict] = {}
+    for i, ks in enumerate(key_specs):
+        item = ks.get("item") if isinstance(ks, dict) else None
+        if not item or not ks.get("item_id"):
+            continue
+        name = f"shopping_check_{i}"
+        items[name] = item
+        specs.append(ActionSpec(
+            name=name, label=ks.get("label", "Item"),
+            color=SHOPPING_CHECK_KEY_COLOR, kind="shopping_check",
+            icon="cart-check",
+        ))
+    return specs, items
+
+
 # Largest PIN the buffer will hold. Generous enough for any reasonable unlock
 # code; extra presses past this are ignored rather than silently truncating a
 # longer code into a different one.
@@ -737,6 +842,7 @@ ACTION_ICONS: dict[str, str] = {
     "camera": "camera-video",
     "camera_full": "camera",
     "scan_mode": "upc-scan",
+    "shopping_check": "cart-check",
 }
 
 
@@ -1092,6 +1198,15 @@ ACTIONS: dict[str, ActionSpec] = {
         "physical scanner then adds to inventory, consumes stock, or adds to the "
         "shopping list. The key face shows the active mode.",
     ),
+    "shopping_check": ActionSpec(
+        name="shopping_check",
+        label="Check\nOff",
+        color="#0f766e",
+        kind="shopping_check_page",
+        description="Open a quick-check page whose keys are the top items on the "
+        "Mealie shopping list. Press an item to check it off (handy while "
+        "unpacking groceries). A Back key returns to the normal layout.",
+    ),
 }
 
 # Stamp each spec with its glyph from the single-source-of-truth map above, so
@@ -1130,7 +1245,7 @@ ACTION_EMOJI: dict[str, str] = {
     "screen_off": "sleep", "screen_on": "sun", "health": "heart",
     "convert": "abacus", "timers_view": "stopwatch",
     "kiosk_restart": "refresh", "update": "inbox", "reboot": "plug",
-    "shopping_add": "cart", "macro": "bolt",
+    "shopping_add": "cart", "macro": "bolt", "shopping_check": "cart",
 }
 
 
@@ -1161,6 +1276,7 @@ DEFAULT_ORDER: list[str] = [
     "recipes",
     "mealplan",
     "shopping",
+    "shopping_check",
     "meal_today",
     "cooked",
     "timer_1",
@@ -1190,6 +1306,7 @@ _GROUP_BY_KIND = {
     "health": "System", "bridge_action": "System",
     "camera": "Camera", "camera_full": "Camera",
     "scan_mode": "Actions", "ha_service": "Home Assistant",
+    "shopping_check_page": "Actions", "shopping_check": "Actions",
 }
 
 
@@ -1706,6 +1823,51 @@ async def add_shopping_item(client: Any, base_url: str, item: str) -> str:
         return "Failed"
 
 
+async def fetch_shopping_items(client: Any, base_url: str) -> dict:
+    """Fetch the current Mealie shopping list payload, or an empty one on error.
+
+    Returns the app's /mealie/shopping shape ``{list, items, ...}`` so the caller
+    can map the top items onto check keys via ``shopping_check_key_specs``. Any
+    network or service failure degrades to ``{"items": []}`` so the check keys
+    quietly empty out rather than crashing the poll loop.
+    """
+    base = base_url.rstrip("/")
+    try:
+        r = await client.get(f"{base}/mealie/shopping")
+        if r.status_code == 200:
+            data = r.json()
+            return data if isinstance(data, dict) else {"items": []}
+    except Exception:  # noqa: BLE001 - surface as no items, never crash
+        pass
+    return {"items": []}
+
+
+async def check_shopping_item(client: Any, base_url: str, item: dict) -> str:
+    """Check a Mealie shopping-list item off the list. Returns a short face.
+
+    PUTs the full item back to /mealie/shopping/items/{id} with ``checked`` set
+    True (the same shape the web UI sends to toggle an item), so the app forwards
+    the update to Mealie. Returns "Checked" on success, "Empty" when there is no
+    item to check, and "Failed" on any error, so a press always degrades to a
+    readable face rather than crashing the controller.
+    """
+    if not isinstance(item, dict):
+        return "Empty"
+    item_id = str(item.get("id") or "").strip()
+    if not item_id:
+        return "Empty"
+    base = base_url.rstrip("/")
+    payload = dict(item)
+    payload["checked"] = True
+    try:
+        r = await client.put(
+            f"{base}/mealie/shopping/items/{item_id}", json=payload,
+        )
+        return "Checked" if r.status_code == 200 else "Failed"
+    except Exception:  # noqa: BLE001 - never crash a press
+        return "Failed"
+
+
 async def start_server_timer(
     client: Any, base_url: str, label: str, seconds: float,
 ) -> bool:
@@ -1883,6 +2045,15 @@ class ActionContext:
     )
     # Enter the on-deck PIN keypad (kind=="pin").
     keypad_enter: Callable[[], None] = field(default=lambda: None)
+    # Enter the dynamic shopping-check page (kind=="shopping_check_page").
+    shopping_check_enter: Callable[[], Awaitable[None]] = field(
+        default=lambda: __import__("asyncio").sleep(0)
+    )
+    # Check off the item bound to a dynamic shopping-check key (kind==
+    # "shopping_check"). The arg is the pressed spec's name; returns a face.
+    shopping_check_press: Callable[[str], Awaitable[str]] = field(
+        default=lambda _name: __import__("asyncio").sleep(0, result="")
+    )
     # Handle a keypad key press (kind=="keypad"); arg is the keypad_key value.
     keypad_press: Callable[[str], Awaitable[None]] = field(
         default=lambda _k: __import__("asyncio").sleep(0)
@@ -2059,6 +2230,18 @@ async def run_action(spec: ActionSpec, ctx: ActionContext, long_press: bool = Fa
         face = await add_shopping_item(ctx.client, base, spec.item)
         await ctx.refresh()
         return face
+
+    if spec.kind == "shopping_check_page":
+        # Open the dynamic shopping quick-check page. The controller populates it
+        # from the current shopping list and swaps the visible page.
+        await ctx.shopping_check_enter()
+        return "check"
+
+    if spec.kind == "shopping_check":
+        # A dynamic key bound to one shopping-list item: check it off (via the
+        # controller, which holds the item dicts keyed by spec name) and let the
+        # controller refresh the page so the checked item drops out.
+        return await ctx.shopping_check_press(spec.name)
 
     if spec.kind == "macro":
         # Run each named child action in order, reusing the same dispatcher so
