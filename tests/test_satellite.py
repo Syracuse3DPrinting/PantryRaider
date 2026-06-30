@@ -372,6 +372,21 @@ def test_merge_streamdeck_settings_overlays_only_weather_and_theme():
     assert base["weather_location"] == "old"
 
 
+def test_custom_keys_are_synced_to_satellites():
+    """Custom Stream Deck keys are pulled and pushed to a satellite's deck so a
+    button built on the server shows everywhere (FoodAssistant-n0r1)."""
+    from app.services import satellite as sat
+    assert "streamdeck_key_overrides" in SATELLITE_PULL_FIELDS
+    assert "streamdeck_key_overrides" in sat._STREAMDECK_SYNCED_FIELDS
+    merged = sat._merge_streamdeck_settings(
+        {"rotation": 0}, "B", "f", "dark",
+        key_overrides=[{"slot": 3, "type": "shopping_add", "item": "Milk"},
+                       "bad-entry"],
+    )
+    # Only well-formed override dicts survive into the deck config.
+    assert merged["key_overrides"] == [{"slot": 3, "type": "shopping_add", "item": "Milk"}]
+
+
 def test_merge_streamdeck_settings_overlays_ha_and_cameras():
     from app.services import satellite as sat
 

@@ -104,6 +104,9 @@ _STREAMDECK_SYNCED_FIELDS = (
     # deck drives the same entities and feeds without local setup (cr50).
     "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
     "streamdeck_cameras",
+    # Custom keys, so a button built on the server shows on every satellite deck
+    # (FoodAssistant-n0r1).
+    "streamdeck_key_overrides",
 )
 
 
@@ -111,8 +114,10 @@ def _merge_streamdeck_settings(config: dict, location: str, units: str, theme: s
                                key_style: str = "rich", icon_color: str = "full",
                                ha_base_url: str = "", ha_token: str = "",
                                ha_slots: list | None = None,
-                               cameras: list | None = None) -> dict:
-    """Return config with the synced weather, theme, key style, HA, and cameras overlaid.
+                               cameras: list | None = None,
+                               key_overrides: list | None = None) -> dict:
+    """Return config with the synced weather, theme, key style, HA, cameras, and
+    custom keys overlaid.
 
     The bridge rewrites the whole config.toml from the posted dict, so a caller
     must read the current config, overlay just these keys, and post the whole
@@ -132,6 +137,9 @@ def _merge_streamdeck_settings(config: dict, location: str, units: str, theme: s
          "ha_entity": c.get("ha_entity", "")}
         for c in (cameras or []) if isinstance(c, dict)
     ]
+    # Custom keys are applied to the deck by slot, so overlaying them is enough
+    # for a server-built button to appear on the satellite (FoodAssistant-n0r1).
+    merged["key_overrides"] = [o for o in (key_overrides or []) if isinstance(o, dict)]
     return merged
 
 
@@ -162,6 +170,7 @@ def _push_streamdeck_settings(timeout: float = 4.0) -> bool:
             settings.streamdeck_ha_token,
             settings.streamdeck_ha_slots,
             settings.streamdeck_cameras,
+            settings.streamdeck_key_overrides,
         )
         resp = httpx.post(
             f"{_HOST_BRIDGE}/streamdeck/config", json={"config": merged}, timeout=timeout

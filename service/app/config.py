@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.6.149"
+APP_VERSION = "0.6.150"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -229,6 +229,10 @@ SATELLITE_PULL_FIELDS = [
     # attached to, so a satellite can pick its own key style / icon mode (e.g.
     # the full-colour emoji set) and have it stick instead of being overwritten
     # by the server on the next sync (FoodAssistant-ys79).
+    # Custom Stream Deck keys (timers, quick-adds, HA actions, macros, ...), so a
+    # custom button built on the main server appears on every satellite's deck,
+    # not just the device it was made on (FoodAssistant-n0r1).
+    "streamdeck_key_overrides",
     # Cameras, so a satellite's kiosk page and deck mirror the server's feeds.
     "streamdeck_cameras",
     # Home Assistant credentials + key map, so a satellite's deck drives the same
