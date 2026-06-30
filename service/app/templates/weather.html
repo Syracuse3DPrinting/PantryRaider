@@ -4,9 +4,51 @@
 {% block content %}
 <div class="mt-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
   <h4 class="mb-0"><i class="bi bi-cloud-sun me-2"></i>Weather{% if weather_location %} <span class="text-secondary fs-6">{{ weather_location }}</span>{% endif %}</h4>
-  <button type="button" class="btn btn-outline-info btn-sm" onclick="reloadWeather()">
-    <i class="bi bi-arrow-clockwise me-1"></i>Refresh
-  </button>
+  <div class="d-flex gap-2">
+    <button type="button" class="btn btn-outline-secondary btn-sm" data-bs-toggle="collapse" data-bs-target="#wxSettings" title="Location and units">
+      <i class="bi bi-gear"></i>
+    </button>
+    <button type="button" class="btn btn-outline-info btn-sm" onclick="reloadWeather()">
+      <i class="bi bi-arrow-clockwise me-1"></i>Refresh
+    </button>
+  </div>
+</div>
+
+{# The weather location and units are set right here on the Weather page (no
+   separate settings section). They are shared with the Stream Deck weather key. #}
+<div class="collapse mb-3" id="wxSettings">
+  <div class="card card-body">
+    <div class="row g-2 align-items-end">
+      <div class="col-12 col-md-5">
+        <label class="form-label small mb-1" for="wxLocation">Location</label>
+        <input type="text" class="form-control form-control-sm" id="wxLocation"
+               placeholder="City, ZIP, or lat,lon (empty = auto-detect)" value="{{ weather_location }}">
+      </div>
+      <div class="col-6 col-md-3">
+        <label class="form-label small mb-1" for="wxUnits">Units</label>
+        <select class="form-select form-select-sm" id="wxUnits">
+          <option value="f" {{ 'selected' if weather_units != 'c' else '' }}>Fahrenheit (°F)</option>
+          <option value="c" {{ 'selected' if weather_units == 'c' else '' }}>Celsius (°C)</option>
+        </select>
+      </div>
+      <div class="col-6 col-md-4">
+        <button type="button" class="btn btn-info btn-sm" onclick="saveWeatherSettings(this)">
+          <i class="bi bi-check-lg me-1"></i>Save
+        </button>
+        <span class="small ms-1" id="wxSaveResult"></span>
+      </div>
+      <div class="col-12">
+        <a class="small text-decoration-none" data-bs-toggle="collapse" href="#wxAdvanced" role="button"><i class="bi bi-sliders me-1"></i>Advanced</a>
+        <div class="collapse mt-2" id="wxAdvanced">
+          <label class="form-label small mb-1" for="wxServer">Weather server</label>
+          <input type="text" class="form-control form-control-sm" id="wxServer" style="max-width:420px"
+                 placeholder="https://api.open-meteo.com" value="{{ weather_api_base }}">
+          <div class="form-text">The Open-Meteo API base URL. Default is the public service; point it at a self-hosted Open-Meteo if you run one. Falls back to wttr.in if unreachable.</div>
+        </div>
+      </div>
+    </div>
+    <div class="form-text mt-1">Used by this page and any Stream Deck weather keys.</div>
+  </div>
 </div>
 
 <div id="weatherLoading" class="text-secondary py-5 text-center">
@@ -56,7 +98,7 @@
 
 <div id="weatherError" class="d-none text-center text-secondary p-4">
   <i class="bi bi-cloud-slash fs-1 d-block mb-2"></i>
-  <div>Forecast unavailable{% if not weather_location %}. Set a weather location under Settings (the Stream Deck weather card){% endif %}.</div>
+  <div>Forecast unavailable{% if not weather_location %}. Set a weather location with the gear button above{% endif %}.</div>
   <div class="small mt-2" id="weatherErrorDetail"></div>
   <div class="small text-secondary mt-1">The forecast is fetched by the server running FoodAssistant; that machine needs internet access to the weather service.</div>
 </div>
@@ -174,6 +216,29 @@
       if (detail) detail.textContent = e.message && e.message !== 'unavailable' ? 'Reason: ' + e.message : '';
       errEl.classList.remove('d-none');
     }
+  }
+
+  async function saveWeatherSettings(btn) {
+    const out = document.getElementById('wxSaveResult');
+    const location = document.getElementById('wxLocation')?.value || '';
+    const units = document.getElementById('wxUnits')?.value || 'f';
+    const server = document.getElementById('wxServer')?.value.trim() || '';
+    const orig = btn.innerHTML; btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+    if (out) out.textContent = '';
+    try {
+      const r = await fetch('setup/save', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ streamdeck_weather_location: location,
+                               streamdeck_weather_units: units, weather_api_base: server }),
+      });
+      const d = await r.json();
+      if (!d.ok) throw new Error(d.detail || 'Save failed');
+      if (out) out.innerHTML = '<span class="text-success"><i class="bi bi-check-circle"></i></span>';
+      reloadWeather();
+    } catch (e) {
+      if (out) out.innerHTML = '<span class="text-danger">' + e.message + '</span>';
+    } finally { btn.disabled = false; btn.innerHTML = orig; }
   }
 
   reloadWeather();

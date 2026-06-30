@@ -19,6 +19,7 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 - **Reset navigation to defaults.** The navigation editor has a Reset to defaults button that restores the original tab order, folder grouping, and visibility in one click.
 
 ### Changed
+- **Weather settings moved onto the Weather page.** Weather no longer has its own settings menu section; set the location, units, and (advanced) weather server with the gear button on the Weather page. The Stream Deck weather key still uses the same values.
 - **Start Page editor mirrors the Stream Deck.** The Start Page now has the same custom-key builder as the Stream Deck (Home Assistant actions, timers, weather, cameras, media, macros). Custom keys are one shared library: build or edit a key on either side and it shows up on both, with the Stream Deck key placements preserved.
 - **Combined Start Page and Stream Deck menu.** Settings now has one "Start & Stream Deck" item with a toggle at the top (like Settings vs Personalization) to switch between the on-screen Start Page and the physical Stream Deck, which share the same custom-button library. The Start tab also appears in the main navigation automatically when the Start Page is enabled.
 - **Settings and Personalization split into clearer menus.** The Interface pane is now two separate menu items, Theme and Navigation. Display and Stream Deck moved from Settings into the Personalization menu, and the live attached-hardware detection moved from the Stream Deck pane to the Hardware pane where hardware detection belongs.

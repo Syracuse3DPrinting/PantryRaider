@@ -60,7 +60,6 @@ def test_personalization_heading_and_links(client, monkeypatch):
     for pane in (
         "pane-personalization-recipes",
         "pane-personalization-storage",
-        "pane-personalization-weather",
     ):
         assert f'data-bs-target="#{pane}"' in html
         assert f'id="{pane}"' in html
@@ -95,13 +94,25 @@ def test_storage_categories_moved_out_of_inventory(client, monkeypatch):
     assert "saveStorageCategories()" in store
 
 
-def test_streamdeck_weather_personalization_pane_non_satellite(client, monkeypatch):
+def test_weather_has_no_dedicated_settings_pane(client, monkeypatch):
+    # Weather no longer has its own Personalization section; location/units are
+    # set on the Weather page itself (FoodAssistant). A hidden input keeps the
+    # Stream Deck save working.
     html = _render(client, monkeypatch, satellite=False)
-    wx = html.split('id="pane-personalization-weather"', 1)[1].split(
-        'id="pane-', 1
-    )[0]
-    assert "streamdeck_weather_location" in wx
-    assert 'onclick="saveStreamDeckWeather(this)"' in wx
+    assert 'id="pane-personalization-weather"' not in html
+    assert 'data-bs-target="#pane-personalization-weather"' not in html
+    assert 'id="streamdeck_weather_location"' in html  # hidden mirror for the deck save
+
+
+def test_weather_page_has_location_settings(client, monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "grocy_base_url", "http://g")
+    monkeypatch.setattr(settings, "grocy_api_key", "k")
+    with patch.object(type(settings), "is_configured", lambda self: True):
+        html = client.get("/ui/weather").text
+    assert 'id="wxLocation"' in html
+    assert 'id="wxUnits"' in html
+    assert 'onclick="saveWeatherSettings(this)"' in html
 
 
 def test_satellite_recipe_prefs_pane_is_read_only(client, monkeypatch):

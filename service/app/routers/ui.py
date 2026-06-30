@@ -523,6 +523,7 @@ async def weather_page(request: Request):
         "active": "weather",
         "weather_location": settings.streamdeck_weather_location or "",
         "weather_units": settings.streamdeck_weather_units or "f",
+        "weather_api_base": settings.weather_api_base or "",
     })
 
 

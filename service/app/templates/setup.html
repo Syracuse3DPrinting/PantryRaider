@@ -993,11 +993,6 @@
             <i class="bi bi-display me-2"></i>Display
           </button>
           {% endif %}
-          {% if not features.satellite %}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-weather" type="button">
-            <i class="bi bi-cloud-sun me-2"></i>Weather
-          </button>
-          {% endif %}
           {# Combined Start Page + Stream Deck menu. A top toggle inside the pane
              switches between the on-screen Start Page and (on a Pi) the physical
              Stream Deck, which share the same custom-button library. #}
@@ -2383,45 +2378,12 @@ docker compose up -d</code></pre>
           </div>
         </div>
 
-        <!-- Personalization: Stream Deck Weather (moved from Satellite Devices,
-             FoodAssistant-pszk). Stays main-server only (non-satellite): any
-             main server, Pi or not, sets the location/units that satellite decks
-             pull. A satellite reads these read-only in its own Stream Deck pane. -->
-        <div class="tab-pane fade" id="pane-personalization-weather">
-          <p class="pane-intro">The location, units, and data source for the on-screen <a href="ui/weather" target="_blank">Weather page</a> and any Stream Deck weather keys (including satellite decks).</p>
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-cloud-sun text-info"></i> Weather</div>
-            <div class="row g-3 mb-2">
-              <div class="col-md-6">
-                <label class="form-label">Weather Location</label>
-                <input type="text" class="form-control form-control-sm" id="streamdeck_weather_location"
-                       placeholder="Leave empty to auto-detect" value="{{ s.streamdeck_weather_location }}">
-              </div>
-              <div class="col-md-6">
-                <label class="form-label">Weather Units</label>
-                <select class="form-select form-select-sm" id="streamdeck_weather_units">
-                  <option value="f" {{ 'selected' if s.streamdeck_weather_units == 'f' else '' }}>Fahrenheit (°F)</option>
-                  <option value="c" {{ 'selected' if s.streamdeck_weather_units == 'c' else '' }}>Celsius (°C)</option>
-                </select>
-              </div>
-            </div>
-            <div class="mb-2">
-              <a class="small text-decoration-none" data-bs-toggle="collapse" href="#weather-advanced" role="button">
-                <i class="bi bi-sliders me-1"></i>Advanced</a>
-              <div class="collapse mt-2" id="weather-advanced">
-                <label class="form-label">Weather server</label>
-                <input type="text" class="form-control form-control-sm" id="weather_api_base"
-                       placeholder="https://api.open-meteo.com" value="{{ s.weather_api_base }}" style="max-width:420px">
-                <div class="form-text">The Open-Meteo API base URL. The default is the public service; point it at a self-hosted Open-Meteo if you run one. The app falls back to wttr.in if this is unreachable.</div>
-              </div>
-            </div>
-            <button type="button" class="btn btn-info btn-sm" onclick="saveStreamDeckWeather(this)">
-              <i class="bi bi-check-lg me-1"></i>Save weather
-            </button>
-            <span class="test-result sd-weather-result ms-1"></span>
-            <div class="form-text">Location is a city, ZIP, or "lat,lon". Used by the Weather page, this device's deck (if connected), and every connected satellite deck.</div>
-          </div>
-        </div>
+        {# Weather location/units no longer have their own settings section: they
+           are set on the Weather page itself (FoodAssistant). These hidden inputs
+           stay so the Stream Deck save still reads the current location/units the
+           deck weather key should use. #}
+        <input type="hidden" id="streamdeck_weather_location" value="{{ s.streamdeck_weather_location }}">
+        <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
         {% endif %}
 
         <!-- Personalization: on-screen Start Page (FoodAssistant) -->
@@ -2651,16 +2613,11 @@ docker compose up -d</code></pre>
           <p class="pane-intro">Configure the Elgato Stream Deck attached to this appliance.</p>
 
           {% if features.satellite %}
-          <!-- On a satellite the deck weather is server-controlled, so there are
-               no editable controls here, just a note pointing to the main server.
-               The values are kept as hidden inputs (same ids) so a deck save
-               still reports the synced location and units. -->
-          <div class="section-card mb-3">
-            <div class="section-title"><i class="bi bi-cloud-sun text-info"></i> Stream Deck Weather</div>
-            <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Weather settings are managed on the main server and sync to this device automatically. Change the location and units there (Personalization, Stream Deck Weather).</div>
-            <input type="hidden" id="streamdeck_weather_location" value="{{ s.streamdeck_weather_location }}">
-            <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
-          </div>
+          <!-- On a satellite the deck weather is server-controlled. Just a note
+               (no section); hidden inputs keep the synced values for a deck save. -->
+          <div class="form-text mb-3"><i class="bi bi-cloud-sun me-1"></i>Weather location and units are managed on the main server and sync here automatically.</div>
+          <input type="hidden" id="streamdeck_weather_location" value="{{ s.streamdeck_weather_location }}">
+          <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
           {% endif %}
 
           <div class="section-card mb-3">
