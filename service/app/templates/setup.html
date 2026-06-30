@@ -4441,26 +4441,30 @@ function downloadLogs() {
 // date" because of a stale local checkout (FoodAssistant-r7e6). The actual
 // pull/restart stays on the separate "Update now" button.
 async function checkSatelliteUpdate(btn) {
-  const el = document.getElementById('update-avail');
+  // Always have somewhere to write: the availability line if present, otherwise
+  // the result line, so the check never silently does nothing.
+  const el = document.getElementById('update-avail') || document.getElementById('update-result');
   let orig;
   if (btn) { orig = btn.innerHTML; btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Checking…'; }
-  if (el) el.innerHTML = '<span class="text-secondary"><i class="bi bi-hourglass-split me-1"></i>Checking for a newer version…</span>';
+  const write = function (cls, html) { if (el) el.innerHTML = '<span class="' + cls + '">' + html + '</span>'; };
+  write('text-secondary', '<i class="bi bi-hourglass-split me-1"></i>Checking for a newer version…');
   try {
-    const r = await fetch('admin/check-update');
+    const r = await fetch('admin/check-update', { cache: 'no-store' });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
     const d = await r.json();
-    if (!el) return;
     if (!d.ok) {
-      el.innerHTML = '<span class="text-secondary"><i class="bi bi-dash-circle me-1"></i>' +
-        (d.error || 'Update check unavailable') + ' (running v' + d.current + ').</span>';
+      write('text-secondary', '<i class="bi bi-dash-circle me-1"></i>' +
+        (d.error || 'Update check unavailable') + ' (running v' + (d.current || '?') + ').');
     } else if (d.update_available) {
-      el.innerHTML = '<span class="text-warning"><i class="bi bi-exclamation-circle-fill me-1"></i>' +
-        'Update available: <strong>' + d.latest + '</strong> (you have v' + d.current + '). Press Update now to apply it.</span>';
+      write('text-warning', '<i class="bi bi-exclamation-circle-fill me-1"></i>' +
+        'Update available: <strong>' + d.latest + '</strong> (you have v' + d.current + '). Press Update now to apply it.');
     } else {
-      el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' +
-        'You are on the latest version (v' + d.current + ').</span>';
+      write('text-success', '<i class="bi bi-check-circle-fill me-1"></i>' +
+        'You are on the latest version (v' + d.current + ').');
     }
   } catch (e) {
-    if (el) el.innerHTML = '<span class="text-secondary">Update check failed.</span>';
+    console.error('check-update failed:', e);
+    write('text-danger', '<i class="bi bi-x-circle me-1"></i>Update check failed (' + (e && e.message ? e.message : e) + '). The server may not be able to reach GitHub.');
   } finally {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
   }
