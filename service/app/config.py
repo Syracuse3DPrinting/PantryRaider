@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.9"
+APP_VERSION = "0.7.10"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -204,7 +204,7 @@ _SAVEABLE = [
     "secret_key", "auth_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "tunnel_mode", "tunnel_token", "tunnel_url",
-    "debug_logging", "auto_update",
+    "debug_logging", "auto_update", "lan_scan_cidr",
 ]
 
 # Settings a satellite (pi_remote) pulls from its main server and mirrors
@@ -870,6 +870,12 @@ class Settings(BaseSettings):
     # version. A Pi appliance auto-applies via the host-bridge OTA; a non-Pi
     # server applies via the Watchtower container in docker-compose.prod.yml.
     auto_update: bool = True
+
+    # Remembered LAN range for the satellite-discovery scan, so a containerized
+    # server (which only sees its Docker subnet) does not have to be told the
+    # range every time. Set automatically the first time a real LAN range is
+    # scanned or a satellite checks in (FoodAssistant).
+    lan_scan_cidr: str = ""
 
     # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "subscription"
     tunnel_mode: str = ""

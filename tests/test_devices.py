@@ -246,3 +246,32 @@ def test_lan_cidr_skips_docker_and_loopback():
     from app.services import devices
     devices.record_scan_result("172.19.0.1", version="0.7.7")  # docker only
     assert devices.lan_cidr_from_known_devices() is None
+
+
+# ---------------------------------------------------------------------------
+# Scan CIDR resolution: derive the LAN from configured backend URLs
+# ---------------------------------------------------------------------------
+
+def test_scan_cidr_from_grocy_url(monkeypatch):
+    from app.config import settings
+    from app.routers import devices as router
+    monkeypatch.setattr(settings, "grocy_base_url", "http://192.168.1.170:9383", raising=False)
+    monkeypatch.setattr(settings, "mealie_base_url", "", raising=False)
+    monkeypatch.setattr(settings, "grocy_public_url", "", raising=False)
+    monkeypatch.setattr(settings, "mealie_public_url", "", raising=False)
+    assert router._lan_cidr_from_config_urls() == "192.168.1.0/24"
+
+
+def test_scan_cidr_skips_docker_and_servicename(monkeypatch):
+    from app.config import settings
+    from app.routers import devices as router
+    for f in ("grocy_base_url", "mealie_base_url", "grocy_public_url", "mealie_public_url"):
+        monkeypatch.setattr(settings, f, "", raising=False)
+    monkeypatch.setattr(settings, "grocy_base_url", "http://grocy:80", raising=False)
+    monkeypatch.setattr(settings, "mealie_base_url", "http://172.19.0.5:9285", raising=False)
+    assert router._lan_cidr_from_config_urls() is None
+
+
+def test_resolve_prefers_explicit(monkeypatch):
+    from app.routers import devices as router
+    assert router._resolve_scan_cidr("10.0.5.0/24") == "10.0.5.0/24"

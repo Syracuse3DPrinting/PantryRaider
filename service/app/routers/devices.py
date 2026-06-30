@@ -31,6 +31,47 @@ class LabelBody(BaseModel):
     label: str = ""
 
 
+def _good_cidr(c: str | None) -> bool:
+    """A usable scan range: present and not a Docker bridge network."""
+    return bool(c) and not lan_scan.looks_dockerish(c)
+
+
+def _lan_cidr_from_config_urls() -> str | None:
+    """Derive a LAN /24 from a configured backend URL (Grocy, Mealie). The user
+    points those at a real LAN IP and the container reaches them there, so they
+    are a reliable LAN reference even on a bridge container that cannot see its
+    own LAN address (FoodAssistant)."""
+    import ipaddress
+    from urllib.parse import urlparse
+    for url in (settings.grocy_base_url, settings.mealie_base_url,
+                settings.grocy_public_url, settings.mealie_public_url):
+        host = urlparse(url or "").hostname or ""
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            continue  # a hostname, not a literal IP
+        if ip.is_loopback or not ip.is_private:
+            continue
+        net = str(ipaddress.ip_network(f"{host}/24", strict=False))
+        if _good_cidr(net):
+            return net
+    return None
+
+
+def _resolve_scan_cidr(explicit: str) -> str | None:
+    """Pick the network to scan: the user's explicit range, else a remembered
+    one, a real LAN interface, a satellite's LAN, or a configured backend URL.
+    Docker subnets are skipped so a bridge container never scans its own network."""
+    explicit = (explicit or "").strip()
+    if explicit:
+        return explicit
+    for cand in (settings.lan_scan_cidr, lan_scan.default_cidr(),
+                 devices.lan_cidr_from_known_devices(), _lan_cidr_from_config_urls()):
+        if _good_cidr(cand):
+            return cand
+    return None
+
+
 @router.get("")
 def list_remotes():
     return {"devices": devices.list_devices()}
@@ -43,26 +84,21 @@ async def scan_lan(body: ScanBody = Body(default=ScanBody())):
     Uses the requested CIDR, or this server's own /24 when none is given. The
     scan blocks (sockets), so it runs in a threadpool.
     """
-    explicit = bool((body.cidr or "").strip())
-    cidr = (body.cidr or "").strip() or lan_scan.default_cidr()
-    # A bridge-only server auto-detects its Docker subnet. If a satellite has
-    # already checked in from a real LAN, scan that instead so a blank scan finds
-    # the fleet without the user having to type a range (FoodAssistant).
-    if not explicit and (not cidr or lan_scan.looks_dockerish(cidr)):
-        better = devices.lan_cidr_from_known_devices()
-        if better:
-            cidr = better
-        else:
-            # Bridge-only server with no LAN reference: scanning the Docker subnet
-            # is useless, so do not. Ask for the range instead. Satellites still
-            # self-register when they sync, so a scan is rarely needed anyway.
-            return {"ok": False, "needs_cidr": True, "error": (
-                "This server runs in a Docker network, so it cannot detect your "
-                "LAN on its own. Enter your LAN range (for example 192.168.1.0/24) "
-                "and scan again. Note that satellites also appear here on their "
-                "own once they sync, so you usually do not need to scan at all.")}
+    cidr = _resolve_scan_cidr(body.cidr or "")
     if not cidr:
-        return {"ok": False, "error": "Could not determine a network to scan; enter a CIDR like 192.168.1.0/24."}
+        return {"ok": False, "needs_cidr": True, "error": (
+            "This server runs in a Docker network, so it cannot detect your LAN "
+            "on its own, and it found no LAN reference (no Grocy/Mealie LAN URL "
+            "and no satellite checked in). Enter your LAN range (for example "
+            "192.168.1.0/24) and scan again. Satellites also appear here on their "
+            "own once they sync, so you usually do not need to scan at all.")}
+    # Remember a good (non-Docker) range so future blank scans reuse it without
+    # the user retyping it.
+    if _good_cidr(cidr) and cidr != settings.lan_scan_cidr:
+        try:
+            settings.save({"lan_scan_cidr": cidr})
+        except Exception:
+            pass
 
     results = await run_in_threadpool(lan_scan.scan_for_instances, cidr, body.ports)
     # A malformed/too-large CIDR comes back as a single error dict.
