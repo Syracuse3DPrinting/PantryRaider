@@ -34,7 +34,9 @@
 
 <div id="weatherError" class="d-none text-center text-secondary p-4">
   <i class="bi bi-cloud-slash fs-1 d-block mb-2"></i>
-  <div>Forecast unavailable. Check the server's internet connection{% if not weather_location %}, and set a weather location under Settings (the Stream Deck weather card){% endif %}.</div>
+  <div>Forecast unavailable{% if not weather_location %}. Set a weather location under Settings (the Stream Deck weather card){% endif %}.</div>
+  <div class="small mt-2" id="weatherErrorDetail"></div>
+  <div class="small text-secondary mt-1">The forecast is fetched by the server running FoodAssistant; that machine needs to reach wttr.in.</div>
 </div>
 {% endblock %}
 
@@ -76,12 +78,14 @@
     try {
       const r = await fetch('weather/data', { cache: 'no-store' });
       const d = await r.json();
-      if (!d.ok || !d.forecast) throw new Error('unavailable');
+      if (!d.ok || !d.forecast) throw new Error(d.error || 'unavailable');
       render(d.forecast);
       loadingEl.classList.add('d-none');
       bodyEl.classList.remove('d-none');
     } catch (e) {
       loadingEl.classList.add('d-none');
+      const detail = document.getElementById('weatherErrorDetail');
+      if (detail) detail.textContent = e.message && e.message !== 'unavailable' ? 'Reason: ' + e.message : '';
       errEl.classList.remove('d-none');
     }
   }

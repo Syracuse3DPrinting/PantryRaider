@@ -88,22 +88,51 @@ def parse_forecast(data: Any, units: str = "f") -> dict | None:
     return {"units": units, "current": current, "days": days}
 
 
-async def fetch_forecast(location: str = "", units: str = "f") -> dict | None:
-    """Fetch and parse the wttr.in forecast for ``location``. None on any error.
-
-    A blank location lets wttr.in geolocate from the requester (this server's
-    egress) IP, matching the Stream Deck widget's behaviour."""
-    import httpx
-    loc = (location or "").strip().replace(" ", "+")
+async def _fetch_one(client, loc: str, units: str) -> tuple[dict | None, str]:
+    """Fetch+parse one wttr.in query. Returns (forecast|None, error_str)."""
     url = f"https://wttr.in/{loc}?format=j1"
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            r = await client.get(url, headers={"User-Agent": "foodassistant-weather/1.0"})
-        if r.status_code != 200:
-            return None
-        parsed = parse_forecast(r.json(), units)
-    except Exception:  # noqa: BLE001 - any failure is "unavailable", never a crash
-        return None
-    if parsed is not None:
-        parsed["location"] = location
-    return parsed
+        r = await client.get(url, headers={"User-Agent": "foodassistant-weather/1.0"})
+    except Exception as e:  # noqa: BLE001 - network/DNS/TLS error
+        return None, f"could not reach wttr.in ({e.__class__.__name__})"
+    if r.status_code != 200:
+        return None, f"wttr.in returned HTTP {r.status_code}"
+    try:
+        data = r.json()
+    except Exception:  # noqa: BLE001 - rate-limit/error page, not JSON
+        return None, "wttr.in did not return forecast data (it may be rate limiting)"
+    parsed = parse_forecast(data, units)
+    if parsed is None:
+        return None, "could not parse the forecast for this location"
+    return parsed, ""
+
+
+async def fetch_forecast(location: str = "", units: str = "f") -> tuple[dict | None, str]:
+    """Fetch and parse the wttr.in forecast for ``location``.
+
+    Returns ``(forecast, "")`` on success or ``(None, error)`` so the caller can
+    show why it failed instead of a bare "unavailable". A blank location lets
+    wttr.in geolocate from this server's egress IP, matching the Stream Deck
+    widget. If a "City, ST" query fails, it retries with just the city, since
+    wttr.in is picky about some region suffixes."""
+    import httpx
+    raw = (location or "").strip()
+    primary = raw.replace(" ", "+")
+    # Build an ordered, de-duplicated list of queries to try.
+    queries = [primary]
+    if "," in raw:
+        city = raw.split(",", 1)[0].strip().replace(" ", "+")
+        if city and city != primary:
+            queries.append(city)
+    last_error = ""
+    try:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=True) as client:
+            for q in queries:
+                parsed, err = await _fetch_one(client, q, units)
+                if parsed is not None:
+                    parsed["location"] = location
+                    return parsed, ""
+                last_error = err
+    except Exception as e:  # noqa: BLE001 - client construction, never crash
+        return None, f"weather lookup failed ({e.__class__.__name__})"
+    return None, last_error or "forecast unavailable"

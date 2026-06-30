@@ -53,6 +53,35 @@ def test_parse_forecast_rejects_garbage():
     assert weather.parse_forecast("nope") is None
 
 
+def test_fetch_forecast_retries_city_when_region_fails(monkeypatch):
+    import asyncio
+    calls = []
+
+    async def fake_one(client, loc, units):
+        calls.append(loc)
+        if loc == "Syracuse":
+            return ({"units": units, "current": {"temp": "70"}, "days": []}, "")
+        return (None, "wttr.in returned HTTP 404")
+
+    monkeypatch.setattr(weather, "_fetch_one", fake_one)
+    fc, err = asyncio.run(weather.fetch_forecast("Syracuse, NY", "f"))
+    assert fc is not None and err == ""
+    assert fc["location"] == "Syracuse, NY"     # original label preserved
+    assert calls == ["Syracuse,+NY", "Syracuse"]  # tried precise, then city only
+
+
+def test_fetch_forecast_reports_error(monkeypatch):
+    import asyncio
+
+    async def fake_one(client, loc, units):
+        return (None, "could not reach wttr.in (ConnectError)")
+
+    monkeypatch.setattr(weather, "_fetch_one", fake_one)
+    fc, err = asyncio.run(weather.fetch_forecast("Nowhere", "f"))
+    assert fc is None
+    assert "could not reach wttr.in" in err
+
+
 def test_unknown_weather_code_falls_back_to_desc():
     data = {"current_condition": [{"temp_F": "50", "weatherCode": "99999",
                                    "weatherDesc": [{"value": "Weird sky"}]}],
