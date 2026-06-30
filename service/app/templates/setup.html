@@ -4245,6 +4245,12 @@ async function testRemote() {
   }
 }
 
+{% endif %}
+{# The functions below are shared by the wizard AND the configured settings page
+   (the Updates card, Diagnostics, and the satellite Sync Status panel), so they
+   must render unconditionally. Gating them behind the wizard-only block left the
+   settings page calling undefined functions, so the update buttons silently did
+   nothing (FoodAssistant). #}
 // Show an ISO-8601 UTC timestamp in the visitor's local time, e.g. for the
 // satellite Sync Status panel. Returns the raw string if it cannot be parsed.
 function fmtSyncTime(iso) {
@@ -4515,6 +4521,7 @@ async function checkForUpdates() {
   }
 }
 
+{% if not configured %}
 function toggleStreamDeckOptions() {
   const checked = document.getElementById('has_streamdeck')?.checked;
   document.getElementById('wiz-streamdeck-opts')?.classList.toggle('d-none', !checked);

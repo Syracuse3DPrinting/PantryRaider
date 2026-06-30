@@ -163,3 +163,15 @@ def _attr_present(html: str, element_id: str, attr: str) -> bool:
     end = html.find(">", idx)
     assert end != -1
     return attr in html[idx:end]
+
+
+def test_configured_page_defines_update_functions(client, monkeypatch):
+    """The update/diagnostics functions must be defined on a CONFIGURED install,
+    not only in the wizard. They were trapped in the {% if not configured %}
+    block, so the Updates card buttons called undefined functions and silently
+    did nothing (FoodAssistant). Regression guard."""
+    html = _render_setup(client, monkeypatch, satellite=False)
+    for fn in ("function checkSatelliteUpdate", "async function updateServerNow",
+               "async function checkForUpdates", "function _initSyncTimes",
+               "async function saveAutoUpdate"):
+        assert fn in html, f"missing {fn} on the configured settings page"
