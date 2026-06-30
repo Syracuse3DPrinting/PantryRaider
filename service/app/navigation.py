@@ -23,6 +23,7 @@ NAV_TABS = [
     {"key": "nutrition", "label": "Nutrition", "icon": "bi-heart-pulse",     "href": "ui/nutrition"},
     {"key": "camera",    "label": "Camera",    "icon": "bi-camera-video",    "href": "ui/camera",   "requires": "cameras"},
     {"key": "convert",   "label": "Convert",   "icon": "bi-rulers",          "href": "ui/convert"},
+    {"key": "weather",   "label": "Weather",   "icon": "bi-cloud-sun",       "href": "ui/weather"},
     {"key": "guide",     "label": "Kitchen Guide", "icon": "bi-book",        "href": "ui/kitchen-guide"},
     {"key": "shop",      "label": "Shop",      "icon": "bi-bag",             "href": "ui/shop"},
     {"key": "defaults",  "label": "Defaults",  "icon": "bi-table",           "href": "ui/defaults"},
@@ -52,6 +53,7 @@ DEFAULT_NAV_PARENTS = {
     "convert": "guide",
     "nutrition": "guide",
     "camera": "guide",
+    "weather": "guide",
     "shop": "guide",
 }
 

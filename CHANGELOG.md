@@ -11,6 +11,8 @@ All notable changes to FoodAssistant are recorded here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Weather page and settings.** The Stream Deck Weather settings are now just "Weather" and add an advanced weather-server option (the Open-Meteo API base, default the public service, so you can point it at a self-hosted instance). Weather also has its own navigation tab, so the forecast page is reachable without a Stream Deck.
+- **Camera scan shows brand and resolution, and handles logins.** Scanning for IP cameras now labels each result with the detected brand and snapshot resolution, and a password-protected camera gets an inline username and password form that finds a working snapshot and lets you preview and add it.
 - **Background image.** Set a photo behind the whole UI from Theme settings: upload an image or paste a URL, with an opacity slider so the interface stays readable. Applies on every page and device.
 - **Named custom themes.** The custom theme builder now takes a name and saves your palette as its own entry in the Theme dropdown, so you can keep several and switch between them. A saved theme applies everywhere, including the Settings page itself, and can be deleted from the builder.
 - **Reset navigation to defaults.** The navigation editor has a Reset to defaults button that restores the original tab order, folder grouping, and visibility in one click.

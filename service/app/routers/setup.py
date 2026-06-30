@@ -248,6 +248,7 @@ class SetupPayload(BaseModel):
     streamdeck_key_overrides: list = []
     streamdeck_weather_location: str = ""
     streamdeck_weather_units: str = "f"
+    weather_api_base: str = ""
     streamdeck_key_style: str = ""
     streamdeck_icon_color: str = ""
     streamdeck_cameras: list = []

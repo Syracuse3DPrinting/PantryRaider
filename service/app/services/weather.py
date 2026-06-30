@@ -231,7 +231,9 @@ async def _fetch_open_meteo(client, location: str, units: str) -> tuple[dict | N
     if coords:
         params["latitude"], params["longitude"] = coords[0], coords[1]
     try:
-        r = await client.get("https://api.open-meteo.com/v1/forecast", params=params)
+        from ..config import settings
+        base = (getattr(settings, "weather_api_base", "") or "https://api.open-meteo.com").rstrip("/")
+        r = await client.get(f"{base}/v1/forecast", params=params)
     except Exception as e:  # noqa: BLE001
         return None, f"could not reach the weather service ({e.__class__.__name__})"
     if r.status_code != 200:

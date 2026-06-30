@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.29"
+APP_VERSION = "0.7.30"
 
 # GitHub repo used by the in-app update checker.
 GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
@@ -278,7 +278,7 @@ _SAVEABLE = [
     "display_type",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
     "display_idle_timeout", "streamdeck_idle_timeout", "streamdeck_key_overrides",
-    "streamdeck_weather_location", "streamdeck_weather_units",
+    "streamdeck_weather_location", "streamdeck_weather_units", "weather_api_base",
     "streamdeck_key_style", "streamdeck_icon_color",
     "streamdeck_cameras",
     "streamdeck_ha_base_url", "streamdeck_ha_token", "streamdeck_ha_slots",
@@ -808,6 +808,11 @@ class Settings(BaseSettings):
     # "f" or "c". Mirrored into config.toml when the deck config is written.
     streamdeck_weather_location: str = ""
     streamdeck_weather_units: str = "f"
+    # Weather data server (FoodAssistant). The base URL of an Open-Meteo API,
+    # default the public instance. Advanced users can point this at a self-hosted
+    # Open-Meteo. The "/v1/forecast" path is appended by the weather service.
+    # Used by both the on-screen Weather page and the Stream Deck weather key.
+    weather_api_base: str = "https://api.open-meteo.com"
 
     # Stream Deck key visual style, pushed into the deck's config.toml
     # (FoodAssistant-fygv). key_style: rich | minimal | glass. icon_color:

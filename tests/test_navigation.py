@@ -184,13 +184,13 @@ def test_default_tree_groups_secondary_tabs_under_parents(monkeypatch):
 
     # Secondary tabs are grouped, not top-level.
     for key in ("expiring", "audit", "cook", "current_recipe", "mealplan",
-                "convert", "nutrition", "camera", "shop"):
+                "convert", "nutrition", "camera", "weather", "shop"):
         assert key not in top, f"{key} should be nested, not top-level"
 
     # Children follow the flat NAV_TABS registration order within each parent.
     assert children["inventory"] == ["expiring", "audit"]
     assert children["recipes"] == ["cook", "current_recipe", "mealplan"]
-    assert sorted(children["guide"]) == sorted(["convert", "nutrition", "camera", "shop"])
+    assert sorted(children["guide"]) == sorted(["convert", "nutrition", "camera", "weather", "shop"])
 
 
 def test_default_grouping_keeps_every_tab_reachable_flat(monkeypatch):
