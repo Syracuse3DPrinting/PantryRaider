@@ -345,7 +345,10 @@
           <a class="nav-link {% if active == tab.key %}active{% endif %}" href="{{ tab.href }}">
             <i class="bi {{ tab.icon }} me-1"></i>{{ tab.label }}
             {%- if tab.key == 'pending' %}
-            <span class="badge rounded-pill text-bg-warning d-none" id="pending-nav-badge">0</span>
+            {# Two overlaid counts on the Inbox tab: action items (red) and
+               pending scans (yellow), FoodAssistant-4se3. #}
+            <span class="badge rounded-pill text-bg-danger d-none" id="actions-nav-badge" title="Action items">0</span>
+            <span class="badge rounded-pill text-bg-warning d-none" id="pending-nav-badge" title="Pending scans">0</span>
             {%- endif %}
           </a>
         </li>
@@ -538,13 +541,14 @@
     }
   </script>
   <script>
-    // Pending-scan badge in the navbar
+    // Inbox badges in the navbar: pending scans (yellow) + action items (red).
     fetch('pending/count').then(r => r.json()).then(d => {
-      if (d.count > 0) {
-        const b = document.getElementById('pending-nav-badge');
-        b.textContent = d.count;
-        b.classList.remove('d-none');
-      }
+      const b = document.getElementById('pending-nav-badge');
+      if (b && d.count > 0) { b.textContent = d.count; b.classList.remove('d-none'); }
+    }).catch(() => {});
+    fetch('action-items/count').then(r => r.json()).then(d => {
+      const b = document.getElementById('actions-nav-badge');
+      if (b && d.count > 0) { b.textContent = d.count; b.classList.remove('d-none'); }
     }).catch(() => {});
   </script>
   <script>

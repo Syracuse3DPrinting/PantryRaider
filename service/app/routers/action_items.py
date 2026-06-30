@@ -87,9 +87,10 @@ async def list_items(request: Request, db: Session = Depends(get_db)):
 
 @router.get("/count")
 async def count_items(request: Request, db: Session = Depends(get_db)):
-    """Just the active count, for the inbox badge."""
+    """Just the active count, for the inbox nav badge."""
     if _upstream():
         return await _forward(request, "/count")
+    await _maybe_refresh(db)
     return {"count": action_items.count_active(db)}
 
 

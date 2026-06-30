@@ -12,7 +12,7 @@
 {% else %}
 
 <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 mb-3">
-  <h4 class="mb-0"><i class="bi bi-journal-check me-2"></i>Current Recipe</h4>
+  <h4 class="mb-0"><i class="bi bi-fire me-2"></i>On the Line</h4>
   <div class="d-flex gap-2">
     <a class="btn btn-outline-secondary" href="ui/cook" title="Back to suggestions">
       <i class="bi bi-fire me-1"></i>What Can I Cook?
@@ -43,6 +43,10 @@
 <div id="cr-loading" class="text-secondary py-4">
   <span class="spinner-border spinner-border-sm me-2"></span>Loading the active recipe…
 </div>
+
+<!-- Course selector: every recipe in progress (appetizer, main, dessert...),
+     shown only when more than one is cooking (FoodAssistant-dbgx/i8hz). -->
+<div id="cr-courses" class="d-flex flex-wrap gap-2 mb-3 d-none"></div>
 
 <!-- Active recipe -->
 <div id="cr-active" class="d-none">
@@ -130,24 +134,30 @@ function fmtClock(secs) {
 function show(id) { document.getElementById(id).classList.remove('d-none'); }
 function hide(id) { document.getElementById(id).classList.add('d-none'); }
 
+let crAll = [];       // every recipe in progress
+let crFocus = 0;      // slot of the recipe shown in detail
+
 async function loadCurrentRecipe() {
   show('cr-loading');
   hide('cr-empty');
   hide('cr-active');
+  hide('cr-courses');
   try {
-    const r = await fetch('current-recipe');
+    const r = await fetch('current-recipe/all');
     if (!r.ok) throw new Error(r.statusText);
-    const data = await r.json();
-    crRecipe = data.recipe;
+    crAll = (await r.json()).recipes || [];
     hide('cr-loading');
-    if (!crRecipe) {
-      show('cr-empty');
-      return;
-    }
+    if (!crAll.length) { show('cr-empty'); return; }
+    // Keep the focused slot if it still exists, else focus the first recipe.
+    if (!crAll.some(x => x.slot === crFocus)) crFocus = crAll[0].slot;
+    crRecipe = crAll.find(x => x.slot === crFocus) || crAll[0];
+    renderCourseStrip();
     renderRecipe();
     show('cr-active');
-    await loadTimerSuggestions();
-    startTimerPolling();
+    // Timers come from the primary (slot 0); show them only when it is focused.
+    if (crFocus === 0) { await loadTimerSuggestions(); startTimerPolling(); }
+    else { document.getElementById('cr-timer-suggestions').innerHTML =
+      '<span class="small text-secondary">Open the primary recipe for its timers.</span>'; }
   } catch (e) {
     hide('cr-loading');
     show('cr-empty');
@@ -156,10 +166,25 @@ async function loadCurrentRecipe() {
   }
 }
 
+function renderCourseStrip() {
+  const strip = document.getElementById('cr-courses');
+  if (crAll.length < 2) { strip.classList.add('d-none'); strip.innerHTML = ''; return; }
+  strip.classList.remove('d-none');
+  strip.innerHTML = '';
+  crAll.forEach(rc => {
+    const b = document.createElement('button');
+    const on = rc.slot === crFocus;
+    b.className = 'btn btn-sm ' + (on ? 'btn-primary' : 'btn-outline-primary');
+    b.innerHTML = (rc.slot === 0 ? '<i class="bi bi-star-fill me-1"></i>' : '') + escHtml(rc.title || 'Recipe');
+    b.onclick = () => { crFocus = rc.slot; loadCurrentRecipe(); };
+    strip.appendChild(b);
+  });
+}
+
 async function clearCurrentRecipe(btn) {
   if (btn) btn.disabled = true;
   try {
-    await fetch('current-recipe', { method: 'DELETE' });
+    await fetch('current-recipe/' + crFocus, { method: 'DELETE' });
   } catch (e) { /* ignore: reload reflects the truth */ }
   if (btn) btn.disabled = false;
   loadCurrentRecipe();
@@ -168,7 +193,7 @@ async function clearCurrentRecipe(btn) {
 async function markCooked(btn) {
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('current-recipe/cooked', { method: 'POST' });
+    const r = await fetch('current-recipe/' + crFocus + '/cooked', { method: 'POST' });
     if (!r.ok) throw new Error('cook failed');
     const data = await r.json();
     const n = (data.consumed || []).length;
@@ -217,7 +242,7 @@ function renderRecipe() {
 
 async function applyScale(factor) {
   try {
-    const r = await fetch('current-recipe/scale', {
+    const r = await fetch('current-recipe/' + crFocus + '/scale', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({factor}),
     });

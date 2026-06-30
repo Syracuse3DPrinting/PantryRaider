@@ -1,6 +1,6 @@
 import secrets
 from fastapi import APIRouter, Depends, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 
@@ -144,15 +144,12 @@ async def current_recipe_page(request: Request):
     })
 
 
-@router.get("/recipes-in-progress", response_class=HTMLResponse)
+@router.get("/recipes-in-progress")
 async def recipes_in_progress_page(request: Request):
-    """All recipes currently in the works (appetizer, main, dessert...) on one
-    page, each with scale/cook/clear controls (FoodAssistant-dbgx)."""
-    return templates.TemplateResponse(request, "recipes-in-progress.html", {
-        "request": request,
-        "active": "recipes_in_progress",
-        "mealie_configured": settings.mealie_configured(),
-    })
+    """The In Progress view was merged into the 'On the Line' page (current
+    recipe), which now shows every recipe in progress with a course selector.
+    Kept as a redirect so old links/bookmarks still land somewhere (i8hz)."""
+    return RedirectResponse(url="ui/current-recipe", status_code=307)
 
 
 @router.get("/mealplan", response_class=HTMLResponse)

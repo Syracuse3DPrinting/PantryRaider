@@ -954,7 +954,7 @@ async function addCourse(slug, btn) {
     });
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
-    window.location.href = 'ui/recipes-in-progress';
+    window.location.href = 'ui/current-recipe';
   } catch (e) {
     if (btn) { btn.disabled = false; btn.innerHTML = orig; }
     alert('Could not add the course: ' + e.message);
