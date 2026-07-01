@@ -4207,8 +4207,8 @@ function showDeckStart(which) {
 // _startState is a flat token array (one per key): a built-in action key, a
 // "custom:<id>" reference into the shared custom-button store, or "" for blank.
 let _startState = null;
-let _startDragTok = null;     // token being dragged from the palette
-let _startDragCell = null;    // cell index being dragged within the grid
+// Drag/selection state is shared with the Stream Deck editor via _sdDragSrc so
+// both grids use the same cell engine.
 const _START_SHAPES = { 6: [3, 2], 15: [5, 3], 32: [8, 4] };
 
 function _startKeyCount() {
@@ -4230,21 +4230,6 @@ function _startCustomMeta(def) {
   // Reuse the deck's face metadata (label/icon) so a custom key looks identical
   // on the Start Page and the Stream Deck.
   try { return _sdDefMeta(def); } catch (e) { return { label: def.label || 'Custom', icon: def.icon || 'bi-grid-1x2' }; }
-}
-function _startTokenInfo(tok) {
-  // Tokens use the SAME model as the deck: a built-in action name, a custom key
-  // id, or "blank"/empty.
-  if (!tok || tok === 'blank') return { kind: 'blank', color: '#1f2937', iconCls: '' };
-  const def = _startCustomDefs().find(d => d.id === tok);
-  if (def) {
-    const m = _startCustomMeta(def);
-    const iconCls = m.icon ? 'bi bi-' + String(m.icon).replace(/^bi-/, '') : '';
-    return { kind: 'custom', iconCls: iconCls, label: m.label, color: m.color || '#374151' };
-  }
-  // Built-in face from the deck's own catalog, so it matches the deck exactly.
-  const a = _sdActionByName(tok);
-  if (a) return { kind: 'builtin', iconCls: _sdIconClass(a), label: a.label, color: a.color || '#374151' };
-  return { kind: 'blank', color: '#1f2937', iconCls: '' };
 }
 // Build a Start Page custom-key editor row from the deck's shared row builder,
 // rewiring its delete + change handlers to refresh the Start Page palette.
@@ -4300,9 +4285,9 @@ function _startRenderPalette() {
     ].join(';');
     chip.draggable = true; chip.dataset.tok = tok;
     chip.innerHTML = (iconCls ? '<i class="' + iconCls + ' me-1"></i>' : '') + escapeHtml(label);
-    chip.addEventListener('dragstart', e => { _startDragTok = tok; _startDragCell = null; e.dataTransfer.effectAllowed = 'copy'; chip.style.opacity = '0.5'; });
+    chip.addEventListener('dragstart', e => { _sdDragSrc = {type:'palette', name: tok}; e.dataTransfer.effectAllowed = 'copy'; chip.style.opacity = '0.5'; });
     chip.addEventListener('dragend', () => { chip.style.opacity = '1'; });
-    chip.addEventListener('click', () => { _startDragTok = tok; chip.style.outline = '2px solid #0dcaf0'; setTimeout(() => chip.style.outline = '', 600); });
+    chip.addEventListener('click', () => { _sdDragSrc = {type:'palette', name: tok}; chip.style.outline = '2px solid #0dcaf0'; setTimeout(() => chip.style.outline = '', 600); });
     return chip;
   };
   const makeRow = (gname) => {
@@ -4343,48 +4328,15 @@ function _startEditorRender() {
   // Match the Stream Deck grid: same column sizing and coloured square keys.
   grid.style.gridTemplateColumns = 'repeat(' + cols + ', minmax(0,1fr))';
   grid.innerHTML = '';
-  _startState.forEach((tok, i) => {
-    const info = _startTokenInfo(tok);
-    const blank = info.kind === 'blank';
-    const cell = document.createElement('div');
-    cell.className = 'rounded position-relative';
-    // Larger keys than the deck editor (the Start Page's roomier design), in the
-    // same coloured deck-key style.
-    cell.style.cssText = [
-      'aspect-ratio:1', 'min-width:74px', 'min-height:74px', 'display:flex',
-      'flex-direction:column', 'align-items:center', 'justify-content:center',
-      'gap:4px', 'overflow:hidden', 'background:' + (info.color || '#1f2937'),
-      'cursor:' + (blank ? 'pointer' : 'grab'), 'user-select:none',
-      'transition:filter 0.1s', 'border-radius:0.75rem', 'border:2px solid rgba(255,255,255,0.15)',
-      blank ? 'opacity:0.55;border-style:dashed' : '',
-    ].join(';');
-    cell.draggable = !blank;
-    cell.dataset.idx = i;
-    cell.innerHTML = blank
-      ? '<i class="bi bi-plus" style="color:#fff;opacity:0.6;font-size:1.7rem"></i>'
-      : (info.iconCls ? '<i class="' + info.iconCls + '" style="color:#fff;font-size:1.6rem;line-height:1"></i>' : '') +
-        '<span style="color:#fff;font-size:0.72rem;line-height:1.05;text-align:center;word-break:break-word;padding:0 4px">' + escapeHtml(info.label || '') + '</span>';
-    cell.title = blank ? 'Drop an action here' : (info.label + ' — click to clear');
-    cell.addEventListener('click', () => {
-      if (_startDragTok) { _startState[i] = _startDragTok; _startDragTok = null; }
-      else { _startState[i] = ''; }   // click a filled cell with nothing selected clears it
-      _startEditorRender();
-    });
-    cell.addEventListener('dragstart', e => { _startDragCell = i; _startDragTok = null; e.dataTransfer.effectAllowed = 'move'; });
-    cell.addEventListener('dragover', e => { e.preventDefault(); cell.classList.add('border-info'); });
-    cell.addEventListener('dragleave', () => cell.classList.remove('border-info'));
-    cell.addEventListener('drop', e => {
-      e.preventDefault(); cell.classList.remove('border-info');
-      if (_startDragCell !== null) {            // swap two cells
-        const tmp = _startState[i]; _startState[i] = _startState[_startDragCell]; _startState[_startDragCell] = tmp;
-        _startDragCell = null;
-      } else if (_startDragTok) {               // place from palette
-        _startState[i] = _startDragTok; _startDragTok = null;
-      }
-      _startEditorRender();
-    });
-    grid.appendChild(cell);
-  });
+  // Same cell engine as the Stream Deck editor. ctx resolves custom keys from the
+  // Start Page's own override rows, allows click-to-place/clear, and omits the
+  // deck position badge. Rebuilt each render since _startState may be reassigned.
+  const startDefById = id => _startCustomDefs().find(d => d.id === id) || null;
+  const ctx = {
+    keys: _startState, refresh: _startEditorRender, badge: false, click: true,
+    defById: startDefById,
+  };
+  _startState.forEach((tok, i) => grid.appendChild(_sdMakeCell(ctx, i, tok || 'blank', i)));
 }
 function savePaneStartPage(btn) {
   if (!_startState) _startEditorInit();
@@ -5825,8 +5777,16 @@ function _sdEffectiveDim(count, rotation) {
   return dim;
 }
 
-function _sdMakeCell(idx, name, displayPos) {
-  // idx is the GLOBAL index into _sdKeys (so drag/drop/swap operate on the full
+// Shared grid-cell renderer for BOTH the Stream Deck editor and the on-screen
+// Start Page editor, so a key looks and behaves identically in each. `ctx`
+// carries the per-editor differences:
+//   ctx.keys    - the flat token array this editor mutates (_sdKeys / _startState)
+//   ctx.refresh - re-render callback for that editor
+//   ctx.badge   - show the 1-based deck position in the corner (deck only)
+//   ctx.click   - allow click-to-place / click-to-clear (Start Page only)
+// The larger, roomier key style from the Start Page is used for both.
+function _sdMakeCell(ctx, idx, name, displayPos) {
+  // idx is the GLOBAL index into ctx.keys (so drag/drop/swap operate on the full
   // paginated list); displayPos is the 1-based key position on the physical deck
   // page shown in the corner badge. Defaults to idx when not paginating.
   if (displayPos === undefined) displayPos = idx;
@@ -5834,8 +5794,11 @@ function _sdMakeCell(idx, name, displayPos) {
   // built-in catalog action. A custom id whose definition was deleted falls
   // back to an empty cell.
   let face, custom = false, iconName = '';
+  // Custom-key definitions live in a per-editor override container (the deck's
+  // vs the Start Page's), so the lookup is supplied by ctx.
+  const defById = ctx.defById || _sdCustomDefById;
   if (_sdIsCustomId(name)) {
-    const def = _sdCustomDefById(name);
+    const def = defById(name);
     if (def) {
       const meta = _sdDefMeta(def);
       face = {label: meta.label, color: meta.color};
@@ -5847,49 +5810,76 @@ function _sdMakeCell(idx, name, displayPos) {
   } else {
     face = _sdActionByName(name) || {name: 'blank', label: 'Empty', color: '#1f2937'};
   }
+  const blank = !custom && face.name === 'blank';
   const cell = document.createElement('div');
   cell.className = 'rounded position-relative';
   cell.style.cssText = [
-    'min-width:60px', 'min-height:44px', 'display:flex', 'flex-direction:column',
-    'align-items:center', 'justify-content:center', 'gap:1px',
-    'overflow:hidden', `background:${face.color || '#1f2937'}`,
-    'cursor:grab', 'user-select:none', 'transition:filter 0.1s', 'border:2px solid rgba(255,255,255,0.15)',
+    'aspect-ratio:1', 'min-width:74px', 'min-height:74px', 'display:flex',
+    'flex-direction:column', 'align-items:center', 'justify-content:center',
+    'gap:4px', 'overflow:hidden', `background:${face.color || '#1f2937'}`,
+    'cursor:' + (blank && ctx.click ? 'pointer' : 'grab'), 'user-select:none',
+    'transition:filter 0.1s', 'border-radius:0.75rem', 'border:2px solid rgba(255,255,255,0.15)',
+    (blank ? 'opacity:0.55;border-style:dashed' : ''),
   ].join(';');
-  cell.draggable = true;
+  // On the Start Page a blank cell is a click target, not a drag source; on the
+  // deck every cell drags (so empty slots can be swapped/moved).
+  cell.draggable = ctx.click ? !blank : true;
   cell.dataset.idx = String(idx);
 
-  const iconCls = custom
-    ? (iconName ? 'bi bi-' + String(iconName).replace(/^bi-/, '') : '')
-    : _sdIconClass(face);
-  if (iconCls) {
-    const ic = document.createElement('i');
-    ic.className = iconCls;
-    ic.style.cssText = 'color:#fff;font-size:0.95rem;line-height:1;';
-    cell.appendChild(ic);
+  if (blank && ctx.click) {
+    const plus = document.createElement('i');
+    plus.className = 'bi bi-plus';
+    plus.style.cssText = 'color:#fff;opacity:0.6;font-size:1.7rem;line-height:1;';
+    cell.appendChild(plus);
+  } else {
+    const iconCls = custom
+      ? (iconName ? 'bi bi-' + String(iconName).replace(/^bi-/, '') : '')
+      : _sdIconClass(face);
+    if (iconCls) {
+      const ic = document.createElement('i');
+      ic.className = iconCls;
+      ic.style.cssText = 'color:#fff;font-size:1.6rem;line-height:1;';
+      cell.appendChild(ic);
+    }
+    const lbl = document.createElement('span');
+    lbl.style.cssText = 'color:#fff;font-size:0.72rem;line-height:1.05;text-align:center;word-break:break-word;padding:0 4px;';
+    lbl.textContent = face.label;
+    cell.appendChild(lbl);
   }
-
-  const lbl = document.createElement('span');
-  lbl.style.cssText = 'color:#fff;font-size:0.6rem;line-height:1.1;text-align:center;word-break:break-word;padding:0 3px;';
-  lbl.textContent = face.label;
-  cell.appendChild(lbl);
 
   if (custom) {
     const mark = document.createElement('span');
-    mark.style.cssText = 'position:absolute;top:2px;left:3px;font-size:0.5rem;color:rgba(255,255,255,0.85);';
+    mark.style.cssText = 'position:absolute;top:3px;left:4px;font-size:0.55rem;color:rgba(255,255,255,0.85);';
     mark.title = 'Custom key';
     mark.innerHTML = '<i class="bi bi-pencil-fill"></i>';
     cell.appendChild(mark);
   }
 
-  const badge = document.createElement('span');
-  badge.style.cssText = 'position:absolute;top:2px;right:3px;font-size:0.5rem;color:rgba(255,255,255,0.45);';
-  badge.textContent = String(displayPos + 1);
-  cell.appendChild(badge);
+  if (ctx.badge) {
+    const badge = document.createElement('span');
+    badge.style.cssText = 'position:absolute;top:3px;right:4px;font-size:0.55rem;color:rgba(255,255,255,0.45);';
+    badge.textContent = String(displayPos + 1);
+    cell.appendChild(badge);
+  }
+
+  cell.title = ctx.click
+    ? (blank ? 'Drop or click to place an action here' : (face.label + ' — click to clear'))
+    : '';
+
+  if (ctx.click) {
+    cell.addEventListener('click', () => {
+      // A selected palette chip (via click) drops into this cell; otherwise a
+      // click on a filled cell clears it.
+      if (_sdDragSrc && _sdDragSrc.type === 'palette') { ctx.keys[idx] = _sdDragSrc.name; _sdDragSrc = null; }
+      else if (!blank) { ctx.keys[idx] = ''; }
+      ctx.refresh();
+    });
+  }
 
   cell.addEventListener('dragstart', e => {
-    _sdDragSrc = {type:'grid', idx, name: _sdKeys[idx] || 'blank'};
+    _sdDragSrc = {type:'grid', idx, name: ctx.keys[idx] || 'blank'};
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', _sdKeys[idx] || 'blank');
+    e.dataTransfer.setData('text/plain', ctx.keys[idx] || 'blank');
     cell.style.opacity = '0.45';
   });
   cell.addEventListener('dragend', () => { cell.style.opacity = '1'; });
@@ -5910,14 +5900,14 @@ function _sdMakeCell(idx, name, displayPos) {
     if (!_sdDragSrc) return;
     const tgtIdx = parseInt(cell.dataset.idx, 10);
     if (_sdDragSrc.type === 'grid') {
-      const tmp = _sdKeys[tgtIdx] || 'blank';
-      _sdKeys[tgtIdx] = _sdKeys[_sdDragSrc.idx] || 'blank';
-      _sdKeys[_sdDragSrc.idx] = tmp;
+      const tmp = ctx.keys[tgtIdx] || 'blank';
+      ctx.keys[tgtIdx] = ctx.keys[_sdDragSrc.idx] || 'blank';
+      ctx.keys[_sdDragSrc.idx] = tmp;
     } else {
-      _sdKeys[tgtIdx] = _sdDragSrc.name;
+      ctx.keys[tgtIdx] = _sdDragSrc.name;
     }
     _sdDragSrc = null;
-    _sdRefreshCustom();
+    ctx.refresh();
   });
 
   return cell;
@@ -5941,16 +5931,16 @@ function _sdMakeMoreCell(displayPos) {
   const cell = document.createElement('div');
   cell.className = 'rounded position-relative';
   cell.style.cssText = [
-    'min-width:60px', 'min-height:44px', 'display:flex', 'flex-direction:column',
-    'align-items:center', 'justify-content:center', 'gap:1px', 'overflow:hidden',
+    'aspect-ratio:1', 'min-width:74px', 'min-height:74px', 'display:flex', 'flex-direction:column',
+    'align-items:center', 'justify-content:center', 'gap:4px', 'overflow:hidden',
     'background:#334155', 'cursor:pointer', 'user-select:none',
-    'border:2px dashed rgba(255,255,255,0.35)',
+    'border-radius:0.75rem', 'border:2px dashed rgba(255,255,255,0.35)',
   ].join(';');
   cell.title = 'Auto "More" key (cycles pages on the deck)';
   cell.innerHTML =
-    '<i class="bi bi-arrow-repeat" style="color:#fff;font-size:0.95rem;line-height:1;"></i>' +
-    '<span style="color:#fff;font-size:0.6rem;line-height:1.1;">More</span>' +
-    '<span style="position:absolute;top:2px;right:3px;font-size:0.5rem;color:rgba(255,255,255,0.45);">' +
+    '<i class="bi bi-arrow-repeat" style="color:#fff;font-size:1.6rem;line-height:1;"></i>' +
+    '<span style="color:#fff;font-size:0.72rem;line-height:1.05;">More</span>' +
+    '<span style="position:absolute;top:3px;right:4px;font-size:0.55rem;color:rgba(255,255,255,0.45);">' +
     String(displayPos + 1) + '</span>';
   cell.addEventListener('click', () => _sdGotoPage(1));
   return cell;
@@ -6055,13 +6045,16 @@ async function _sdRenderGrid() {
   while (_sdKeys.length < pageStart + info.usable) _sdKeys.push('blank');
 
   grid.innerHTML = '';
+  // ctx must be rebuilt each render because _sdKeys can be reassigned; the drop
+  // handler mutates ctx.keys in place by index, which stays valid within a render.
+  const ctx = {keys: _sdKeys, refresh: _sdRefreshCustom, badge: true, click: false};
   for (let pos = 0; pos < total; pos++) {
     if (info.paginated && pos === total - 1) {
       // Reserved auto "More" key (page cycle); shown but not editable.
       grid.appendChild(_sdMakeMoreCell(pos));
     } else {
       const globalIdx = pageStart + pos;
-      grid.appendChild(_sdMakeCell(globalIdx, _sdKeys[globalIdx] || 'blank', pos));
+      grid.appendChild(_sdMakeCell(ctx, globalIdx, _sdKeys[globalIdx] || 'blank', pos));
     }
   }
   _sdRenderPageNav(info);
