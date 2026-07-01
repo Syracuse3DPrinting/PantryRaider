@@ -1,6 +1,6 @@
-# FoodAssistant interactive demo
+# Pantry Raider interactive demo
 
-`index.html` is a self-contained, no-backend interactive demo of FoodAssistant
+`index.html` is a self-contained, no-backend interactive demo of Pantry Raider
 (inventory, scanning, recipe suggestions, cameras, the unit converter, and the
 Stream Deck). It runs entirely in the browser with sample data; open it locally
 or host it as a static site.

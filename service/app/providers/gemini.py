@@ -142,7 +142,7 @@ class GeminiProvider(VisionProvider):
         self._health_ts: float = 0.0
 
     async def _gen(self, parts):
-        """Call the model and record the tokens it reports (FoodAssistant)."""
+        """Call the model and record the tokens it reports (Pantry Raider)."""
         response = await self.model.generate_content_async(parts)
         try:
             from ..services import usage

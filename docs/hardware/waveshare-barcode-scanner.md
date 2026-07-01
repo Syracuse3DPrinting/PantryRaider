@@ -12,7 +12,7 @@ module itself, so display this page on a screen (or print it) and scan each code
 
 These codes are taken from the official Waveshare "Barcode Scanner Module Setting Manual"
 (V2.1). The full manual has every other setting; this page collects just the ones that
-matter for a hands-free FoodAssistant kiosk.
+matter for a hands-free Pantry Raider kiosk.
 
 ## How configuration works
 
@@ -57,7 +57,7 @@ the 5 s code in the Optional section instead if you find items getting double-co
 
 ![Same-barcode delay 3 s](img/waveshare/same-barcode-delay-3000ms.png)
 
-> FoodAssistant already de-duplicates: scanning the same barcode again just bumps the
+> Pantry Raider already de-duplicates: scanning the same barcode again just bumps the
 > item's quantity on the pending list rather than creating a second row. The hardware
 > delay above is still worth setting so the sensor does not flood the queue while an item
 > sits in view.
@@ -125,7 +125,7 @@ redo the recommended codes above.
 
 ![Restore factory setting](img/waveshare/restore-factory.png)
 
-## Using it with FoodAssistant
+## Using it with Pantry Raider
 
 Once the module is in Sensing Mode, open the **Add Food** page and present a barcode. The
 code is captured anywhere on the page (you do not need to click into a field first), looked

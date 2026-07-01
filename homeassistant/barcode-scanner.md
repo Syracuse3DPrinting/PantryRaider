@@ -1,7 +1,7 @@
 # Headless Wireless Barcode Scanner
 
 Scan groceries with a dedicated wireless barcode scanner - no phone, no
-browser. Each scan is forwarded to FoodAssistant's `/pending/scan` endpoint
+browser. Each scan is forwarded to Pantry Raider's `/pending/scan` endpoint
 via an HA automation and REST command, then appears in `/ui/pending` with
 name, category, storage, and best-by date pre-filled from Open Food Facts
 and your defaults rules. Review and commit when ready.
@@ -14,7 +14,7 @@ followed by Enter. Home Assistant's
 [`keyboard_remote`](https://www.home-assistant.io/integrations/keyboard_remote/)
 integration listens to that input device and fires an event per keypress.
 An automation buffers digits and submits the completed barcode to
-FoodAssistant when Enter is received.
+Pantry Raider when Enter is received.
 
 How the scanner reaches the host depends on the model - most support one
 or both of:
@@ -136,7 +136,7 @@ rest_command:
     url: http://YOUR_HOST:9284/pending/scan
     method: POST
     content_type: "application/json"
-    # Required if FoodAssistant has API_KEY set - without it the POST is
+    # Required if Pantry Raider has API_KEY set - without it the POST is
     # rejected with 401 and HA only logs a warning (the automation trace
     # still looks successful).
     headers:
@@ -144,7 +144,7 @@ rest_command:
     payload: '{"barcode": "{{ barcode }}", "source": "ha"}'
 ```
 
-Replace `YOUR_HOST` with your FoodAssistant host:
+Replace `YOUR_HOST` with your Pantry Raider host:
 - **Docker standalone:** your server's IP or hostname, e.g. `192.168.1.170`
 - **HA add-on with mapped port:** `<HA-IP>:<mapped-port>`, e.g. `192.168.1.10:9284`
 
@@ -157,7 +157,7 @@ Devices & Services - Helpers - Create Helper - Text**, name it
 + Create Automation - Skip - three-dot menu - Edit in YAML**) and paste:
 
 ```yaml
-alias: Barcode scanner - FoodAssistant
+alias: Barcode scanner - Pantry Raider
 mode: queued
 triggers:
   - trigger: event
@@ -228,7 +228,7 @@ actions:
   key-code/type mismatch; check the `key` value in the trace's Changed
   variables tab.
 - Buffer fills but nothing reaches `/ui/pending` means the `rest_command` is
-  failing (check **Settings - System - Logs**). If FoodAssistant has
+  failing (check **Settings - System - Logs**). If Pantry Raider has
   `API_KEY` set, the `X-API-Key` header is required - see step 3.
 
 ### 5. Optional: scan-received notification

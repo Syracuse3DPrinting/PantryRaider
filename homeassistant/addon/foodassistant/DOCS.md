@@ -1,6 +1,6 @@
-# FoodAssistant Home Assistant Add-on
+# Pantry Raider Home Assistant Add-on
 
-Run FoodAssistant directly inside Home Assistant - no separate server, no
+Run Pantry Raider directly inside Home Assistant - no separate server, no
 extra login. The UI appears in the HA sidebar and Home Assistant authenticates
 you through Ingress.
 
@@ -16,8 +16,8 @@ you through Ingress.
 
 1. In Home Assistant go to **Settings - Add-ons - Add-on Store**, open the
    three-dot menu, choose **Repositories**, and add:
-   `https://github.com/Syracuse3DPrinting/FoodAssistant`
-2. Install **FoodAssistant** from the list and start it.
+   `https://github.com/Syracuse3DPrinting/PantryRaider`
+2. Install **Pantry Raider** from the list and start it.
 3. Click **Open Web UI** (or the sidebar entry) to launch the setup wizard.
 
 ## Configure
@@ -46,7 +46,7 @@ the community Mealie add-on.
 **Using the community Mealie add-on:**
 
 1. Install the Mealie add-on from the add-on store and start it.
-2. In FoodAssistant's setup wizard under **Recipes & Meal Plan**:
+2. In Pantry Raider's setup wizard under **Recipes & Meal Plan**:
    - **Mealie URL (LAN):** the Supervisor network address, e.g.
      `http://mealie:9000` (check the Mealie add-on info page for the hostname)
    - **Mealie URL (public):** leave blank to use the same URL, or enter

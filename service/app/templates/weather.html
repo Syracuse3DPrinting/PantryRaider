@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Weather: FoodAssistant{% endblock %}
+{% block title %}Weather: Pantry Raider{% endblock %}
 
 {% block content %}
 <div class="mt-3 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -100,7 +100,7 @@
   <i class="bi bi-cloud-slash fs-1 d-block mb-2"></i>
   <div>Forecast unavailable{% if not weather_location %}. Set a weather location with the gear button above{% endif %}.</div>
   <div class="small mt-2" id="weatherErrorDetail"></div>
-  <div class="small text-secondary mt-1">The forecast is fetched by the server running FoodAssistant; that machine needs internet access to the weather service.</div>
+  <div class="small text-secondary mt-1">The forecast is fetched by the server running Pantry Raider; that machine needs internet access to the weather service.</div>
 </div>
 {% endblock %}
 

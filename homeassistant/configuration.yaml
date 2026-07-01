@@ -1,4 +1,4 @@
-# FoodAssistant — Home Assistant Integration
+# Pantry Raider — Home Assistant Integration
 #
 # Add the contents of this file to your HA configuration.yaml
 # Replace 192.168.1.170:9284 with your Unraid IP if different.
@@ -10,7 +10,7 @@
 # leaving every sensor "Unknown". The public URL is only for the Lovelace
 # buttons, which open in a browser where you have a proxy session.
 #
-# If you set API_KEY in FoodAssistant, add it to HA's secrets.yaml as
+# If you set API_KEY in Pantry Raider, add it to HA's secrets.yaml as
 #   foodassistant_api_key: "your_key_here"
 # and uncomment the headers blocks below.
 rest:
@@ -110,14 +110,14 @@ rest:
         icon: mdi:barcode-scan
 
 # ─── Barcode Scanner → Pending Queue ─────────────────────────────────────────
-# Sends a scanned barcode to FoodAssistant's pending queue. Call this from an
+# Sends a scanned barcode to Pantry Raider's pending queue. Call this from an
 # automation (see homeassistant/barcode-scanner.md for full setup).
 rest_command:
   foodassistant_scan:
     url: http://192.168.1.170:9284/pending/scan
     method: POST
     content_type: "application/json"
-    # Uncomment if FoodAssistant has API_KEY set — without the header the
+    # Uncomment if Pantry Raider has API_KEY set — without the header the
     # POST is rejected with 401 and HA only logs a warning (the automation
     # trace still looks successful).
     # headers:

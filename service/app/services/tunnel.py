@@ -1,4 +1,4 @@
-"""Tunnel service: manages Cloudflare Tunnel and FoodAssistant Cloud connections.
+"""Tunnel service: manages Cloudflare Tunnel and Pantry Raider Cloud connections.
 
 All subprocess calls are wrapped in try/except: docker may not be available in
 all environments (CI, dev without Docker, HA add-on, etc.).
@@ -154,7 +154,7 @@ class TunnelService:
             return {"ok": False, "error": str(exc)}
 
     def _start_subscription(self, token: str) -> dict:
-        """Register with FoodAssistant Cloud (stubbed: no live endpoint yet)."""
+        """Register with Pantry Raider Cloud (stubbed: no live endpoint yet)."""
         if not token:
             return {"ok": False, "error": "Subscription token is required."}
         try:

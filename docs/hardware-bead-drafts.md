@@ -120,7 +120,7 @@ This is the highest-priority hardware bug (P1) and has three linked symptoms.
 - Plan: the server already knows its hostname (`device_hostname`). Include it in
   the satellite config payload, and on the satellite store an mDNS fallback
   (`<host>.local`). When `sync_from_upstream` hits a ConnectError on the stored
-  IP, re-resolve `<host>.local` (and/or re-run the LAN scan for a FoodAssistant
+  IP, re-resolve `<host>.local` (and/or re-run the LAN scan for a Pantry Raider
   instance) and update `remote_server_ip`. Prefer the `.local` name in the
   upstream URL when the host advertises mDNS.
 - Confirm: change the host's DHCP lease, verify the satellite reconnects without

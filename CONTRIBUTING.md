@@ -1,6 +1,6 @@
-# Contributing to FoodAssistant
+# Contributing to Pantry Raider
 
-Thanks for your interest in FoodAssistant. This guide covers how the project is
+Thanks for your interest in Pantry Raider. This guide covers how the project is
 developed so your changes land smoothly.
 
 ## Where Work Is Tracked

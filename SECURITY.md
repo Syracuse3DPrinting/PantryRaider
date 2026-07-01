@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-FoodAssistant is pre-1.0 software. Only the latest released version receives
+Pantry Raider is pre-1.0 software. Only the latest released version receives
 security fixes. There are no backported patches for older tags. Please update to
 the most recent version before reporting an issue.
 
@@ -27,7 +27,7 @@ When reporting, include as much of the following as you can:
 
 ## Why Security Reports Matter Here
 
-FoodAssistant is built to run on hardware you control, but a couple of features
+Pantry Raider is built to run on hardware you control, but a couple of features
 widen its attack surface and are worth flagging when you assess risk:
 
 - The appliance image runs a host root bridge bound to `127.0.0.1:9299` that can

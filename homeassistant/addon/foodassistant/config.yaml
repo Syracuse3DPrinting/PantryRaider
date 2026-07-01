@@ -1,8 +1,8 @@
-name: FoodAssistant
+name: Pantry Raider
 version: "0.1.0"
 slug: foodassistant
 description: Food spoilage tracker with Grocy inventory and optional AI
-url: https://github.com/Syracuse3DPrinting/FoodAssistant
+url: https://github.com/Syracuse3DPrinting/PantryRaider
 arch:
   - amd64
   - aarch64
@@ -12,7 +12,7 @@ init: false
 ingress: true
 ingress_port: 8000
 panel_icon: mdi:fridge-outline
-panel_title: FoodAssistant
+panel_title: Pantry Raider
 # The web server's data lives in the add-on's persistent /data dir (set via
 # DATA_DIR in the add-on Dockerfile), so settings survive restarts/updates.
 # Optional direct LAN port — left unmapped (secure) by default. Map it only if

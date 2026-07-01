@@ -1,4 +1,4 @@
-"""Unit tests for the FoodAssistant host bridge helpers.
+"""Unit tests for the Pantry Raider host bridge helpers.
 
 The bridge is a plain python http.server script with no .py extension, so it is
 loaded here from its source path. These tests cover the pure helpers that gate
@@ -455,7 +455,7 @@ def test_write_calibration_rule_targets_named_device(tmp_path, monkeypatch):
 
 def test_streamdeck_keycount_from_sysfs_fallback(tmp_path, monkeypatch):
     # When lsusb is unavailable, the key count is read from the Elgato device's
-    # sysfs idProduct (FoodAssistant): an MK.2 (006d) maps to 15 keys.
+    # sysfs idProduct (Pantry Raider): an MK.2 (006d) maps to 15 keys.
     def _raise(*a, **k):
         raise FileNotFoundError("lsusb not installed")
     monkeypatch.setattr(bridge.subprocess, "run", _raise)

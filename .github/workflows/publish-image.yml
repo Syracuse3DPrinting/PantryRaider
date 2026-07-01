@@ -1,6 +1,6 @@
 name: Publish container image
 
-# Builds the FoodAssistant service image and publishes it to the GitHub
+# Builds the Pantry Raider service image and publishes it to the GitHub
 # Container Registry (GHCR) so users can run the app without building locally.
 # Tag a release (e.g. v1.0.0) to publish a versioned image; pushes to main
 # refresh the :main tag. Run manually from the Actions tab via workflow_dispatch.

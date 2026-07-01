@@ -4,7 +4,7 @@ compatibility_date = "2024-01-01"
 
 [vars]
 GITHUB_OWNER = "Syracuse3DPrinting"
-GITHUB_REPO  = "FoodAssistant"
+GITHUB_REPO  = "PantryRaider"
 
 # Add GITHUB_TOKEN as an encrypted secret in Cloudflare dashboard:
 #   Worker Settings → Variables and Secrets → Add → GITHUB_TOKEN

@@ -1,6 +1,6 @@
 # Production compose: runs the prebuilt image from GHCR — no local build needed.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/docker-compose.prod.yml -o docker-compose.yml
+#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/docker-compose.prod.yml -o docker-compose.yml
 #   docker compose up -d
 #   # then open http://YOUR-HOST:9284/setup
 #
@@ -76,7 +76,7 @@ services:
 
   # Automatic updates for the server (non-Pi) install, ON BY DEFAULT. A plain
   # server has no host bridge, so it cannot run the in-app one-button update the
-  # Pi appliances use. Watchtower fills that gap: it watches the FoodAssistant
+  # Pi appliances use. Watchtower fills that gap: it watches the Pantry Raider
   # image on GHCR and, when a new version is published, pulls it and recreates
   # the service container (which brings in updated Python dependencies, since
   # they are baked into the image). New deps need no separate step.

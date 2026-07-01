@@ -1,6 +1,6 @@
 name: Build appliance SD image
 
-# Bakes the FoodAssistant first-boot provisioner into the official Raspberry Pi
+# Bakes the Pantry Raider first-boot provisioner into the official Raspberry Pi
 # OS Lite (64-bit) image and publishes a ready-to-flash .img.xz. A customer
 # flashes it with Raspberry Pi Imager, sets only wifi in the Imager GUI, and
 # boots: no config files, no terminal. The provisioner auto-detects the display
@@ -55,7 +55,7 @@ jobs:
           mv raspios.img base.img || true
           ls -lh base.img
 
-      - name: Bake in the FoodAssistant provisioner
+      - name: Bake in the Pantry Raider provisioner
         run: |
           set -euo pipefail
           sudo scripts/image-build/prepare-image.sh --image "$PWD/base.img"

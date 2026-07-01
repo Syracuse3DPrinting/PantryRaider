@@ -128,7 +128,7 @@ def _is_lat_lon(text: str) -> tuple[float, float] | None:
 
 def _day_label(i: int, date: str) -> str:
     """Forecast day label: Today, Tomorrow, then the weekday name (Tuesday,
-    Wednesday, ...) rather than a bare date (FoodAssistant). Pure."""
+    Wednesday, ...) rather than a bare date (Pantry Raider). Pure."""
     if i == 0:
         return "Today"
     if i == 1:

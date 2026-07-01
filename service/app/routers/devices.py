@@ -57,7 +57,7 @@ def list_remotes():
 
 @router.post("/scan")
 async def scan_lan(body: ScanBody = Body(default=ScanBody())):
-    """Sweep the LAN for FoodAssistant instances and fold them into the list.
+    """Sweep the LAN for Pantry Raider instances and fold them into the list.
 
     Uses the requested CIDR, or this server's own /24 when none is given. The
     scan blocks (sockets), so it runs in a threadpool.

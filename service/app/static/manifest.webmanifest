@@ -1,5 +1,5 @@
 {
-  "name": "FoodAssistant",
+  "name": "Pantry Raider",
   "short_name": "Food",
   "description": "Food spoilage tracker with photo import, recipes, and meal planning",
   "start_url": "/ui/",

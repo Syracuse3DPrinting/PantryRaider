@@ -1,6 +1,6 @@
 # API Reference
 
-FoodAssistant exposes a REST API used by the UI, Home Assistant, and any external integrations.
+Pantry Raider exposes a REST API used by the UI, Home Assistant, and any external integrations.
 
 Interactive docs (Swagger UI) are available at `/docs` when the app is running.
 

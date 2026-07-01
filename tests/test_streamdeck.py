@@ -463,7 +463,7 @@ def test_poll_status_tolerates_errors():
 
 def test_start_server_timer_posts_to_timers():
     # A preset deck timer mirrors to the shared server registry via POST /timers
-    # so the web UI /timers page reflects it (FoodAssistant).
+    # so the web UI /timers page reflects it (Pantry Raider).
     client = _FakeClient(post_map={"/timers": _Resp(200, {"id": 1})})
     ok = asyncio.run(actions.start_server_timer(client, "http://x", "Eggs", 360))
     assert ok is True
@@ -2955,7 +2955,7 @@ def test_mono_icon_color_keeps_text_fill():
     assert out == text_fill
 
 
-# -- full-colour icon set + clean style (FoodAssistant: colour icons) --------
+# -- full-colour icon set + clean style (Pantry Raider: colour icons) --------
 
 
 def test_emoji_for_maps_actions_to_slugs():

@@ -36,8 +36,8 @@ to match your notification target (mobile app, etc.).
 Copy individual card configs from `lovelace/food-dashboard.yaml` into your existing views.
 
 Before pasting, replace the two placeholder hostnames in the file:
-- `YOUR_HOST` — your FoodAssistant address (e.g. `https://food.yourdomain.com` for Pangolin, or `http://192.168.1.170:9284` for LAN-only)
-- `YOUR_GROCY_HOST` — your Grocy address (e.g. `https://grocy.yourdomain.com` or `http://192.168.1.170:9383`); set **Grocy Public URL** in `/setup` so FoodAssistant itself also uses this for Grocy browser links
+- `YOUR_HOST` — your Pantry Raider address (e.g. `https://food.yourdomain.com` for Pangolin, or `http://192.168.1.170:9284` for LAN-only)
+- `YOUR_GROCY_HOST` — your Grocy address (e.g. `https://grocy.yourdomain.com` or `http://192.168.1.170:9383`); set **Grocy Public URL** in `/setup` so Pantry Raider itself also uses this for Grocy browser links
 
 ## 4. Grocy HACS Integration (optional but recommended)
 

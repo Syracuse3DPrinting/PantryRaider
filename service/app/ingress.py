@@ -1,6 +1,6 @@
 """Home Assistant Ingress support.
 
-When FoodAssistant runs as an HA add-on, the Supervisor proxies requests at
+When Pantry Raider runs as an HA add-on, the Supervisor proxies requests at
 ``/api/hassio_ingress/<token>/`` and strips that prefix before forwarding, so
 routing is unchanged. The browser, however, still sees the prefixed URL, so any
 link the app emits must carry it. HA tells us the prefix via the

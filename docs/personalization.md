@@ -1,6 +1,6 @@
 # Personalization and On-screen Features
 
-FoodAssistant separates everyday, taste-level settings (Personalization) from
+Pantry Raider separates everyday, taste-level settings (Personalization) from
 the set-and-forget configuration (Settings). Open Settings and use the toggle at
 the top of the page to switch between the two. This page covers the
 Personalization features and the on-screen surfaces they drive.

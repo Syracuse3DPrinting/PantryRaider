@@ -1,6 +1,6 @@
-# FoodAssistant
+# Pantry Raider
 
-[![CI](https://github.com/Syracuse3DPrinting/FoodAssistant/actions/workflows/ci.yml/badge.svg)](https://github.com/Syracuse3DPrinting/FoodAssistant/actions/workflows/ci.yml)
+[![CI](https://github.com/Syracuse3DPrinting/PantryRaider/actions/workflows/ci.yml/badge.svg)](https://github.com/Syracuse3DPrinting/PantryRaider/actions/workflows/ci.yml)
 
 A self-hosted food tracker that helps you manage what's in your fridge, reduce waste, and plan meals. Built to run entirely on your own hardware with no cloud dependency required.
 
@@ -14,11 +14,11 @@ Licensed under [PolyForm Noncommercial 1.0](LICENSE) - free for personal, educat
 
 ---
 
-## Why FoodAssistant?
+## Why Pantry Raider?
 
-[Grocy](https://grocy.info/) is an excellent, battle-tested self-hosted grocery and inventory manager. It handles product storage, stock levels, expiry tracking, and more. FoodAssistant uses Grocy as its inventory backbone.
+[Grocy](https://grocy.info/) is an excellent, battle-tested self-hosted grocery and inventory manager. It handles product storage, stock levels, expiry tracking, and more. Pantry Raider uses Grocy as its inventory backbone.
 
-What FoodAssistant adds on top:
+What Pantry Raider adds on top:
 
 - **AI-powered photo import** -- photograph a pile of groceries and get them all queued for review at once, without typing anything
 - **Barcode scanning with LLM enrichment** -- scan barcodes via camera, USB scanner, or manual entry; [Open Food Facts](https://world.openfoodfacts.org) provides product data, and an optional LLM pass cleans up messy names and fills in gaps
@@ -30,7 +30,7 @@ What FoodAssistant adds on top:
 
 We stand on the shoulders of giants. See [About & Credits](/ui/about) in the app for the full list.
 
-All AI features are optional. You can run FoodAssistant without any AI provider configured; photo analysis and barcode enrichment will not work, but everything else does.
+All AI features are optional. You can run Pantry Raider without any AI provider configured; photo analysis and barcode enrichment will not work, but everything else does.
 
 ## Features
 
@@ -72,7 +72,7 @@ All AI features are optional. You can run FoodAssistant without any AI provider 
 
 ## How AI works in this app
 
-All AI features are optional. You can run FoodAssistant without any AI provider configured, though photo analysis and barcode enrichment will not work.
+All AI features are optional. You can run Pantry Raider without any AI provider configured, though photo analysis and barcode enrichment will not work.
 
 When AI is enabled you have four choices:
 
@@ -91,10 +91,10 @@ Pick the path that matches where you're running it.
 
 ### Option 1 - Docker (server, NAS, Proxmox, TrueNAS, Unraid)
 
-Needs [Docker](https://docs.docker.com/get-docker/) with Compose v2. One command pulls the prebuilt image and starts FoodAssistant plus a bundled Grocy:
+Needs [Docker](https://docs.docker.com/get-docker/) with Compose v2. One command pulls the prebuilt image and starts Pantry Raider plus a bundled Grocy:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/scripts/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/scripts/install.sh | bash
 ```
 
 Then open **http://YOUR-HOST:9284/setup** and follow the wizard: set a UI password (required by default), add your Grocy and AI provider keys, test, save.
@@ -119,17 +119,17 @@ For each, create an API key/token in that service and paste it into the setup wi
 
 Runs inside Home Assistant with the UI in the sidebar and no separate login - HA handles auth through Ingress.
 
-1. **Settings > Add-ons > Add-on Store**, open the three-dot menu, choose **Repositories**, and add `https://github.com/Syracuse3DPrinting/FoodAssistant`.
-2. Install **FoodAssistant** and start it, then click **Open Web UI**.
+1. **Settings > Add-ons > Add-on Store**, open the three-dot menu, choose **Repositories**, and add `https://github.com/Syracuse3DPrinting/PantryRaider`.
+2. Install **Pantry Raider** and start it, then click **Open Web UI**.
 
-Install the community **Grocy** add-on first and point FoodAssistant at it in the wizard. Full details, including low-power AI options: [add-on docs](homeassistant/addon/foodassistant/DOCS.md).
+Install the community **Grocy** add-on first and point Pantry Raider at it in the wizard. Full details, including low-power AI options: [add-on docs](homeassistant/addon/foodassistant/DOCS.md).
 
 ### Option 3 - Raspberry Pi appliance
 
-Turn a Raspberry Pi into a dedicated FoodAssistant appliance (optionally with a kiosk display and a Stream Deck). Flash a stock Raspberry Pi OS Lite card with Raspberry Pi Imager (set wifi, hostname, and SSH there), boot, SSH in, and run:
+Turn a Raspberry Pi into a dedicated Pantry Raider appliance (optionally with a kiosk display and a Stream Deck). Flash a stock Raspberry Pi OS Lite card with Raspberry Pi Imager (set wifi, hostname, and SSH there), boot, SSH in, and run:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/install.sh | bash
 ```
 
 The installer detects the board, any attached display, and any Stream Deck, then asks for the deployment mode (full **Pi Hosted** stack, or a thin **Pi Remote** that only drives a kiosk/Stream Deck for a server elsewhere) and which add-ons to enable. Nothing to edit on your PC. Full walkthrough: [docs/hardware/sd-image.md](docs/hardware/sd-image.md).
@@ -151,7 +151,7 @@ cp .env.example .env
 
 ## Offline / Air-Gapped Use
 
-FoodAssistant can run entirely offline if you use Ollama. With Ollama configured:
+Pantry Raider can run entirely offline if you use Ollama. With Ollama configured:
 
 - Photo analysis and receipt import work locally
 - Barcode lookup still contacts Open Food Facts by default; set `BARCODE_ENRICHMENT=off` to disable this (items will need manual names)
@@ -162,7 +162,7 @@ Startup is fully self-contained - no internet access is required to start or res
 
 ## Backup
 
-Download a zip of FoodAssistant's data at **Settings > Security > Download Backup**. API keys and passwords are stripped from the backup by default so it is safe to store off-box; tick "Include API keys & passwords" for a restore-complete copy you keep somewhere trusted.
+Download a zip of Pantry Raider's data at **Settings > Security > Download Backup**. API keys and passwords are stripped from the backup by default so it is safe to store off-box; tick "Include API keys & passwords" for a restore-complete copy you keep somewhere trusted.
 
 To restore that backup, use **Settings > Security > Restore** to rebuild the app's data (settings, database, staples) from a backup zip. Your current data is copied aside first, and a redacted backup keeps your existing API keys in place.
 
@@ -182,7 +182,7 @@ For support, turn on **Settings > Security > Debug logging** to raise the log le
 
 ## Home Assistant
 
-**Running Home Assistant OS or Supervised?** Install FoodAssistant as an add-on so it lives in the HA sidebar with no separate login - HA authenticates the UI through Ingress. In HA go to **Settings > Add-ons > Add-on Store**, open the menu, choose Repositories, and add `https://github.com/Syracuse3DPrinting/FoodAssistant`, then install FoodAssistant. Full instructions: [homeassistant/addon/foodassistant/DOCS.md](homeassistant/addon/foodassistant/DOCS.md).
+**Running Home Assistant OS or Supervised?** Install Pantry Raider as an add-on so it lives in the HA sidebar with no separate login - HA authenticates the UI through Ingress. In HA go to **Settings > Add-ons > Add-on Store**, open the menu, choose Repositories, and add `https://github.com/Syracuse3DPrinting/PantryRaider`, then install Pantry Raider. Full instructions: [homeassistant/addon/foodassistant/DOCS.md](homeassistant/addon/foodassistant/DOCS.md).
 
 For a **standalone** install, see [homeassistant/README.md](homeassistant/README.md) for REST sensors, automations, and the Lovelace dashboard.
 
@@ -199,7 +199,7 @@ docker compose up -d
 
 Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.3.1` in `.env`.
 
-**Automatic updates (server):** the prod compose runs Watchtower, which checks for a new FoodAssistant image and recreates the service container when one is published. This is **on by default** so a server install stays current without intervention, and updated Python dependencies come along for free because they are baked into the image. It only touches the FoodAssistant container (the others stay on their pinned versions) and polls daily (override with `WATCHTOWER_POLL_INTERVAL` seconds in `.env`).
+**Automatic updates (server):** the prod compose runs Watchtower, which checks for a new Pantry Raider image and recreates the service container when one is published. This is **on by default** so a server install stays current without intervention, and updated Python dependencies come along for free because they are baked into the image. It only touches the Pantry Raider container (the others stay on their pinned versions) and polls daily (override with `WATCHTOWER_POLL_INTERVAL` seconds in `.env`).
 
 To turn auto-updates off, stop the one service or pin to a fixed version:
 
@@ -238,7 +238,7 @@ To move a backend to a newer version, **back up first** (`./scripts/backup.sh` p
 docker compose up -d grocy   # or mealie / ollama
 ```
 
-Check each project's release notes before a major bump - Mealie in particular has had breaking schema migrations between major versions. FoodAssistant's own image is versioned separately via `FOODASSISTANT_TAG` (see above).
+Check each project's release notes before a major bump - Mealie in particular has had breaking schema migrations between major versions. Pantry Raider's own image is versioned separately via `FOODASSISTANT_TAG` (see above).
 
 ### Dependencies
 
@@ -262,7 +262,7 @@ To install exactly the locked set in a venv: `uv pip sync service/requirements.l
 - [docs/hardware/supported-hardware.md](docs/hardware/supported-hardware.md) - minimum specs and the board test matrix.
 - [docs/hardware/sd-image.md](docs/hardware/sd-image.md) - flashing the ready-made SD-card image.
 - [docs/api.md](docs/api.md) - REST endpoint reference.
-- [docs/AI_DECLARATIONS.md](docs/AI_DECLARATIONS.md) - how AI tools were used to build FoodAssistant.
+- [docs/AI_DECLARATIONS.md](docs/AI_DECLARATIONS.md) - how AI tools were used to build Pantry Raider.
 
 These pages are also wired into an MkDocs site (`mkdocs.yml`) for browsable local docs. MkDocs and its theme are dev-only tools and are not part of the runtime requirements. To preview the site:
 

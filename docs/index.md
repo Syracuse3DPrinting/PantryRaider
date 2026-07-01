@@ -1,11 +1,11 @@
-# FoodAssistant
+# Pantry Raider
 
 A self-hosted food tracker that helps you manage what is in your fridge, reduce
 waste, and plan meals. It runs entirely on your own hardware with no required
 cloud dependency, built on [Grocy](https://grocy.info/) for inventory with
 optional [Mealie](https://mealie.io/) recipes and a local LLM.
 
-What FoodAssistant adds on top of Grocy:
+What Pantry Raider adds on top of Grocy:
 
 - **AI photo import.** Photograph a pile of groceries and queue them all for
   review at once, without typing.
@@ -34,4 +34,4 @@ What FoodAssistant adds on top of Grocy:
   [HTTP API](api.md).
 
 The project source and issues live on
-[GitHub](https://github.com/Syracuse3DPrinting/FoodAssistant).
+[GitHub](https://github.com/Syracuse3DPrinting/PantryRaider).

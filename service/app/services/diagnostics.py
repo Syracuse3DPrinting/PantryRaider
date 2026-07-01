@@ -14,7 +14,7 @@ import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-# A marker attribute so we only ever add ONE FoodAssistant file handler to the
+# A marker attribute so we only ever add ONE Pantry Raider file handler to the
 # root logger, no matter how many times configure_file_logging runs (startup
 # plus every settings save).
 _HANDLER_TAG = "foodassistant_file_handler"

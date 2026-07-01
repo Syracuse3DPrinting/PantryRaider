@@ -1,5 +1,5 @@
 /**
- * FoodAssistant – Change & Bead Dashboard
+ * Pantry Raider – Change & Bead Dashboard
  * Cloudflare Worker
  *
  * Sources:
@@ -9,7 +9,7 @@
  */
 
 const OWNER = "Syracuse3DPrinting";
-const REPO  = "FoodAssistant";
+const REPO  = "PantryRaider";
 const BRANCHES = ["main", "arch/modular", "ANG-Test", "ANGTEST2"];
 
 // ── Utility ───────────────────────────────────────────────────────────────────
@@ -98,7 +98,7 @@ function renderPage(beads, commits, changelog, branch) {
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>FoodAssistant Dashboard</title>
+<title>Pantry Raider Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet"/>
 <style>
@@ -263,7 +263,7 @@ code{font-family:'JetBrains Mono',monospace}
 <header class="hdr">
   <div class="logo">
     <div class="logo-blob">🥗</div>
-    <span>FoodAssistant</span>
+    <span>Pantry Raider</span>
     <span style="color:var(--muted);font-weight:400">Dashboard</span>
   </div>
   <div class="hdr-right">

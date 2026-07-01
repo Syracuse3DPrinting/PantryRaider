@@ -1,6 +1,6 @@
 # Hardware
 
-This page covers the physical hardware FoodAssistant runs on and the peripherals
+This page covers the physical hardware Pantry Raider runs on and the peripherals
 it integrates with: single-board computers, displays and touch panels, Stream
 Deck controllers, the optional accelerometer, and barcode scanners.
 
@@ -44,11 +44,11 @@ surface (kiosk and/or Stream Deck only, no local backend), since that mode runs
 no Docker stack.
 
 The architecture is 64-bit only. The image is aarch64, and the Docker images
-(FoodAssistant, Grocy, Mealie, Ollama) are published for arm64 and amd64.
+(Pantry Raider, Grocy, Mealie, Ollama) are published for arm64 and amd64.
 
 ## Displays
 
-A display is optional. FoodAssistant is a web app reachable from any browser on
+A display is optional. Pantry Raider is a web app reachable from any browser on
 your network, so a headless box is a perfectly normal setup. For a dedicated
 kitchen panel, the appliance image runs a Chromium kiosk (via the `cage` Wayland
 compositor) pointed at the local UI.
@@ -131,7 +131,7 @@ Two ways to scan, neither needing special hardware:
 
 For a fully headless scanner that submits directly without a focused browser
 field, the Home Assistant integration captures the scanner with the
-`keyboard_remote` integration and posts the barcode to FoodAssistant. That path
+`keyboard_remote` integration and posts the barcode to Pantry Raider. That path
 requires Home Assistant OS or Supervised; see
 [homeassistant/barcode-scanner.md](../homeassistant/barcode-scanner.md) and
 [Platforms](platforms.md).

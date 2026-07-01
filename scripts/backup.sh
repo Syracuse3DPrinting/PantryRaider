@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FoodAssistant backup — tars the bind-mounted data directories.
+# Pantry Raider backup — tars the bind-mounted data directories.
 #
 # Usage:
 #   ./scripts/backup.sh [destination-dir]      # default: ./backups
@@ -8,7 +8,7 @@
 #   ./scripts/restore.sh <backup-file.tar.gz>
 #
 # Cron example (2:30 AM daily, keep 14 days):
-#   30 2 * * * /path/to/FoodAssistant/scripts/backup.sh /mnt/nas/foodassistant-backups
+#   30 2 * * * /path/to/PantryRaider/scripts/backup.sh /mnt/nas/foodassistant-backups
 #
 # What's included:
 #   service/data   — settings.json, SQLite defaults DB, staples.txt

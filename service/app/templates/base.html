@@ -10,7 +10,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Resolve all relative links against the app root (or the HA Ingress prefix) -->
   <base href="{{ ingress_path }}/">
-  <title>{% block title %}FoodAssistant{% endblock %}</title>
+  <title>{% block title %}{{ app_name }}{% endblock %}</title>
   <link rel="manifest" href="static/manifest.webmanifest">
   <meta name="theme-color" content="#212529">
   <link rel="icon" type="image/svg+xml" href="static/icons/favicon.svg">
@@ -375,7 +375,7 @@
 <body>
   <nav class="navbar navbar-expand-lg bg-body-tertiary border-bottom fixed-top">
     <div class="container-fluid">
-      <a class="navbar-brand" href="ui/"><i class="bi bi-fridge me-2"></i>FoodAssistant</a>
+      <a class="navbar-brand" href="ui/"><i class="bi bi-fridge me-2"></i>{{ app_name }}</a>
       {# Primary navigation lives OUTSIDE the collapse so the main menu items stay
          visible on a phone instead of hiding behind the hamburger (the toggler
          now only reveals the utility controls). On small screens the row lays out

@@ -127,7 +127,7 @@ async def test_event():
     """Queue a sample notification so the user can confirm the channel works."""
     eid = ha_events.add_notification(
         "If you can read this, Home Assistant notifications are wired up.",
-        title="FoodAssistant test", level="success",
+        title="Pantry Raider test", level="success",
     )
     return {"ok": True, "id": eid}
 

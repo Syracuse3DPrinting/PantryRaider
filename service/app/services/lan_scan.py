@@ -1,9 +1,9 @@
-"""Server-side LAN scan to discover FoodAssistant instances.
+"""Server-side LAN scan to discover Pantry Raider instances.
 
 A satellite normally registers itself by dialing out (see services/devices.py),
 but a freshly imaged device, or a second server, may not have done so yet. This
 gives the admin a one-shot active scan: probe a CIDR for open ports, then ask
-each open host for /health and keep the ones that fingerprint as FoodAssistant.
+each open host for /health and keep the ones that fingerprint as Pantry Raider.
 
 Stdlib TCP connect for the cheap liveness check, httpx for the fingerprint. The
 per-host probe is factored out so tests can monkeypatch it without any network.
@@ -28,7 +28,7 @@ MAX_HOSTS = 1024
 def _probe_host(ip: str, ports: list[int], timeout: float) -> dict | None:
     """Probe one host: TCP connect each port, fingerprint the first that opens.
 
-    Returns a result dict when the host answers /health as FoodAssistant, else
+    Returns a result dict when the host answers /health as Pantry Raider, else
     None. Swallows every per-host error so one dead host never aborts the sweep.
     """
     for port in ports:
@@ -59,7 +59,7 @@ def _probe_host(ip: str, ports: list[int], timeout: float) -> dict | None:
 def scan_for_instances(cidr: str, ports: list[int] | None = None,
                        timeout: float = 0.4, concurrency: int = 64,
                        exclude: set[str] | None = None) -> list[dict]:
-    """Scan a CIDR for FoodAssistant instances.
+    """Scan a CIDR for Pantry Raider instances.
 
     Returns a list of result dicts (one per instance found). On a malformed or
     too-large CIDR returns a single-element list carrying an "error" key, so the
@@ -130,7 +130,7 @@ def _local_ips() -> set[str]:
 def _rank_ip(ip: str) -> int:
     """Lower rank = more likely to be a real home/office LAN. Docker's default
     bridge lives in 172.16/12, so that range is ranked last so a containerized
-    server prefers a real LAN interface when it has one (FoodAssistant)."""
+    server prefers a real LAN interface when it has one (Pantry Raider)."""
     if ip.startswith("192.168."):
         return 0
     if ip.startswith("10."):

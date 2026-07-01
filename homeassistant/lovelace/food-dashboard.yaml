@@ -134,7 +134,7 @@ views:
 
       # ── Shopping List ─────────────────────────────────────────────────────────
       # Unchecked items from the Mealie shopping list. Tap the tile above to
-      # open the FoodAssistant shopping page and check things off.
+      # open the Pantry Raider shopping page and check things off.
       - type: conditional
         conditions:
           - condition: numeric_state

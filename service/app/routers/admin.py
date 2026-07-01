@@ -100,7 +100,7 @@ async def check_update():
     # a few minutes, so just after a push it can still return the previous
     # APP_VERSION and the check wrongly reports "up to date". A unique query
     # string busts that cache, and we also send no-cache headers, so a Check for
-    # updates right after a release sees the new version (FoodAssistant).
+    # updates right after a release sees the new version (Pantry Raider).
     raw_url = (f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/service/app/config.py"
                f"?cb={int(time.time())}")
     _no_cache = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
@@ -146,7 +146,7 @@ async def check_update():
 
 @router.get("/backup")
 async def download_backup(include_secrets: bool = False):
-    """Stream a zip of all FoodAssistant app data as a browser download.
+    """Stream a zip of all Pantry Raider app data as a browser download.
 
     Includes settings.json, the SQLite database, and any user-edited data
     files. By default API keys, passwords and the TOTP/session secrets are
@@ -256,7 +256,7 @@ def _restore_zip(zip_bytes: bytes) -> dict:
     if not members:
         raise HTTPException(
             400,
-            "This zip does not look like a FoodAssistant backup "
+            "This zip does not look like a Pantry Raider backup "
             "(no 'foodassistant-data/' contents).",
         )
 
@@ -325,7 +325,7 @@ def _restore_zip(zip_bytes: bytes) -> dict:
 
 @router.post("/restore")
 async def restore_backup(file: UploadFile = File(...)):
-    """Restore FoodAssistant app data from an uploaded backup zip.
+    """Restore Pantry Raider app data from an uploaded backup zip.
 
     The counterpart to GET /admin/backup: it rewrites this app's data directory
     (settings.json, the defaults database, staples) from the archive. Grocy and

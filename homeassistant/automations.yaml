@@ -1,4 +1,4 @@
-# FoodAssistant — Automations
+# Pantry Raider — Automations
 # Add these to your automations.yaml or import via the UI
 
 - alias: "Food - Alert: Items Expired"

@@ -96,7 +96,7 @@ def test_storage_categories_moved_out_of_inventory(client, monkeypatch):
 
 def test_weather_has_no_dedicated_settings_pane(client, monkeypatch):
     # Weather no longer has its own Personalization section; location/units are
-    # set on the Weather page itself (FoodAssistant). A hidden input keeps the
+    # set on the Weather page itself (Pantry Raider). A hidden input keeps the
     # Stream Deck save working.
     html = _render(client, monkeypatch, satellite=False)
     assert 'id="pane-personalization-weather"' not in html
@@ -143,7 +143,7 @@ def test_stand_mixer_attachment_toggle_present(client, monkeypatch):
 def test_settings_personalization_top_toggle_present(client, monkeypatch):
     """The Settings page has a top toggle to switch between Settings and
     Personalization, and the Personalization pills carry the group marker so the
-    toggle can show one menu at a time (FoodAssistant)."""
+    toggle can show one menu at a time (Pantry Raider)."""
     from app.config import settings
     monkeypatch.setattr(settings, "deployment_mode", "server")
     with patch.object(type(settings), "is_configured", lambda self: True):

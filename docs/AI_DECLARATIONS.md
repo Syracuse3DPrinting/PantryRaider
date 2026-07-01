@@ -1,6 +1,6 @@
 # AI Declarations
 
-An honest note about how AI tools were used to build FoodAssistant.
+An honest note about how AI tools were used to build Pantry Raider.
 
 ## How AI was used
 
@@ -18,8 +18,8 @@ Grocy and Mealie instances), not just generated and shipped.
 
 Use caution when installing software on your network, and review what you run
 before you run it. That is good practice for any project, with or without AI
-involvement. FoodAssistant is open source, so you can read the code, check the
+involvement. Pantry Raider is open source, so you can read the code, check the
 dependencies, and decide for yourself.
 
 If you find a problem or have a question about how something works, the source
-is on [GitHub](https://github.com/Syracuse3DPrinting/FoodAssistant).
+is on [GitHub](https://github.com/Syracuse3DPrinting/PantryRaider).

@@ -1,5 +1,5 @@
 """On-screen Start Page: a full-screen launcher that works like an on-screen
-Stream Deck (FoodAssistant).
+Stream Deck (Pantry Raider).
 
 The Start Page editor mirrors the Stream Deck editor exactly: the same key
 catalog, the same custom-key library (shared via streamdeck_key_overrides), and

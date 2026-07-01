@@ -1,6 +1,6 @@
 # SD-card image guide
 
-Set up a FoodAssistant appliance on a Raspberry Pi in four steps: flash a stock
+Set up a Pantry Raider appliance on a Raspberry Pi in four steps: flash a stock
 Raspberry Pi OS Lite card, boot, SSH in, and run one install command. The
 installer asks what you want (full stack, or a thin remote) and provisions only
 that. No files to edit on your PC, nothing to clone on your PC.
@@ -10,7 +10,7 @@ that. No files to edit on your PC, nothing to clone on your PC.
 
 ## How it works
 
-FoodAssistant runs on the official **Raspberry Pi OS Lite (64-bit)** image plus
+Pantry Raider runs on the official **Raspberry Pi OS Lite (64-bit)** image plus
 an on-device installer. You flash the stock OS, boot it, then run the installer
 over SSH. It detects the board, any attached display, and any attached Stream
 Deck, asks for the deployment mode and add-ons, then installs Docker and the
@@ -63,17 +63,17 @@ your router, or it may print on an attached screen).
 Then run the installer:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/install.sh | bash
 ```
 
 The installer shows what it detected (board, display, Stream Deck) and asks one
 question:
 
 - **Deployment mode**
-  - **Pi Hosted** — run the full FoodAssistant stack on this Pi (FoodAssistant +
+  - **Pi Hosted** — run the full Pantry Raider stack on this Pi (Pantry Raider +
     Grocy). Pick this for a normal appliance.
   - **Pi Remote** — thin client. Installs **no** Docker, Grocy, or Mealie; this
-    device only drives a kiosk and/or Stream Deck pointed at a FoodAssistant
+    device only drives a kiosk and/or Stream Deck pointed at a Pantry Raider
     server already running elsewhere on your LAN. Viable on a Pi 3. It asks for
     that server's URL.
 
@@ -90,7 +90,7 @@ The installer can run unattended by passing the choices as environment variables
 and setting `NONINTERACTIVE=1`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/install.sh \
+curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/install.sh \
   | NONINTERACTIVE=1 DEPLOYMENT_MODE=pi_hosted ENABLE_MEALIE=true bash
 ```
 
@@ -110,7 +110,7 @@ http://foodassistant.local:9284/setup
 The web wizard takes you through: deployment mode confirmation, security
 (set a password), hardware (display scale and rotation, Stream Deck), Grocy
 connection, AI provider, and optional integrations. When you click
-**Start using FoodAssistant** everything is saved and you're done.
+**Start using Pantry Raider** everything is saved and you're done.
 
 A Pi Remote install has no local app; it drives the server URL you gave the
 installer.
@@ -123,7 +123,7 @@ see Troubleshooting.)
 
 If you want a flash-and-go card with no SSH step, a pre-built
 `foodassistant-appliance-*-arm64.img.xz` is published to the
-[Releases page](https://github.com/Syracuse3DPrinting/FoodAssistant/releases).
+[Releases page](https://github.com/Syracuse3DPrinting/PantryRaider/releases).
 It bakes the provisioner into the image so it self-installs the full Pi Hosted
 stack on first boot. Flash it with balenaEtcher or `dd`.
 
@@ -210,7 +210,7 @@ again. To force the provisioner to redo a completed step set `FORCE=1`:
 
 ```bash
 sudo rm -f /var/lib/foodassistant/firstboot.done
-curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/install.sh | bash
 ```
 
 **Verify the stack.**

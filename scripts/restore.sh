@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# FoodAssistant restore — unpacks a backup made by backup.sh.
+# Pantry Raider restore — unpacks a backup made by backup.sh.
 #
 # Usage:
 #   ./scripts/restore.sh <backup-file.tar.gz>

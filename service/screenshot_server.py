@@ -1,5 +1,5 @@
 """
-Standalone FastAPI app that serves the FoodAssistant templates with realistic
+Standalone FastAPI app that serves the Pantry Raider templates with realistic
 mock data, for screenshot generation. Bypasses Grocy/Mealie entirely.
 Run with: uvicorn screenshot_server:app --port 8999
 """

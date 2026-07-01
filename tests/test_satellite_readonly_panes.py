@@ -126,7 +126,7 @@ def test_satellite_device_local_secrets_stay_editable(client, monkeypatch):
     """A satellite must be able to edit its OWN device-local secrets (the upstream
     API key it uses to reach the server, its web password, X-API-Key, and kiosk
     PIN) so it can be paired or re-keyed locally, even though server-managed
-    secrets (AI, Grocy, Mealie) are read-only (FoodAssistant)."""
+    secrets (AI, Grocy, Mealie) are read-only (Pantry Raider)."""
     html = _render_setup(client, monkeypatch, satellite=True)
     # Device-local: editable.
     assert not _attr_present(html, "upstream_api_key", "readonly")
@@ -169,7 +169,7 @@ def test_configured_page_defines_update_functions(client, monkeypatch):
     """The update/diagnostics functions must be defined on a CONFIGURED install,
     not only in the wizard. They were trapped in the {% if not configured %}
     block, so the Updates card buttons called undefined functions and silently
-    did nothing (FoodAssistant). Regression guard."""
+    did nothing (Pantry Raider). Regression guard."""
     html = _render_setup(client, monkeypatch, satellite=False)
     for fn in ("function checkSatelliteUpdate", "async function updateServerNow",
                "async function checkForUpdates", "function _initSyncTimes",

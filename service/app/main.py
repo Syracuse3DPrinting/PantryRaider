@@ -7,7 +7,7 @@ from fastapi.responses import JSONResponse, RedirectResponse
 from starlette.middleware.sessions import SessionMiddleware
 from contextlib import asynccontextmanager
 
-from .config import settings, APP_VERSION
+from .config import settings, APP_NAME, APP_VERSION
 from .database import engine, get_db, Base
 from .ingress import ingress_redirect
 from .models import db_models  # noqa: F401 - registers models with Base
@@ -111,7 +111,7 @@ async def _periodic_auto_update():
 
 
 app = FastAPI(
-    title="FoodAssistant",
+    title=APP_NAME,
     description="Food spoilage tracker with LLM-powered photo import and Grocy integration",
     version=APP_VERSION,
     lifespan=lifespan,
@@ -265,7 +265,7 @@ async def root():
     return RedirectResponse("/ui/", status_code=303)
 
 
-# Stable fingerprint so a LAN scan can tell a FoodAssistant instance apart from
+# Stable fingerprint so a LAN scan can tell a Pantry Raider instance apart from
 # any other service answering on the same port. Public (no auth) on purpose: it
 # reveals only the app name, version and deployment mode, never config or keys.
 _FINGERPRINT = {"app": "foodassistant", "version": APP_VERSION}
@@ -289,7 +289,7 @@ async def health():
         "status": "ok",
         "mode": settings.deployment_mode,
         # Lets a LAN scan recognise and skip this very server when it answers its
-        # own probe through a Docker gateway (FoodAssistant).
+        # own probe through a Docker gateway (Pantry Raider).
         "device_id": settings.device_id,
         "vision_provider": vision_status,
         "grocy": "ok" if await grocy.health_check() else "error",

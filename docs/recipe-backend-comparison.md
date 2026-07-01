@@ -1,6 +1,6 @@
 # Recipes: do you need Mealie?
 
-FoodAssistant always uses Grocy for inventory. Recipes, meal planning, and
+Pantry Raider always uses Grocy for inventory. Recipes, meal planning, and
 shopping lists are a separate, optional layer that runs on **Mealie**. This page
 explains what you get when you add Mealie, what works without it, and how to
 decide whether it is worth the extra container for your setup.
@@ -14,7 +14,7 @@ it. Mealie is one more Docker container and a little more RAM, nothing more.
 
 ### Grocy only (no Mealie)
 
-This is the lean setup: FoodAssistant plus Grocy, no second recipe service.
+This is the lean setup: Pantry Raider plus Grocy, no second recipe service.
 
 You get everything inventory-related: the storage panels, drag-and-drop moves,
 expiry tracking and badges, barcode scanning, photo/receipt import, the expiry
@@ -47,7 +47,7 @@ Add Mealie and the recipe layer lights up:
 
 How the inventory awareness works is worth knowing, because it shapes the
 tradeoffs below. Mealie itself has no idea what's in your fridge; by design it
-does not track pantry inventory. FoodAssistant bridges that gap itself: it reads
+does not track pantry inventory. Pantry Raider bridges that gap itself: it reads
 your Grocy stock, matches it against Mealie's recipe ingredients by name, and
 does the "ready / needs staples / needs shopping" tiering and the "consume stock
 when you cook" step in its own Python code (see
@@ -94,7 +94,7 @@ docker compose --profile with-mealie up -d
 ```
 
 Mealie comes up on port 9285. Create an API token inside Mealie, then paste the
-Mealie URL and token into the FoodAssistant setup wizard at `/setup` and test the
+Mealie URL and token into the Pantry Raider setup wizard at `/setup` and test the
 connection. The Recipes, Cook, Meal plan, and Shopping tabs become available once
 the connection succeeds.
 
@@ -110,11 +110,11 @@ rather than name-matched. That is genuinely appealing for a single-box appliance
 recipes, stock, meal plan, and shopping list would all live in one service with
 one backup and one product catalog, and no second container.
 
-FoodAssistant does **not** use Grocy's recipe module today. The entire recipe,
+Pantry Raider does **not** use Grocy's recipe module today. The entire recipe,
 cook, meal-plan, and shopping experience in the app is built on Mealie's API, and
 `service/app/services/grocy.py` implements no recipe support. Running the recipe
 features therefore means running Mealie. Using Grocy as the recipe backend
 instead would be a real feature to build, not a setting to flip; it is tracked as
 possible future work, not something you can turn on now. If a Grocy-native recipe
 mode would make your setup simpler, that is useful feedback to raise on the
-[issue tracker](https://github.com/Syracuse3DPrinting/FoodAssistant/issues).
+[issue tracker](https://github.com/Syracuse3DPrinting/PantryRaider/issues).

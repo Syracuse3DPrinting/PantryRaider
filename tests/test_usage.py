@@ -1,4 +1,4 @@
-"""AI token usage tracking + budget (FoodAssistant): the response token
+"""AI token usage tracking + budget (Pantry Raider): the response token
 extractor, recording/accumulation, monthly rollup, and the budget check."""
 from __future__ import annotations
 

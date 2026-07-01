@@ -1,6 +1,6 @@
-# FoodAssistant – Change & Bead Dashboard
+# Pantry Raider – Change & Bead Dashboard
 
-A read-only Cloudflare Worker that renders a live dashboard for the FoodAssistant project.
+A read-only Cloudflare Worker that renders a live dashboard for the Pantry Raider project.
 
 ## What it shows
 

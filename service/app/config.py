@@ -12,10 +12,16 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.52"
+APP_VERSION = "0.7.53"
+
+# Single source of truth for the product's display name. The runtime identifiers
+# (systemd units, install paths, the foodassistant_streamdeck package, the
+# foodassistant.local host) deliberately keep their original slug so deployed
+# devices keep updating; only the user-facing brand lives here.
+APP_NAME = "Pantry Raider"
 
 # GitHub repo used by the in-app update checker.
-GITHUB_REPO = "Syracuse3DPrinting/FoodAssistant"
+GITHUB_REPO = "Syracuse3DPrinting/PantryRaider"
 
 # Amazon Associates tag for the Shop recommendations. This is the project
 # owner's static tag (the same on every deployment, since the affiliate revenue
@@ -204,13 +210,13 @@ def nav_chrome_hidden(nav_visibility: str, has_streamdeck: bool, ui_scale: str) 
 
 # Deployment modes chosen on the first wizard step. They steer the rest of
 # setup and (on a Pi) what the first-boot provisioner installs:
-#   server     - FoodAssistant on a general server; connect to separately
+#   server     - Pantry Raider on a general server; connect to separately
 #                running Grocy/Mealie. The only non-Pi mode.
-#   pi_hosted  - everything runs on this Pi (FoodAssistant + Grocy + Mealie),
+#   pi_hosted  - everything runs on this Pi (Pantry Raider + Grocy + Mealie),
 #                with or without an attached display (kiosk auto-enables when a
 #                display is present, and a display can be added later).
 #   pi_remote  - thin client: this device only drives a Stream Deck and/or
-#                kiosk pointed at an existing FoodAssistant server on the LAN.
+#                kiosk pointed at an existing Pantry Raider server on the LAN.
 #                No local Docker/Grocy/Mealie; runs on low-spec hardware.
 DEPLOYMENT_MODES = {
     "server":    {"label": "Server hosted", "pi": False, "local_stack": True,
@@ -676,7 +682,7 @@ class Settings(BaseSettings):
     # when one is rate-limited or revoked. Set in the setup wizard.
     ai_extra_keys: dict = {}
 
-    # AI token budget (FoodAssistant). A per-calendar-month cap on AI tokens for
+    # AI token budget (Pantry Raider). A per-calendar-month cap on AI tokens for
     # this instance, for users on their own API key who want to bound spend. 0 =
     # no budget (unlimited). Usage is tracked in data_dir/ai_usage.json; when the
     # month's usage reaches the budget, AI photo/enrichment calls are declined
@@ -878,7 +884,7 @@ class Settings(BaseSettings):
     streamdeck_key_count: int = 0
     display_touch: bool = False
 
-    # On-screen Start Page (FoodAssistant): an optional full-screen launcher that
+    # On-screen Start Page (Pantry Raider): an optional full-screen launcher that
     # works like an on-screen Stream Deck. start_page_enabled turns it on (off by
     # default); start_page_keys is the grid size (6, 15, or 32); start_page_layout
     # is an ordered list of slot tokens, each a built-in action key, a
@@ -936,7 +942,7 @@ class Settings(BaseSettings):
     # "f" or "c". Mirrored into config.toml when the deck config is written.
     streamdeck_weather_location: str = ""
     streamdeck_weather_units: str = "f"
-    # Weather data server (FoodAssistant). The base URL of an Open-Meteo API,
+    # Weather data server (Pantry Raider). The base URL of an Open-Meteo API,
     # default the public instance. Advanced users can point this at a self-hosted
     # Open-Meteo. The "/v1/forecast" path is appended by the weather service.
     # Used by both the on-screen Weather page and the Stream Deck weather key.
@@ -997,7 +1003,7 @@ class Settings(BaseSettings):
     # (Grocy/Mealie/AI keys and the expiry defaults) from a main server and then
     # talks to those backends directly. See SATELLITE_PULL_FIELDS.
     deployment_mode: str = ""
-    # Satellite only: base URL of the main FoodAssistant server to pull config
+    # Satellite only: base URL of the main Pantry Raider server to pull config
     # from (e.g. http://192.168.1.50:9284), plus the API key used to authenticate
     # that pull. Unused in the other modes.
     remote_server_url: str = ""
@@ -1121,7 +1127,7 @@ class Settings(BaseSettings):
     # Remembered LAN range for the satellite-discovery scan, so a containerized
     # server (which only sees its Docker subnet) does not have to be told the
     # range every time. Set automatically the first time a real LAN range is
-    # scanned or a satellite checks in (FoodAssistant).
+    # scanned or a satellite checks in (Pantry Raider).
     lan_scan_cidr: str = ""
 
     # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "subscription"
@@ -1219,7 +1225,7 @@ class Settings(BaseSettings):
     def save(self, data: dict) -> None:
         """Merge data into settings.json and apply values to the live object.
 
-        Hardened against data loss (FoodAssistant): if the existing settings file
+        Hardened against data loss (Pantry Raider): if the existing settings file
         is present but cannot be read or parsed, it is preserved aside as
         settings.json.corrupt.<n> rather than silently overwritten with only the
         new fields, and the write is atomic (temp file plus rename) so an

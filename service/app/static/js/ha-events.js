@@ -1,5 +1,5 @@
 /*
- * On-screen Home Assistant event channel (FoodAssistant).
+ * On-screen Home Assistant event channel (Pantry Raider).
  *
  * When enabled (Settings > Home Assistant), the page polls /events/poll for
  * events pushed from Home Assistant and shows them on the display:

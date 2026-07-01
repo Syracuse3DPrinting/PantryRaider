@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
-# FoodAssistant on-device installer (loader)
+# Pantry Raider on-device installer (loader)
 # ==========================================
 # Run this ON the device (a freshly imaged Raspberry Pi, or any Debian/Ubuntu
 # box) over SSH. It asks what you want to install, then provisions only that.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/install.sh | bash
 #
 # There is nothing to edit on your PC and no repo to clone on your PC. Flash the
 # card with Raspberry Pi Imager (set wifi/hostname/locale there), boot, SSH in,
@@ -19,9 +19,9 @@
 #      (scripts/image-build/firstboot.sh) with the choices you made.
 #
 # Modes:
-#   pi_hosted  - full stack on this Pi (FoodAssistant + Grocy, optional Mealie).
+#   pi_hosted  - full stack on this Pi (Pantry Raider + Grocy, optional Mealie).
 #   pi_remote  - thin client: NO Docker/Grocy here, just a kiosk and/or Stream
-#                Deck pointed at a FoodAssistant server elsewhere on the LAN.
+#                Deck pointed at a Pantry Raider server elsewhere on the LAN.
 #   server     - full stack on a general (non-Pi) Debian/Ubuntu host.
 #
 # Non-interactive use (CI, scripted installs): set NONINTERACTIVE=1 and pass the
@@ -31,7 +31,7 @@
 # without cloning, using sudo, or provisioning (used by the test suite).
 set -euo pipefail
 
-REPO_URL="${REPO_URL:-https://github.com/Syracuse3DPrinting/FoodAssistant.git}"
+REPO_URL="${REPO_URL:-https://github.com/Syracuse3DPrinting/PantryRaider.git}"
 REPO_BRANCH="${REPO_BRANCH:-main}"
 # Where the repo is checked out ON THE DEVICE (never on the user's PC).
 REPO_DIR="${REPO_DIR:-/opt/foodassistant-src}"
@@ -155,7 +155,7 @@ HOSTNAME_CHOICE="${HOSTNAME:-$(hostname 2>/dev/null || echo foodassistant)}"
 
 banner() {
   hr
-  printf '%s  FoodAssistant installer%s\n' "$C_GREEN" "$C_OFF"
+  printf '%s  Pantry Raider installer%s\n' "$C_GREEN" "$C_OFF"
   hr
   if [ "$IS_PI" = true ]; then
     say "Device: $(board_model)"
@@ -175,7 +175,7 @@ interactive_config() {
   # later via the web setup wizard at /setup.
   if [ "$IS_PI" = true ]; then
     DEPLOYMENT_MODE="$(prompt_choice "How will this device be used?" \
-      "pi_hosted:Pi Hosted  - run the full FoodAssistant stack on this Pi" \
+      "pi_hosted:Pi Hosted  - run the full Pantry Raider stack on this Pi" \
       "pi_remote:Pi Remote  - thin client (kiosk/Stream Deck) for a server elsewhere")"
   else
     say "Non-Pi host detected; using Server hosted mode."
@@ -232,7 +232,7 @@ need_root() {
 }
 
 fetch_repo() {
-  say "Fetching FoodAssistant to $REPO_DIR (on this device)"
+  say "Fetching Pantry Raider to $REPO_DIR (on this device)"
   if [ -d "$REPO_DIR/.git" ]; then
     if $SUDO git -C "$REPO_DIR" fetch --depth 1 origin "$REPO_BRANCH"; then
       $SUDO git -C "$REPO_DIR" reset --hard "origin/$REPO_BRANCH" \
@@ -267,7 +267,7 @@ run_provisioner() {
 
 print_done() {
   hr
-  ok "FoodAssistant installed."
+  ok "Pantry Raider installed."
   if [ "$DEPLOYMENT_MODE" = "pi_remote" ] && [ -n "$REMOTE_SERVER_URL" ]; then
     say "This device controls: $REMOTE_SERVER_URL"
     say "To change it later, open the setup wizard in your browser:"

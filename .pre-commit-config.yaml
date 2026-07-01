@@ -1,4 +1,4 @@
-# Pre-commit hooks for FoodAssistant.
+# Pre-commit hooks for Pantry Raider.
 #
 # This complements, and does not replace, the version-bump git hook installed
 # by scripts/install-git-hooks.sh. That hook auto-bumps APP_VERSION on commit

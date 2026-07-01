@@ -51,7 +51,7 @@ def test_default_enables_mealie(tmp_path):
 
 def test_seed_writes_local_backend_urls_pi_hosted(tmp_path):
     # The host-networked app reaches Grocy/Mealie at localhost:PORT, so the seed
-    # pre-fills the backend URLs there (FoodAssistant). Mealie is on by default.
+    # pre-fills the backend URLs there (Pantry Raider). Mealie is on by default.
     rc, out = run_firstboot(tmp_path, "HOSTNAME=foodassistant\n")
     assert rc == 0, out
     assert "grocy_base_url" in out and "localhost:9383" in out

@@ -1,4 +1,4 @@
-"""AI token usage tracking and budget (FoodAssistant).
+"""AI token usage tracking and budget (Pantry Raider).
 
 Records the tokens each AI call consumes so the user can see what their API key
 is spending and, optionally, cap it with a token budget. This is the local

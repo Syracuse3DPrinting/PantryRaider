@@ -16,7 +16,7 @@ from app.services import diagnostics  # noqa: E402
 
 @pytest.fixture(autouse=True)
 def _detach_handlers():
-    """Remove any FoodAssistant file handler the test installs so cases do not
+    """Remove any Pantry Raider file handler the test installs so cases do not
     leak handlers (and open files) into each other."""
     yield
     root = logging.getLogger()

@@ -149,7 +149,7 @@ def test_best_lan_cidr_prefers_real_lan_over_docker(monkeypatch):
 def test_camera_scan_default_uses_grocy_url_lan(monkeypatch):
     """The camera scan default inherits the LAN from the Grocy/Mealie URL, the
     same as the device scan, so a containerized server does not default to its
-    Docker subnet (FoodAssistant)."""
+    Docker subnet (Pantry Raider)."""
     import sys
     from pathlib import Path
     sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "service"))

@@ -9,7 +9,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <!-- Resolve all relative links against the app root (or the HA Ingress prefix) -->
   <base href="{{ ingress_path }}/">
-  <title>Settings: FoodAssistant</title>
+  <title>Settings: {{ app_name }}</title>
   {% if theme_css %}
   <link href="{{ theme_css }}" rel="stylesheet">
   {% else %}
@@ -77,7 +77,7 @@
        internally if the menu itself is taller than the viewport. */
     .side-menu { max-height: calc(100vh - 2rem); overflow-y: auto; }
     /* Denser variant for the busy Start Page / Stream Deck editors so a whole
-       page of controls fits on a laptop screen (FoodAssistant): tighter card
+       page of controls fits on a laptop screen (Pantry Raider): tighter card
        padding, smaller gaps between blocks, and compact labels. Long help text
        moves into info() tooltips instead of full-width paragraphs. */
     .editor-dense { padding: 1rem 1.1rem; }
@@ -305,7 +305,7 @@
 
   <!-- Header -->
   <div class="d-flex align-items-center gap-3 mb-3">
-    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant</div>
+    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>{{ app_name }}</div>
     <span class="badge bg-secondary">Setup</span>
   </div>
 
@@ -328,7 +328,7 @@
 
   <!-- Step 1: Welcome / deployment mode -->
   <div class="wiz-card" id="wiz-step-1">
-    <div class="wiz-card-title"><i class="bi bi-house-door text-primary me-2"></i>Welcome to FoodAssistant</div>
+    <div class="wiz-card-title"><i class="bi bi-house-door text-primary me-2"></i>Welcome to {{ app_name }}</div>
     <div class="wiz-card-sub">
       Let's get you set up in a few minutes. First, how is this device being used?
       {% if is_pi and board_model %}<span class="badge bg-success ms-1"><i class="bi bi-cpu me-1"></i>{{ board_model }}</span>{% endif %}
@@ -345,11 +345,11 @@
           {% elif key == 'pi_hosted' %}
           <div class="icon text-success"><i class="bi bi-house-gear"></i></div>
           <div class="label">Pi Hosted</div>
-          <div class="desc">Everything runs on this Pi: FoodAssistant, Grocy, and Mealie. Works with or without a screen — plug a display in any time to turn it into a kiosk.</div>
+          <div class="desc">Everything runs on this Pi: Pantry Raider, Grocy, and Mealie. Works with or without a screen — plug a display in any time to turn it into a kiosk.</div>
           {% elif key == 'pi_remote' %}
           <div class="icon text-warning"><i class="bi bi-dpad"></i></div>
           <div class="label">Pi Remote</div>
-          <div class="desc">A control surface only. This device drives a Stream Deck and/or kiosk pointed at a FoodAssistant server already running elsewhere on your network. Runs on a Pi 3.</div>
+          <div class="desc">A control surface only. This device drives a Stream Deck and/or kiosk pointed at a Pantry Raider server already running elsewhere on your network. Runs on a Pi 3.</div>
           {% endif %}
         </div>
       </div>
@@ -368,7 +368,7 @@
             <i class="bi bi-search me-1"></i>Scan LAN
           </button>
         </div>
-        <div class="form-text">Address of the main FoodAssistant server, no trailing slash.</div>
+        <div class="form-text">Address of the main Pantry Raider server, no trailing slash.</div>
         <div id="wiz-scan-result" class="small mt-1"></div>
       </div>
       <div class="mb-2">
@@ -387,7 +387,7 @@
 
     {% if hosted_unavailable %}
     <div class="alert alert-warning py-2 small mb-3">
-      <i class="bi bi-exclamation-triangle me-1"></i>Pi Hosted is hidden because this board has too little memory to run Grocy and Mealie locally. Use Pi Remote to point it at a FoodAssistant server on your network.
+      <i class="bi bi-exclamation-triangle me-1"></i>Pi Hosted is hidden because this board has too little memory to run Grocy and Mealie locally. Use Pi Remote to point it at a Pantry Raider server on your network.
     </div>
     {% endif %}
 
@@ -447,7 +447,7 @@
   <!-- Step 3: Hardware -->
   <div class="wiz-card d-none" id="wiz-step-3">
     <div class="wiz-card-title"><i class="bi bi-cpu text-info me-2"></i>Hardware</div>
-    <div class="wiz-card-sub">Tell FoodAssistant what's connected so it can configure the display and Stream Deck correctly. Skip anything you don't have.</div>
+    <div class="wiz-card-sub">Tell Pantry Raider what's connected so it can configure the display and Stream Deck correctly. Skip anything you don't have.</div>
 
     <div class="section-card mb-3">
       <div class="section-title"><i class="bi bi-hdd-stack me-1"></i>Stream Deck</div>
@@ -533,7 +533,7 @@
         <li>Go to your user menu, then <span class="text-info">Manage API keys</span>, and add a new key.</li>
         <li>Paste the Grocy address and that key below, then use Test connection.</li>
       </ol>
-      <a href="https://github.com/Syracuse3DPrinting/FoodAssistant/blob/main/docs/hardware/sd-image.md" target="_blank" rel="noopener">
+      <a href="https://github.com/Syracuse3DPrinting/PantryRaider/blob/main/docs/hardware/sd-image.md" target="_blank" rel="noopener">
         <i class="bi bi-book me-1"></i>Setup instructions
       </a>
     </div>
@@ -709,7 +709,7 @@
           </div>
           <div class="test-result" id="wiz-scanner-test-result"></div>
           <p class="form-text mt-2">Running a Waveshare scan-engine module on a kiosk? See the
-            <a href="https://github.com/Syracuse3DPrinting/FoodAssistant/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
+            <a href="https://github.com/Syracuse3DPrinting/PantryRaider/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
             to make it scan on sight without the button.</p>
         </div>
         <div id="wiz-scanner-camera-hint" class="d-none">
@@ -814,7 +814,7 @@
         <i class="bi bi-chevron-down ms-auto"></i>
       </button>
       <div class="collapse mt-3" id="tunnel-wiz-collapse">
-        <p class="text-secondary small">Access FoodAssistant from outside your home without port-forwarding,
+        <p class="text-secondary small">Access Pantry Raider from outside your home without port-forwarding,
           using a free <a href="https://www.cloudflare.com/products/tunnel/" target="_blank">Cloudflare Tunnel</a>.</p>
         <p class="text-secondary small">Full setup is available in <strong>Settings → Remote Access</strong>
           after the wizard. Paste your Cloudflare token there and the tunnel starts automatically.</p>
@@ -836,7 +836,7 @@
   <!-- Step 7: Done -->
   <div class="wiz-card d-none" id="wiz-step-7">
     <div class="wiz-card-title"><i class="bi bi-check-circle-fill text-success me-2"></i>Ready to Go</div>
-    <div class="wiz-card-sub">Here's what you've configured. Click the button below to save and start using FoodAssistant.</div>
+    <div class="wiz-card-sub">Here's what you've configured. Click the button below to save and start using Pantry Raider.</div>
 
     <!-- Summary list, built by JS -->
     <div id="wiz-summary" class="mb-4"></div>
@@ -852,7 +852,7 @@
     <div class="d-flex flex-wrap justify-content-between gap-2">
       <button class="btn btn-outline-secondary" onclick="wizBack()"><i class="bi bi-arrow-left me-1"></i>Back</button>
       <button class="btn btn-success btn-lg px-4" onclick="wizSaveAll()" id="wiz-finish-btn">
-        <i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant
+        <i class="bi bi-rocket-takeoff me-2"></i>Start using Pantry Raider
       </button>
     </div>
   </div>
@@ -874,7 +874,7 @@
     <i class="bi bi-hdd-network fs-5"></i>
     <div>
       <strong>This is a Pi Remote (satellite).</strong>
-      It mirrors a main FoodAssistant server. Backend settings (Grocy, Mealie, AI,
+      It mirrors a main Pantry Raider server. Backend settings (Grocy, Mealie, AI,
       weather) are managed on the main server and shown here read-only. This device
       keeps its own display, Stream Deck, and security settings.
     </div>
@@ -890,7 +890,7 @@
   </div>
 
   <div class="d-flex align-items-center justify-content-between flex-wrap gap-2 my-3">
-    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>FoodAssistant
+    <div class="logo"><i class="bi bi-fridge me-2 text-primary"></i>Pantry Raider
       <span class="text-secondary fw-normal fs-6 ms-1">Settings</span></div>
     <a href="ui/" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left me-1"></i>Back to app</a>
   </div>
@@ -1038,10 +1038,10 @@
         <!-- Main Server (satellite mode only) -->
         {% if features.satellite %}
         <div class="tab-pane fade show active" id="pane-upstream">
-          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main FoodAssistant server.</p>
+          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main Pantry Raider server.</p>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-hdd-network text-info"></i> Main FoodAssistant Server</div>
+            <div class="section-title"><i class="bi bi-hdd-network text-info"></i> Main Pantry Raider Server</div>
             <p class="text-secondary small">Enter the server's address and its API key. This device authenticates with that key, pulls the shared config, then talks to Grocy/Mealie/AI directly. Find the API key in the server's Settings under Security.</p>
             <div class="mb-3">
               <label class="form-label">Server URL</label>
@@ -1140,12 +1140,12 @@
           <div class="section-card">
             <div class="section-title"><i class="bi bi-fridge text-info"></i> Grocy — Inventory Backend</div>
             <p class="text-secondary small">Grocy is the open-source inventory app that stores your stock, storage
-              locations, and consumption history. FoodAssistant reads and updates it through Grocy's API, so it
+              locations, and consumption history. Pantry Raider reads and updates it through Grocy's API, so it
               needs the Grocy address and an API key.
               {% if is_pi %}Grocy is running on this device at port 9383.{% else %}Connect to a Grocy instance running on your network or server.{% endif %}</p>
             <div class="alert alert-secondary py-2 small d-flex flex-wrap gap-3 mb-3">
               <span><i class="bi bi-book me-1"></i><a href="https://grocy.info" target="_blank" rel="noopener">Grocy docs</a></span>
-              <span><i class="bi bi-journal-text me-1"></i><a href="https://github.com/Syracuse3DPrinting/FoodAssistant#readme" target="_blank" rel="noopener">FoodAssistant install guide</a></span>
+              <span><i class="bi bi-journal-text me-1"></i><a href="https://github.com/Syracuse3DPrinting/PantryRaider#readme" target="_blank" rel="noopener">Pantry Raider install guide</a></span>
               <span><i class="bi bi-key me-1"></i>API key: in Grocy, open Settings then Manage API keys and add one.</span>
               {% if is_pi %}<span><i class="bi bi-hdd-network me-1"></i>Default URL on this appliance: <code>http://{{ s.device_hostname or 'foodassistant' }}.local:9383</code></span>{% endif %}
             </div>
@@ -1180,7 +1180,7 @@
                      placeholder="kitchen-pi"
                      value="{{ s.device_hostname }}">
               <div class="form-text">Used to build <span class="text-info">&lt;hostname&gt;.local</span> links to Grocy and Mealie on this device.
-                Empty = auto-detect. Set this when several FoodAssistant devices share one network.</div>
+                Empty = auto-detect. Set this when several Pantry Raider devices share one network.</div>
             </div>
             <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
               <i class="bi bi-plug me-1"></i>Test Connection
@@ -1381,7 +1381,7 @@
           <div class="test-result mt-2" id="ai-save-result"></div>
           {% endif %}
 
-          {# AI token usage + budget (FoodAssistant). Shows what this instance's
+          {# AI token usage + budget (Pantry Raider). Shows what this instance's
              AI key has spent and lets a user on their own key cap it per month.
              Foundation for cloud per-user quotas. #}
           <div class="section-card mt-3">
@@ -1895,7 +1895,7 @@
           <div class="section-card">
             <div class="section-title"><i class="bi bi-bell text-success"></i> On-screen notifications &amp; camera pop-ups</div>
             <p class="text-secondary small">Show messages and camera pop-ups pushed from Home Assistant on this device's screen
-              (the kiosk and any open browser tab). A Home Assistant automation calls FoodAssistant with a <code>rest_command</code>,
+              (the kiosk and any open browser tab). A Home Assistant automation calls Pantry Raider with a <code>rest_command</code>,
               for example to pop up the doorbell camera when a person is detected.</p>
             <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch" id="ha_events_enabled"
@@ -2188,13 +2188,13 @@
         <!-- Remote Access -->
         {% if not is_satellite %}
         <div class="tab-pane fade" id="pane-tunnel">
-          <p class="pane-intro">Expose FoodAssistant over the internet without port-forwarding your router.</p>
+          <p class="pane-intro">Expose Pantry Raider over the internet without port-forwarding your router.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-globe text-info"></i> Remote Access Mode</div>
             <p class="text-secondary small">
               <strong>Cloudflare Tunnel</strong> (free, DIY) — runs a cloudflared container on your host.
-              <strong>FoodAssistant Cloud</strong> — managed subscription with a stable URL (coming soon).
+              <strong>Pantry Raider Cloud</strong> — managed subscription with a stable URL (coming soon).
               Both modes require Docker to be available on the host.
             </p>
 
@@ -2218,7 +2218,7 @@
                   <input class="form-check-input" type="radio" name="tunnel_mode" id="tunnel_mode_subscription"
                          value="subscription" disabled {% if s.tunnel_mode == 'subscription' %}checked{% endif %}>
                   <label class="form-check-label" for="tunnel_mode_subscription">
-                    <i class="bi bi-stars me-1 text-primary"></i>FoodAssistant Cloud
+                    <i class="bi bi-stars me-1 text-primary"></i>Pantry Raider Cloud
                     <span class="badge bg-secondary ms-1">Coming soon</span>
                   </label>
                 </div>
@@ -2239,7 +2239,7 @@
                       Cloudflare Zero Trust dashboard</a> — create a tunnel, copy the token.
                   </span>
                   <span id="tunnel-help-subscription" style="display:none">
-                    Enter the subscription token from your FoodAssistant Cloud account.
+                    Enter the subscription token from your Pantry Raider Cloud account.
                   </span>
                 </div>
               </div>
@@ -2271,7 +2271,7 @@
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-archive text-success"></i> Backup</div>
-            <p class="text-secondary small">FoodAssistant's data directory (settings, database, staples list) as a zip.
+            <p class="text-secondary small">Pantry Raider's data directory (settings, database, staples list) as a zip.
               Grocy and Mealie data live in separate containers — use
               <code>scripts/backup.sh</code> on the host for a full snapshot.</p>
             <div class="form-check mb-2">
@@ -2358,7 +2358,7 @@
                  class="small ms-2 text-decoration-none"><i class="bi bi-journal-text me-1"></i>Release notes</a></div>
             {% if is_pi_appliance %}
             <p class="text-secondary small">Check for a newer version, then update in place. Updating downloads the
-              latest FoodAssistant and restarts the app (no SSH needed). On a Pi Hosted box it refreshes the Docker
+              latest Pantry Raider and restarts the app (no SSH needed). On a Pi Hosted box it refreshes the Docker
               image; on a Pi Remote it refreshes the local install. A failed update leaves the running version
               untouched.</p>
             <div class="test-result mb-2" id="update-avail"></div>
@@ -2504,7 +2504,7 @@ docker compose up -d</code></pre>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-search text-info"></i> Find Devices on the LAN</div>
-            <p class="text-secondary small">Scan your local network for FoodAssistant instances that have not checked in yet. Leave the range blank to scan this server's own subnet.</p>
+            <p class="text-secondary small">Scan your local network for Pantry Raider instances that have not checked in yet. Leave the range blank to scan this server's own subnet.</p>
             <div class="input-group mb-2" style="max-width:420px">
               <input type="text" class="form-control" id="scan_cidr" placeholder="192.168.1.0/24 (optional)" autocomplete="off">
               <button class="btn btn-outline-info" type="button" onclick="scanLan()" id="scan-lan-btn">
@@ -2516,14 +2516,14 @@ docker compose up -d</code></pre>
         </div>
 
         {# Weather location/units no longer have their own settings section: they
-           are set on the Weather page itself (FoodAssistant). These hidden inputs
+           are set on the Weather page itself (Pantry Raider). These hidden inputs
            stay so the Stream Deck save still reads the current location/units the
            deck weather key should use. #}
         <input type="hidden" id="streamdeck_weather_location" value="{{ s.streamdeck_weather_location }}">
         <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
         {% endif %}
 
-        <!-- Personalization: on-screen Start Page (FoodAssistant) -->
+        <!-- Personalization: on-screen Start Page (Pantry Raider) -->
         <div class="tab-pane fade" id="pane-start-page">
           {% if is_pi %}
           <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between Start Page and Stream Deck">
@@ -2633,7 +2633,7 @@ docker compose up -d</code></pre>
               </div>
               <div class="test-result" id="scanner-test-result"></div>
               <p class="form-text mt-2">Running a Waveshare scan-engine module on a kiosk? See the
-                <a href="https://github.com/Syracuse3DPrinting/FoodAssistant/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
+                <a href="https://github.com/Syracuse3DPrinting/PantryRaider/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
                 to make it scan on sight without the button.</p>
             </div>
             <div id="scanner-camera-hint" class="{{ '' if s.scanner_type == 'camera' else 'd-none' }}">
@@ -3033,7 +3033,7 @@ docker compose up -d</code></pre>
 const TABS = {{ tabs | tojson }};
 // Pristine built-in layout for the nav editor's Reset to defaults (FoodAssistant-oret).
 window.TABS_DEFAULT = {{ tabs_default | tojson }};
-// On-screen Start Page editor data (FoodAssistant): the shared custom buttons
+// On-screen Start Page editor data (Pantry Raider): the shared custom buttons
 // and the saved layout. The built-in key catalog is the deck's own (_sdCatalog),
 // so the Start Page and Stream Deck editors are identical.
 const START_CUSTOMS = {{ start_customs | tojson }};
@@ -4071,7 +4071,7 @@ function savePaneAi(btn) {
   }, btn, 'ai-save-result');
 }
 
-// AI token usage + budget (FoodAssistant).
+// AI token usage + budget (Pantry Raider).
 async function _loadAiUsage() {
   const el = document.getElementById('ai-usage-display');
   if (!el) return;
@@ -4347,7 +4347,7 @@ function _deckStartSyncDefs(fromWrapId, toWrapId, toBuilder) {
   for (const def of merged.values()) to.appendChild(toBuilder(def));
 }
 
-// -- On-screen Start Page editor (FoodAssistant) ---------------------------
+// -- On-screen Start Page editor (Pantry Raider) ---------------------------
 // _startState is a flat token array (one per key): a built-in action key, a
 // "custom:<id>" reference into the shared custom-button store, or "" for blank.
 let _startState = null;
@@ -5068,7 +5068,7 @@ async function testRemote() {
    (the Updates card, Diagnostics, and the satellite Sync Status panel), so they
    must render unconditionally. Gating them behind the wizard-only block left the
    settings page calling undefined functions, so the update buttons silently did
-   nothing (FoodAssistant). #}
+   nothing (Pantry Raider). #}
 // Show an ISO-8601 UTC timestamp in the visitor's local time, e.g. for the
 // satellite Sync Status panel. Returns the raw string if it cannot be parsed.
 function fmtSyncTime(iso) {
@@ -5112,7 +5112,7 @@ function renderSyncStatus(ls) {
     esc(fmtSyncTime(ls.at)) + '</span></span></div>' + body;
 }
 
-// Satellite: scan the LAN for a FoodAssistant server and fill the URL field.
+// Satellite: scan the LAN for a Pantry Raider server and fill the URL field.
 async function scanLanForServer(inputId, resultId) {
   const inp = document.getElementById(inputId);
   const out = document.getElementById(resultId);
@@ -5135,7 +5135,7 @@ async function scanLanForServer(inputId, resultId) {
     const servers = (d.found || []).filter(h => h.mode !== 'pi_remote' && h.mode !== 'satellite');
     if (!servers.length) {
       out.className = 'small mt-1 text-warning';
-      out.textContent = 'No FoodAssistant servers found on this subnet.';
+      out.textContent = 'No Pantry Raider servers found on this subnet.';
       return;
     }
     if (servers.length === 1) {
@@ -5193,7 +5193,7 @@ async function syncFromUpstream() {
 }
 
 // Updates: server manual "Update now" triggers Watchtower immediately so the
-// user does not wait for the daily poll (FoodAssistant manual-server-update).
+// user does not wait for the daily poll (Pantry Raider manual-server-update).
 async function updateServerNow(btn) {
   const out = document.getElementById('update-result');
   const orig = btn.innerHTML;
@@ -5418,7 +5418,7 @@ async function checkForUpdates() {
   const logEl = document.getElementById('update-log');
   const btn = document.getElementById('update-btn');
   // Persistent, obvious progress state so the user does not press Update again
-  // or leave the page during a slow Pi Remote update (FoodAssistant).
+  // or leave the page during a slow Pi Remote update (Pantry Raider).
   if (out) {
     out.className = 'test-result text-info';
     out.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>'
@@ -5649,7 +5649,7 @@ async function wizSaveAll() {
       resultEl.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle-fill me-1"></i>' +
         'Server URL and API key are required. <a href="#" onclick="event.preventDefault();_wizShowStep(1)">Go to Welcome</a></div>';
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant';
+      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using Pantry Raider';
       return;
     }
   } else {
@@ -5659,7 +5659,7 @@ async function wizSaveAll() {
       resultEl.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle-fill me-1"></i>' +
         'A password is required. <a href="#" onclick="event.preventDefault();_wizShowStep(2)">Go to Security</a></div>';
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant';
+      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using Pantry Raider';
       return;
     }
 
@@ -5668,7 +5668,7 @@ async function wizSaveAll() {
       resultEl.innerHTML = '<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle-fill me-1"></i>' +
         'Grocy URL is required. <a href="#" onclick="event.preventDefault();_wizShowStep(4)">Go to Grocy</a></div>';
       btn.disabled = false;
-      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant';
+      btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using Pantry Raider';
       return;
     }
   }
@@ -5696,7 +5696,7 @@ async function wizSaveAll() {
   } catch (e) {
     resultEl.innerHTML = `<div class="alert alert-danger py-2 small"><i class="bi bi-x-circle-fill me-1"></i>${e.message}</div>`;
     btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using FoodAssistant';
+    btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i>Start using Pantry Raider';
   }
 }
 

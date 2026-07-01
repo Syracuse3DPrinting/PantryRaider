@@ -1,4 +1,4 @@
-"""save() must never destroy existing settings on a bad read (FoodAssistant).
+"""save() must never destroy existing settings on a bad read (Pantry Raider).
 
 Regression for the data-loss bug where a truncated or corrupt settings.json was
 silently treated as empty and then overwritten with only the newly saved field,

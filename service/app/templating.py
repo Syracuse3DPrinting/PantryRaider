@@ -2,7 +2,7 @@
 from fastapi import Request
 from fastapi.templating import Jinja2Templates
 
-from .config import settings, theme_info, ui_scale_factor, resolve_custom_colors, nav_chrome_hidden, APP_VERSION
+from .config import settings, theme_info, ui_scale_factor, resolve_custom_colors, nav_chrome_hidden, APP_NAME, APP_VERSION
 from .hardware import is_raspberry_pi
 from .ingress import template_globals
 from .navigation import visible_tabs, auto_hidden_groups, build_nav_tree
@@ -87,6 +87,7 @@ def theme_context(request: Request) -> dict:
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,
+        "app_name": APP_NAME,
     }
 
 

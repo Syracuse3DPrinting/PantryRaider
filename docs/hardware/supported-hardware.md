@@ -1,6 +1,6 @@
 # Supported Hardware
 
-FoodAssistant runs as a set of Docker containers, so it works on most 64-bit Linux
+Pantry Raider runs as a set of Docker containers, so it works on most 64-bit Linux
 hardware. This page lists what's officially tested and the minimum specs to expect a
 good experience.
 
@@ -17,7 +17,7 @@ good experience.
 | OS | 64-bit Linux with Docker + Compose v2 | Raspberry Pi OS Lite (64-bit) / Debian / Ubuntu Server |
 | Network | Ethernet or Wi-Fi | Ethernet for the always-on box |
 
-**RAM guidance:** FoodAssistant + Grocy run comfortably in 2 GB. Adding **Mealie**
+**RAM guidance:** Pantry Raider + Grocy run comfortably in 2 GB. Adding **Mealie**
 (recipes/meal plan/shopping) pushes the practical floor to 4 GB, especially during meal
 planning. Local AI via **Ollama** is **not** recommended on low-RAM SBCs: use a cloud
 AI provider, or a machine with 16 GB+ if you want fully local inference.
@@ -28,7 +28,7 @@ AI provider, or a machine with 16 GB+ if you want fully local inference.
 |-------|-----|--------|-------|
 | Raspberry Pi 5 | 4 GB / 8 GB | ✅ Supported | Recommended. DSI touch display support. |
 | Raspberry Pi 4B | 4 GB / 8 GB | ✅ Supported | Solid; 2 GB works for Grocy-only setups. |
-| Raspberry Pi 4B | 2 GB | 🟡 Limited | FoodAssistant + Grocy only. Mealie may be tight. |
+| Raspberry Pi 4B | 2 GB | 🟡 Limited | Pantry Raider + Grocy only. Mealie may be tight. |
 | Generic x86-64 mini PC (N100, etc.) | 8 GB+ | ✅ Supported | Runs everything; best for local Ollama. |
 | Raspberry Pi 3B+ | 1 GB | ❌ Unsupported | Insufficient RAM for the full stack. |
 | Raspberry Pi Zero 2 W | 512 MB | ❌ Unsupported | Insufficient RAM. |
@@ -37,7 +37,7 @@ AI provider, or a machine with 16 GB+ if you want fully local inference.
 > caveats) · ❌ Unsupported (known inadequate).
 
 This matrix is filled in from real testing on the SD-card image. If you've run
-FoodAssistant on hardware not listed here, please open an issue with your results.
+Pantry Raider on hardware not listed here, please open an issue with your results.
 
 ## Peripherals
 
@@ -57,7 +57,7 @@ phone), no dedicated hardware required.
 
 ### Displays
 
-A display is optional: FoodAssistant is a web app you can reach from any browser on your
+A display is optional: Pantry Raider is a web app you can reach from any browser on your
 network. For a dedicated touchscreen setup, DSI and HDMI capacitive touch panels both
 work; see the [SD-card image guide](sd-image.md) for kiosk-mode setup.
 

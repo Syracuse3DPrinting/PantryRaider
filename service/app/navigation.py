@@ -163,7 +163,7 @@ def _custom_key(raw_id: str, seen: set[str]) -> str:
 
 def _start_first(keys: list[str]) -> list[str]:
     """Default the Start tab to the top of the nav when the Start Page is enabled
-    and the user has not set their own order (FoodAssistant). Once the user saves
+    and the user has not set their own order (Pantry Raider). Once the user saves
     a nav_order, that wins and this no-ops."""
     if (getattr(settings, "start_page_enabled", False)
             and not (settings.nav_order or "").strip()
@@ -191,7 +191,7 @@ def _ordered_visible() -> list[dict]:
 def first_visible_href() -> str:
     """Href of the first page in the nav menu (after ordering, nesting, and the
     Start-first default). Used so visiting /ui shows whatever page leads the menu
-    rather than a hardcoded one (FoodAssistant)."""
+    rather than a hardcoded one (Pantry Raider)."""
     tree = build_nav_tree()
     for node in tree:
         # A heading/folder has no page of its own; use its first child's href.

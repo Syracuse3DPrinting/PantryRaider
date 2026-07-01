@@ -163,7 +163,7 @@ def recommendations(owned_appliance_keys, tag="", recipe_missing=None) -> list[d
         return "Popular kitchen pick"
 
     # Stand-mixer attachments are only relevant to someone who owns a stand
-    # mixer, so hide that whole category otherwise (FoodAssistant).
+    # mixer, so hide that whole category otherwise (Pantry Raider).
     owns_mixer = "stand_mixer" in owned
     out = []
     for item in PRODUCT_CATALOG:
@@ -221,4 +221,4 @@ def grouped_recommendations(owned_appliance_keys, tag="", recipe_missing=None) -
 # appear. Kept here so the wording lives in one place.
 DISCLOSURE = ("Some links here are affiliate links. If you buy through them the "
               "creator may earn a small commission at no extra cost to you, which "
-              "helps keep FoodAssistant free and open source. Thanks for your support.")
+              "helps keep Pantry Raider free and open source. Thanks for your support.")

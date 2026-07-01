@@ -1,4 +1,4 @@
-"""On-screen Start Page (FoodAssistant): the layout resolver, the shared custom
+"""On-screen Start Page (Pantry Raider): the layout resolver, the shared custom
 buttons, and the /ui/start render + enable gating."""
 from __future__ import annotations
 

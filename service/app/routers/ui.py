@@ -97,7 +97,7 @@ def pin_verify(request: Request, pin: str = Form(None)):
 @router.get("/", response_class=HTMLResponse)
 async def ui_index(request: Request):
     """Land on whatever page leads the nav menu, not a hardcoded one
-    (FoodAssistant). When the user moves another page (e.g. the Start Page) to
+    (Pantry Raider). When the user moves another page (e.g. the Start Page) to
     the top, /ui shows that instead of the inventory dashboard. Only redirects to
     an internal ui/ page, and never to the inventory root, to avoid a loop."""
     from ..navigation import first_visible_href
@@ -508,7 +508,7 @@ async def camera_stream(idx: int):
 
 @router.get("/start", response_class=HTMLResponse)
 async def start_page(request: Request):
-    """Optional full-screen on-screen Start Page (FoodAssistant): a launcher grid
+    """Optional full-screen on-screen Start Page (Pantry Raider): a launcher grid
     that works like an on-screen Stream Deck. Off by default; when disabled it
     still renders (so the Settings preview link works) but is plain."""
     from ..services import start_page as sp

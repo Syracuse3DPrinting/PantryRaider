@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a problem with FoodAssistant
+description: Report a problem with Pantry Raider
 labels: ["bug"]
 body:
   - type: markdown

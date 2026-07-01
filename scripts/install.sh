@@ -1,15 +1,15 @@
 #!/usr/bin/env bash
-# FoodAssistant installer — pulls the prebuilt image and starts the stack.
+# Pantry Raider installer — pulls the prebuilt image and starts the stack.
 # No git clone or local build required.
 #
-#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main/scripts/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main/scripts/install.sh | bash
 #
 # Environment overrides:
 #   INSTALL_DIR=/opt/foodassistant   where to put compose + data (default ./foodassistant)
 #   PROFILES="with-grocy with-mealie"  optional bundled backends to start
 set -euo pipefail
 
-REPO_RAW="https://raw.githubusercontent.com/Syracuse3DPrinting/FoodAssistant/main"
+REPO_RAW="https://raw.githubusercontent.com/Syracuse3DPrinting/PantryRaider/main"
 INSTALL_DIR="${INSTALL_DIR:-foodassistant}"
 PROFILES="${PROFILES:-with-grocy}"
 

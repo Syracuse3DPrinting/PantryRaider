@@ -94,7 +94,7 @@ def _rewrite_links(text: str, src_path: str, page_map: dict[str, str],
 
 
 def _build_sidebar() -> str:
-    lines = ["## FoodAssistant wiki", ""]
+    lines = ["## Pantry Raider wiki", ""]
     for section in SIDEBAR_SECTIONS:
         items = [(name, lbl) for src, name, sec, lbl in PAGES if sec == section]
         if not items:
@@ -139,7 +139,7 @@ def build(root: Path, out: Path, repo: str, branch: str) -> int:
 def main() -> None:
     ap = argparse.ArgumentParser(description="Build the GitHub wiki from docs.")
     ap.add_argument("--out", default="_wiki", help="output directory")
-    ap.add_argument("--repo", default="Syracuse3DPrinting/FoodAssistant",
+    ap.add_argument("--repo", default="Syracuse3DPrinting/PantryRaider",
                     help="owner/name for absolute links")
     ap.add_argument("--branch", default="main", help="branch for absolute links")
     args = ap.parse_args()

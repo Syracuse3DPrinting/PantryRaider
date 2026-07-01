@@ -1,6 +1,6 @@
 """On-screen Home Assistant event channel.
 
-Home Assistant pushes events to FoodAssistant (a rest_command in an automation),
+Home Assistant pushes events to Pantry Raider (a rest_command in an automation),
 and the kiosk / web UI polls for them and shows them on the display: notification
 toasts and camera pop-ups (for example, pop up the doorbell camera when a person
 is detected). Events live in a small in-memory ring, like the timers and the

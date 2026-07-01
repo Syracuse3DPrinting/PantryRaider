@@ -14,7 +14,7 @@ from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel
 
 from ..config import (
-    settings, APP_VERSION, GITHUB_REPO, THEMES, _DEFAULT_THEME,
+    settings, APP_NAME, APP_VERSION, GITHUB_REPO, THEMES, _DEFAULT_THEME,
     UI_SCALES, _DEFAULT_UI_SCALE,
     DISPLAY_ROTATIONS, _DEFAULT_DISPLAY_ROTATION,
     DISPLAY_TYPES, _DEFAULT_DISPLAY_TYPE,
@@ -302,7 +302,7 @@ class TestRemotePayload(BaseModel):
 
 @router.post("/test/remote")
 async def test_remote(payload: TestRemotePayload):
-    """Check that a Pi Remote can reach the FoodAssistant server it controls."""
+    """Check that a Pi Remote can reach the Pantry Raider server it controls."""
     url = (payload.remote_server_url or settings.remote_server_url).rstrip("/")
     if not url:
         return {"ok": False, "error": "Server URL is required."}
@@ -310,7 +310,7 @@ async def test_remote(payload: TestRemotePayload):
         async with httpx.AsyncClient(timeout=6.0, follow_redirects=True) as client:
             r = await client.get(f"{url}/health")
         if r.status_code == 200:
-            return {"ok": True, "message": f"Connected: FoodAssistant reachable at {url}"}
+            return {"ok": True, "message": f"Connected: Pantry Raider reachable at {url}"}
         return {"ok": False, "error": f"HTTP {r.status_code} from {url}/health"}
     except Exception as e:
         return {"ok": False, "error": str(e)}
@@ -404,7 +404,7 @@ def _setup_phone_url(request: Request) -> str:
     phone, so we swap in the device's LAN address and keep the port the request
     came in on. We prefer the LAN IP over the <hostname>.local mDNS name, because
     a phone or laptop on the same subnet can always reach the IP, while .local
-    needs mDNS which many networks do not resolve (FoodAssistant). Off a Pi we
+    needs mDNS which many networks do not resolve (Pantry Raider). Off a Pi we
     fall back to the request hostname, which is already the address the user typed.
     """
     if is_raspberry_pi():
@@ -480,7 +480,7 @@ def _suggest_mealie_internal_url() -> str:
 
     The app talks to Mealie on the same host, so localhost is correct and always
     reachable container-to-host; a <hostname>.local or LAN address is only for a
-    browser and may not resolve from inside the container (FoodAssistant). Empty
+    browser and may not resolve from inside the container (Pantry Raider). Empty
     when Mealie is already configured or off a Pi.
     """
     if not is_raspberry_pi() or settings.mealie_base_url:
@@ -539,7 +539,7 @@ async def setup_page(request: Request):
         "ai_models": AI_MODELS,
         "tabs": all_tabs(),
         "tabs_default": default_tabs(),
-        # On-screen Start Page editor (FoodAssistant): the shared custom buttons
+        # On-screen Start Page editor (Pantry Raider): the shared custom buttons
         # (same store as the Stream Deck). The built-in key catalog is the deck's
         # own (_sdCatalog, loaded client-side), so the two editors are identical.
         "start_customs": _start_customs(),
@@ -583,7 +583,7 @@ async def setup_page(request: Request):
         "scheduled_reboot_time": settings.scheduled_reboot_time,
         # Secrets the main server manages (pulled each sync). On a satellite these
         # render read-only; the device-local secrets (upstream key, password, PIN)
-        # stay editable so the device can be paired or re-keyed (FoodAssistant).
+        # stay editable so the device can be paired or re-keyed (Pantry Raider).
         "satellite_managed": SATELLITE_PULL_FIELDS,
         "board_model": board_model(),
         # When True the board is a Pi too weak for the local stack, so Pi Hosted
@@ -816,7 +816,7 @@ async def clear_background():
 
 @router.get("/ai-usage")
 async def ai_usage():
-    """Current AI token usage + budget for the AI settings panel (FoodAssistant)."""
+    """Current AI token usage + budget for the AI settings panel (Pantry Raider)."""
     from ..services import usage
     return {"ok": True, **usage.get_usage()}
 
@@ -881,7 +881,7 @@ async def save_setup(payload: SetupPayload):
     if data.get("start_page_layout") is None:
         data.pop("start_page_layout", None)  # absent = keep stored layout
     # Merge custom-key definitions built on the Start Page into the shared deck
-    # store (FoodAssistant). Custom keys are shared both ways without the Start
+    # store (Pantry Raider). Custom keys are shared both ways without the Start
     # Page needing the deck's slots:
     #   * update an existing key by id, keeping its Stream Deck slot;
     #   * add a new key unplaced (slot -1);
@@ -1253,7 +1253,7 @@ async def totp_generate():
     import pyotp, qrcode, base64, io
     secret = pyotp.random_base32()
     totp = pyotp.TOTP(secret)
-    uri = totp.provisioning_uri(name="FoodAssistant", issuer_name="FoodAssistant")
+    uri = totp.provisioning_uri(name=APP_NAME, issuer_name=APP_NAME)
     img = qrcode.make(uri)
     buf = io.BytesIO()
     img.save(buf, format="PNG")

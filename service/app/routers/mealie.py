@@ -170,7 +170,7 @@ async def import_recipe_url(payload: ImportUrlPayload):
 
     try:
         async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as client:
-            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (FoodAssistant)"})
+            r = await client.get(url, headers={"User-Agent": "Mozilla/5.0 (Pantry Raider)"})
             r.raise_for_status()
             page_text = _strip_html(r.text)
     except Exception as e:
