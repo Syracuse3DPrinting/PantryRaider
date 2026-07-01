@@ -1,6 +1,6 @@
 {
   "name": "Pantry Raider",
-  "short_name": "Food",
+  "short_name": "Raider",
   "description": "Food spoilage tracker with photo import, recipes, and meal planning",
   "start_url": "/ui/",
   "scope": "/",
