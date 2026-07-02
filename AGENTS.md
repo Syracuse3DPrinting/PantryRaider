@@ -4,13 +4,16 @@ Canonical instructions for every AI agent working in this repo (Claude Code,
 Codex, and anything else). `CLAUDE.md` is just a pointer to this file; edit
 here, not there.
 
-> **ALWAYS USE BEADS.** This repo tracks ALL work in **bd (beads)**, never in
-> markdown TODOs, TodoWrite, or ad-hoc lists. Start every session with
-> `bd prime`, pick work with `bd ready`, claim it (`bd update <id> --claim`),
-> and close it when done (`bd close <id>`). File a new bead for ANY follow-up
-> work you discover. Phase 0 (FoodAssistant-7cc) holds discussion items that
-> gate later phases; don't start blocked work, surface the blocking decision
-> to Dan instead.
+> **ALWAYS USE BEADS, AND THE WORK IS NOT DONE UNTIL IT IS COMMITTED AND
+> PUSHED.** This repo tracks ALL work in **bd (beads)**, never in markdown
+> TODOs, TodoWrite, or ad-hoc lists. Start every session with `bd prime`,
+> pick work with `bd ready`, claim it (`bd update <id> --claim`), and close
+> it when done (`bd close <id>`). File a new bead for ANY follow-up work
+> you discover. Closing a bead means the change is tested, committed on
+> `main`, and pushed to GitHub; never end a beads session with unpushed
+> work. Phase 0 (FoodAssistant-7cc) holds discussion items that gate later
+> phases; don't start blocked work, surface the blocking decision to Dan
+> instead.
 
 ## What This Is
 
@@ -49,6 +52,11 @@ the mode and `image/config.env` pre-seeds it on a flashed image.
   `/health` `app=foodassistant` field, and the `FoodAssistant-*` beads
   prefix. Renaming any of them breaks deployed devices; do not "finish the
   rebrand".
+- Amazon affiliate links use Dan's static tag `improvisedeng-20` and
+  storefront `https://www.amazon.com/shop/improvisedeng`
+  (`AMAZON_ASSOCIATES_TAG` / `AMAZON_STOREFRONT_URL` in
+  `service/app/config.py`, env-overridable). The tag is deliberately NOT a
+  user setting: the point is affiliate revenue for the project owner.
 
 ## Writing Style
 
@@ -58,6 +66,11 @@ commit messages, and UI copy.
 - No em-dashes. Use commas, parentheses, colons, or rewrite the sentence.
 - No ASCII line or box diagrams.
 - The goal is copy that reads as human-written; avoid LLM tells generally.
+- Docs and UI copy are **user-forward**: written for the app's end user, not
+  as notes to Dan or the developer. No option-weighing that reads like an
+  agent asking for feedback, and no copy that describes the software from
+  the builder's side ("Update now pulls the new image" style). Dan has had
+  to flag this repeatedly; check for it before shipping any doc or UI text.
 
 ## Related Repositories
 
@@ -173,6 +186,21 @@ commit messages, and UI copy.
 - `/setup/save` applies only the fields present in the request
   (`model_dump(exclude_unset=True)`), so the per-section Save buttons post
   just their own fields without clobbering others.
+- **Existing installs are production.** Dan's main server (Korolev, Unraid)
+  is a live install that must survive every update; an early 0.7.x update
+  wiped its Mealie data and theme. Settings and data changes must migrate
+  what is already there, never reset or re-seed it.
+
+## Documentation Pipeline
+
+- Docs publish automatically on push to `main`: `wiki-sync.yml` mirrors
+  `docs/` (plus README, CHANGELOG, etc.) to the GitHub wiki through
+  `scripts/build-wiki.py`, and `docs-site.yml` builds the MkDocs site. The
+  wiki is a generated mirror; never edit it directly, it gets overwritten
+  on the next sync.
+- Keep `docs/settings-matrix.md` current whenever a setting is added,
+  moved, or changes visibility (it maps settings across server, pi_hosted,
+  and pi_remote: which live where, which inherit from the server).
 
 ## Build and Test
 
@@ -180,7 +208,7 @@ commit messages, and UI copy.
 docker compose up -d --build                 # run (add profiles as needed)
 
 # local smoke test deps:
-pip install fastapi jinja2 itsdangerous pillow python-multipart sqlalchemy pydantic-settings httpx
+pip install fastapi jinja2 itsdangerous pillow python-multipart sqlalchemy pydantic-settings httpx "qrcode[pil]"
 python -c "import sys; sys.path.insert(0,'service'); from app.main import app"
 
 # tests (pure logic, no network or Docker needed):
@@ -222,6 +250,14 @@ import smoke test above. A user-facing change also needs a CHANGELOG entry
   already set, do not change it. Never add Co-Authored-By trailers, AI
   attributions, or session links to commit messages.
 - Development happens on **`main`** directly.
+- **Commit and push policy (unambiguous):** for beads work and any
+  load-bearing change (code, docs, instructions, provisioning), commit and
+  push are part of done. The deployed fleet updates from GitHub, so an
+  unpushed change has not shipped. Do not wait to be asked.
+- The one exception: small conversational tweaks Dan asks for while just
+  chatting (a wording nit, a quick experiment) may be left uncommitted for
+  his review, unless he says ship it. When in doubt, it is beads work:
+  commit and push.
 - GitHub interactions in cloud sessions go through the GitHub MCP
   integration (no `gh` CLI available there); `gh` may be used on local
   machines.
@@ -258,9 +294,16 @@ bd close <id>         # Complete work
 
 ## Agent Context Profiles
 
+**This repository explicitly opts into the team-maintainer profile.** For
+beads and other load-bearing work, agents close beads, run quality gates,
+commit, and push as part of session close (see the commit and push policy
+under Authorship and Git). The conservative profile below applies only to
+the small-conversational-tweak exception, or when Dan currently says do
+not commit or push.
+
 The managed Beads block is task-tracking guidance, not permission to override repository, user, or orchestrator instructions.
 
-- **Conservative (default)**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
+- **Conservative**: Use `bd` for task tracking. Do not run git commits, git pushes, or Dolt remote sync unless explicitly asked. At handoff, report changed files, validation, and suggested next commands.
 - **Minimal**: Keep tool instruction files as pointers to `bd prime`; use the same conservative git policy unless active instructions say otherwise.
 - **Team-maintainer**: Only when the repository explicitly opts in, agents may close beads, run quality gates, commit, and push as part of session close. A current "do not commit" or "do not push" instruction still wins.
 
@@ -273,13 +316,15 @@ This protocol applies when ending a Beads implementation workflow. It is subordi
 3. **Update issue status** - Close finished work, update in-progress items
 4. **Handle git/sync by active profile**:
    ```bash
-   # Conservative/minimal/default: report status and proposed commands; wait for approval.
-   git status
-
-   # Team-maintainer opt-in only, unless current instructions forbid it:
+   # This repo opts into team-maintainer: this is the DEFAULT close for
+   # beads work, unless Dan currently says do not commit or push.
    git pull --rebase
    bd dolt push
    git push
+   git status
+
+   # Conversational-tweak exception only: report status and proposed
+   # commands, wait for approval.
    git status
    ```
 5. **Hand off** - Summarize changes, validation, issue status, and any blocked sync/commit/push step
