@@ -11,8 +11,9 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Body, Depends
-from fastapi.responses import JSONResponse
+import httpx
+from fastapi import APIRouter, Body, Depends, Request
+from fastapi.responses import JSONResponse, Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -22,6 +23,75 @@ from ..services import action_items, current_recipe, recipe_timers, timers
 
 recipe_router = APIRouter(prefix="/current-recipe", tags=["current-recipe"])
 timers_router = APIRouter(prefix="/timers", tags=["timers"])
+
+# Forwarding client for the satellite -> main server case (see _upstream).
+_fwd_client = httpx.AsyncClient(timeout=20.0)
+
+
+def _upstream() -> str | None:
+    """The main server's base URL if this device is a satellite, else None.
+
+    Timers live on the MAIN server so every surface agrees on the same running
+    countdowns (see services/timers.py). A satellite keeps no timer registry of
+    its own: it forwards every /timers call to the server and shows what the
+    server returns. That way a timer started on a Pi Remote kiosk or deck is
+    immediately visible on the server and every other device, and vice versa.
+    """
+    if settings.is_satellite() and settings.remote_server_url and settings.upstream_api_key:
+        return settings.remote_server_url.rstrip("/")
+    return None
+
+
+async def _forward(request: Request, path: str) -> Response:
+    """Proxy this timer request to the main server, preserving method/body.
+
+    Authenticated with the satellite's upstream API key, the same key the
+    pending and Grocy/Mealie proxies use. Returns the server's response
+    verbatim (status included) so the caller sees exactly what it would see
+    talking to the server directly.
+    """
+    base = _upstream()
+    headers = {"X-API-Key": settings.upstream_api_key}
+    ct = request.headers.get("content-type")
+    if ct:
+        headers["Content-Type"] = ct
+    body = await request.body()
+    try:
+        up = await _fwd_client.request(
+            request.method,
+            f"{base}{path}",
+            headers=headers,
+            params=dict(request.query_params),
+            content=body or None,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"detail": f"could not reach the main server: {exc}"}, status_code=502
+        )
+    media = up.headers.get("content-type", "application/json")
+    return Response(content=up.content, status_code=up.status_code, media_type=media)
+
+
+async def _create_timer_upstream(label: str, seconds: float) -> Response:
+    """Create a timer on the main server from an already-resolved label and
+    duration. The recipe-suggestion start needs this seam: the suggestion is
+    matched against THIS device's active recipe (recipe state is local to each
+    device), but the timer itself must land in the server registry, so we post
+    the resolved values to the shared POST /timers endpoint."""
+    base = _upstream()
+    try:
+        up = await _fwd_client.request(
+            "POST",
+            f"{base}/timers",
+            headers={"X-API-Key": settings.upstream_api_key},
+            json={"label": label, "seconds": seconds},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"detail": f"could not reach the main server: {exc}"}, status_code=502
+        )
+    media = up.headers.get("content-type", "application/json")
+    return Response(content=up.content, status_code=up.status_code, media_type=media)
 
 
 class IngredientIn(BaseModel):
@@ -290,11 +360,15 @@ def get_timer_suggestions():
 
 
 @recipe_router.post("/timers/start")
-def start_suggested_timer(payload: StartSuggestionIn = Body(...)):
+async def start_suggested_timer(payload: StartSuggestionIn = Body(...)):
     """Create a real timer from a suggestion. Pick the suggestion by step_index
     or label; seconds is taken from the payload when given, otherwise from the
     matching suggestion. Reuses the shared timer service so the countdown shows
-    up on every surface."""
+    up on every surface.
+
+    On a satellite the suggestion is still resolved here, against this device's
+    own active recipe (recipe state is per-device), but the resulting timer is
+    created on the main server, where all timers live."""
     suggestions = recipe_timers.suggestions_for_recipe(current_recipe.get_active())
 
     match = None
@@ -311,6 +385,8 @@ def start_suggested_timer(payload: StartSuggestionIn = Body(...)):
         return JSONResponse({"detail": "No matching suggestion"}, status_code=404)
 
     label = payload.label or (match or {}).get("label") or ""
+    if _upstream():
+        return await _create_timer_upstream(label, float(seconds))
     try:
         timer = timers.create_timer(label, seconds)
     except ValueError as exc:
@@ -322,14 +398,18 @@ def start_suggested_timer(payload: StartSuggestionIn = Body(...)):
 
 
 @timers_router.get("")
-def get_timers():
+async def get_timers(request: Request):
     """List every timer with a fresh server-computed remaining/state."""
+    if _upstream():
+        return await _forward(request, "/timers")
     return {"timers": timers.list_timers()}
 
 
 @timers_router.post("")
-def post_timer(payload: TimerIn = Body(...)):
+async def post_timer(request: Request, payload: TimerIn = Body(...)):
     """Create and start a timer for `seconds`."""
+    if _upstream():
+        return await _forward(request, "/timers")
     try:
         timer = timers.create_timer(payload.label, payload.seconds)
     except ValueError as exc:
@@ -338,8 +418,10 @@ def post_timer(payload: TimerIn = Body(...)):
 
 
 @timers_router.get("/{timer_id}")
-def show_timer(timer_id: int):
+async def show_timer(timer_id: int, request: Request):
     """Return one timer's current state."""
+    if _upstream():
+        return await _forward(request, f"/timers/{timer_id}")
     timer = timers.get_timer(timer_id)
     if timer is None:
         return JSONResponse({"detail": "Timer not found"}, status_code=404)
@@ -347,9 +429,11 @@ def show_timer(timer_id: int):
 
 
 @timers_router.post("/{timer_id}/extend")
-def extend_timer(timer_id: int, payload: ExtendIn = Body(...)):
+async def extend_timer(timer_id: int, request: Request, payload: ExtendIn = Body(...)):
     """Add seconds to a running timer. An expired timer cannot be extended
     (dismiss it and start a new one), so it 404s like a missing id."""
+    if _upstream():
+        return await _forward(request, f"/timers/{timer_id}/extend")
     try:
         timer = timers.extend_timer(timer_id, payload.seconds)
     except ValueError as exc:
@@ -360,8 +444,10 @@ def extend_timer(timer_id: int, payload: ExtendIn = Body(...)):
 
 
 @timers_router.delete("/{timer_id}")
-def delete_timer(timer_id: int):
+async def delete_timer(timer_id: int, request: Request):
     """Cancel and remove a timer."""
+    if _upstream():
+        return await _forward(request, f"/timers/{timer_id}")
     if not timers.cancel_timer(timer_id):
         return JSONResponse({"detail": "Timer not found"}, status_code=404)
     return {"ok": True}
