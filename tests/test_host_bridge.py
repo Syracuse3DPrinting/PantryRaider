@@ -650,6 +650,65 @@ def test_display_power_commands_empty_when_no_tools():
     assert bridge._display_power_commands(True, which=lambda n: False) == []
 
 
+def test_kiosk_restart_cmd_prefers_transient_unit():
+    kind, cmd = bridge._kiosk_restart_cmd(2, token="123", which=lambda n: n == "systemd-run")
+    assert kind == "transient"
+    assert cmd[0] == "systemd-run"
+    assert "--on-active=2s" in cmd
+    assert "--unit=fa-kiosk-restart-123" in cmd
+    assert cmd[-3:] == ["systemctl", "restart", "foodassistant-kiosk.service"]
+
+
+def test_kiosk_restart_cmd_shell_fallback():
+    kind, cmd = bridge._kiosk_restart_cmd(3, which=lambda n: None)
+    assert kind == "shell"
+    assert cmd[:2] == ["/bin/sh", "-c"]
+    assert "sleep 3" in cmd[2]
+    assert "systemctl restart foodassistant-kiosk.service" in cmd[2]
+
+
+def test_schedule_kiosk_restart_uses_transient_unit(monkeypatch):
+    # With systemd-run available and succeeding, no shell process is spawned:
+    # the restart is a detached transient unit (FoodAssistant-9ext).
+    calls = []
+
+    class Ok:
+        returncode = 0
+
+    monkeypatch.setattr(bridge.shutil, "which", lambda n: n == "systemd-run")
+    monkeypatch.setattr(bridge.subprocess, "run",
+                        lambda cmd, **k: calls.append(("run", cmd)) or Ok())
+    monkeypatch.setattr(bridge.subprocess, "Popen",
+                        lambda cmd, **k: calls.append(("popen", cmd)))
+    assert bridge._schedule_kiosk_restart() is True
+    assert [c[0] for c in calls] == ["run"]
+    assert calls[0][1][0] == "systemd-run"
+
+
+def test_schedule_kiosk_restart_falls_back_to_detached_shell(monkeypatch):
+    # systemd-run refusing (e.g. a leftover transient unit) falls back to a
+    # detached sleep+restart rather than blocking or failing.
+    spawned = []
+
+    class Refused:
+        returncode = 1
+
+    monkeypatch.setattr(bridge.shutil, "which", lambda n: n == "systemd-run")
+    monkeypatch.setattr(bridge.subprocess, "run", lambda cmd, **k: Refused())
+    monkeypatch.setattr(bridge.subprocess, "Popen",
+                        lambda cmd, **k: spawned.append(cmd))
+    assert bridge._schedule_kiosk_restart() is True
+    assert spawned and spawned[0][:2] == ["/bin/sh", "-c"]
+
+
+def test_schedule_kiosk_restart_false_when_nothing_works(monkeypatch):
+    def boom(*a, **k):
+        raise OSError("no shell")
+    monkeypatch.setattr(bridge.shutil, "which", lambda n: None)
+    monkeypatch.setattr(bridge.subprocess, "Popen", boom)
+    assert bridge._schedule_kiosk_restart() is False
+
+
 def test_reboot_command_prefers_systemctl():
     cmd = bridge._reboot_command(which=lambda n: n == "systemctl")
     assert cmd == ["systemctl", "reboot"]

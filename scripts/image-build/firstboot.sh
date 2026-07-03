@@ -1271,13 +1271,20 @@ Environment=XCURSOR_SIZE=24"
   cat > /etc/systemd/system/foodassistant-kiosk.service <<EOF
 [Unit]
 Description=FoodAssistant Chromium kiosk
-After=foodassistant.target systemd-user-sessions.service getty@tty1.service network-online.target
-Wants=network-online.target
+After=foodassistant.target systemd-user-sessions.service getty@tty1.service network-online.target seatd.service
+Wants=network-online.target seatd.service
 Conflicts=getty@tty1.service
+# The kiosk is the only thing on the display: never give up on it. Early-boot
+# crashes (DRM not ready, seatd racing up) otherwise leave the screen stuck on
+# the boot console until someone starts the unit by hand.
+StartLimitIntervalSec=0
 
 [Service]
 EnvironmentFile=-/etc/foodassistant/kiosk-env
 Type=simple
+# Room for the app wait (ExecStartPre) plus the rotation apply (ExecStartPost)
+# on a slow first boot; the default 90s start timeout is too tight for a Pi 3.
+TimeoutStartSec=240
 User=$kuser
 PAMName=login
 TTYPath=/dev/tty1
@@ -1291,7 +1298,13 @@ UtmpMode=user
 Environment=XDG_RUNTIME_DIR=/run/user/$kuid
 Environment=LIBSEAT_BACKEND=seatd
 ${cursor_env:+$cursor_env
-}ExecStart=$cage_bin -- $chromium_bin --kiosk --noerrdialogs \\
+}# Wait (bounded, best-effort) for the app to answer before launching the
+# browser. Chromium renders a connection-refused error page and never retries,
+# which is what left the display empty until a reboot when the kiosk came up
+# ahead of the app on first boot (FoodAssistant-kyl2). Always exits 0 so a
+# missing curl or an app that stays down never blocks the kiosk itself.
+ExecStartPre=-/bin/sh -c 'command -v curl >/dev/null 2>&1 || exit 0; for i in \$\$(seq 1 40); do curl -sf -o /dev/null --max-time 2 "$KIOSK_URL" && exit 0; sleep 2; done; exit 0'
+ExecStart=$cage_bin -- $chromium_bin --kiosk --noerrdialogs \\
   --disable-infobars --no-first-run --ozone-platform=wayland \\
   --touch-events=enabled --use-gl=egl \\
   --remote-debugging-port=9222 --disable-restore-session-state $KIOSK_URL

@@ -2236,17 +2236,47 @@ def _eviocgabs(axis: int) -> int:
     return (2 << 30) | (_ABSINFO_SIZE << 16) | (ord("E") << 8) | (0x40 + axis)
 
 
-def _abs_range(fd: int, axis: int, default_max: int = 4095) -> tuple[int, int]:
-    """Return (min, max) for an absolute axis via EVIOCGABS, or a sane default."""
+def _abs_axis(fd: int, axis: int, default_max: int = 4095) -> tuple[int | None, int, int]:
+    """Return (value, min, max) for an absolute axis via EVIOCGABS.
+
+    value is the axis position the device last reported (None when the ioctl
+    fails); min/max fall back to a sane default range.
+    """
     try:
         buf = bytearray(_ABSINFO_SIZE)
         fcntl.ioctl(fd, _eviocgabs(axis), buf, True)
-        _value, minimum, maximum, _fuzz, _flat, _res = struct.unpack(_ABSINFO_FORMAT, bytes(buf))
+        value, minimum, maximum, _fuzz, _flat, _res = struct.unpack(_ABSINFO_FORMAT, bytes(buf))
         if maximum > minimum:
-            return minimum, maximum
+            return value, minimum, maximum
     except OSError:
         pass
-    return 0, default_max
+    return None, 0, default_max
+
+
+def _fold_touch_events(data: bytes, x: int | None, y: int | None):
+    """Fold a raw evdev read buffer into completed taps.
+
+    Returns (taps, x, y): one (x, y) tuple per BTN_TOUCH release seen in the
+    buffer, plus the updated last-known axis values to carry into the next
+    read. The position is deliberately carried across taps rather than reset:
+    the kernel input core suppresses ABS events whose value did not change, so
+    a tap in line with the previous contact (same raw X or Y) arrives with no
+    fresh coordinate for that axis. Resetting to None after each tap dropped
+    exactly those releases (FoodAssistant-9ext: tap on a crosshair silently
+    not registered).
+    """
+    taps: list[tuple[int, int]] = []
+    for off in range(0, len(data) - _INPUT_EVENT_SIZE + 1, _INPUT_EVENT_SIZE):
+        _s, _u, etype, code, value = struct.unpack(
+            _INPUT_EVENT_FORMAT, data[off:off + _INPUT_EVENT_SIZE])
+        if etype == _EV_ABS and code == _ABS_X:
+            x = value
+        elif etype == _EV_ABS and code == _ABS_Y:
+            y = value
+        elif etype == _EV_KEY and code == _BTN_TOUCH and value == 0 \
+                and x is not None and y is not None:
+            taps.append((x, y))
+    return taps, x, y
 
 
 async def _evtest_sse(device: str):
@@ -2263,8 +2293,8 @@ async def _evtest_sse(device: str):
         yield "data: " + json.dumps({"type": "error", "msg": f"cannot open {device}: {e}"}) + "\n\n"
         return
 
-    x_min, x_max = _abs_range(fd, _ABS_X)
-    y_min, y_max = _abs_range(fd, _ABS_Y)
+    x0, x_min, x_max = _abs_axis(fd, _ABS_X)
+    y0, y_min, y_max = _abs_axis(fd, _ABS_Y)
     yield "data: " + json.dumps({
         "type": "ranges", "x_min": x_min, "x_max": x_max,
         "y_min": y_min, "y_max": y_max,
@@ -2275,7 +2305,12 @@ async def _evtest_sse(device: str):
     stop = threading.Event()
 
     def _read_loop():
-        x = y = None
+        # Seed the position from the axis state at open (EVIOCGABS reports the
+        # last value the device sent). The kernel suppresses ABS events whose
+        # value did not change, so the first tap can arrive as a bare
+        # BTN_TOUCH press/release with no fresh coordinates; without the seed
+        # that first tap was silently dropped (FoodAssistant-9ext).
+        x, y = x0, y0
         try:
             while not stop.is_set():
                 # select with a timeout so the thread checks `stop` and exits
@@ -2288,17 +2323,9 @@ async def _evtest_sse(device: str):
                     data = os.read(fd, _INPUT_EVENT_SIZE * 64)
                 except OSError:
                     break
-                for off in range(0, len(data) - _INPUT_EVENT_SIZE + 1, _INPUT_EVENT_SIZE):
-                    _s, _u, etype, code, value = struct.unpack(
-                        _INPUT_EVENT_FORMAT, data[off:off + _INPUT_EVENT_SIZE])
-                    if etype == _EV_ABS and code == _ABS_X:
-                        x = value
-                    elif etype == _EV_ABS and code == _ABS_Y:
-                        y = value
-                    elif etype == _EV_KEY and code == _BTN_TOUCH and value == 0 \
-                            and x is not None and y is not None:
-                        loop.call_soon_threadsafe(queue.put_nowait, (x, y))
-                        x = y = None
+                taps, x, y = _fold_touch_events(data, x, y)
+                for tap in taps:
+                    loop.call_soon_threadsafe(queue.put_nowait, tap)
         finally:
             loop.call_soon_threadsafe(queue.put_nowait, None)
 

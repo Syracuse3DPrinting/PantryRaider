@@ -222,3 +222,75 @@ def test_missing_kiosk_unit_is_not_created(rig, tmp_path):
     rig["env"]["KIOSK_UNIT"] = str(unit)
     run_update(rig)
     assert not unit.exists()
+
+
+def _kiosk_unit_text():
+    return (
+        "[Unit]\nDescription=kiosk\n\n[Service]\n"
+        "ExecStart=/usr/bin/cage -- /usr/bin/chromium --kiosk \\\n"
+        "  --disable-restore-session-state http://localhost/ui/?kiosk=1\n"
+        "ExecStartPost=-/usr/local/bin/foodassistant-apply-rotation\n"
+        "Restart=always\nRestartSec=5\n\n[Install]\nWantedBy=multi-user.target\n")
+
+
+def test_kiosk_boot_dropin_is_installed_for_deployed_units(rig, tmp_path):
+    # Deployed units predate the boot hardening (seatd ordering, no
+    # start-limit give-up, app wait); the updater ships it as a drop-in
+    # (FoodAssistant-9ext / FoodAssistant-kyl2).
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text(_kiosk_unit_text())
+    dropin_dir = tmp_path / "kiosk.service.d"
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(dropin_dir)
+    run_update(rig)
+    conf = (dropin_dir / "10-foodassistant-boot.conf").read_text()
+    assert "After=seatd.service" in conf
+    assert "StartLimitIntervalSec=0" in conf
+    assert "TimeoutStartSec=240" in conf
+    # The app wait probes the unit's own kiosk URL, with $$ so systemd passes
+    # a literal $ through to the shell.
+    assert '"http://localhost/ui/?kiosk=1"' in conf
+    assert "$$(seq 1 40)" in conf
+
+
+def test_kiosk_boot_dropin_without_url_omits_the_app_wait(rig, tmp_path):
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text("[Service]\nExecStart=/usr/bin/cage\nRestart=always\n")
+    dropin_dir = tmp_path / "kiosk.service.d"
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(dropin_dir)
+    run_update(rig)
+    conf = (dropin_dir / "10-foodassistant-boot.conf").read_text()
+    assert "After=seatd.service" in conf
+    assert "ExecStartPre" not in conf
+
+
+def test_kiosk_boot_dropin_not_rewritten_or_duplicated(rig, tmp_path):
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text(_kiosk_unit_text())
+    dropin_dir = tmp_path / "kiosk.service.d"
+    dropin_dir.mkdir()
+    marker = "# operator-tuned\n"
+    (dropin_dir / "10-foodassistant-boot.conf").write_text(marker)
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(dropin_dir)
+    run_update(rig)
+    # An existing drop-in is the operator's (or a previous run's); keep it.
+    assert (dropin_dir / "10-foodassistant-boot.conf").read_text() == marker
+
+
+def test_kiosk_boot_dropin_skipped_when_unit_has_the_app_wait(rig, tmp_path):
+    # A freshly provisioned unit already carries the app wait inline; the
+    # drop-in would run it twice, so it is skipped.
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text(
+        "[Service]\n"
+        "ExecStartPre=-/bin/sh -c 'command -v curl >/dev/null 2>&1 || exit 0'\n"
+        "ExecStart=/usr/bin/cage -- /usr/bin/chromium http://localhost/ui/\n"
+        "ExecStartPost=-/usr/local/bin/foodassistant-apply-rotation\n"
+        "Restart=always\n")
+    dropin_dir = tmp_path / "kiosk.service.d"
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(dropin_dir)
+    run_update(rig)
+    assert not dropin_dir.exists()

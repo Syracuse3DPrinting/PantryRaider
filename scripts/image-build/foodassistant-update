@@ -205,6 +205,43 @@ if [ -f "$KIOSK_UNIT" ] && ! grep -q "foodassistant-apply-rotation" "$KIOSK_UNIT
   fi
 fi
 
+# Devices imaged before the kiosk unit gained its boot hardening (seatd
+# ordering, no start-limit give-up, a bounded wait for the app before the
+# browser launches) still race seatd at boot and freeze on a Chromium
+# connection-refused page when the kiosk beats the app up
+# (FoodAssistant-9ext / FoodAssistant-kyl2). The unit is device-generated, so
+# ship the additions as a drop-in rather than rewriting it. Skipped when the
+# unit itself already carries the app wait (a fresh provision).
+KIOSK_DROPIN_DIR="${KIOSK_DROPIN_DIR:-${KIOSK_UNIT}.d}"
+_kdropin="$KIOSK_DROPIN_DIR/10-foodassistant-boot.conf"
+if [ -f "$KIOSK_UNIT" ] && [ ! -f "$_kdropin" ] \
+    && ! grep -q "command -v curl" "$KIOSK_UNIT"; then
+  # The kiosk URL is the last http(s) argument of the unit's ExecStart.
+  _kurl="$(grep -oE 'https?://[^ "\\]+' "$KIOSK_UNIT" | tail -n1)"
+  if mkdir -p "$KIOSK_DROPIN_DIR" 2>/dev/null; then
+    {
+      echo "[Unit]"
+      echo "Wants=seatd.service"
+      echo "After=seatd.service"
+      echo "StartLimitIntervalSec=0"
+      echo ""
+      echo "[Service]"
+      echo "TimeoutStartSec=240"
+      if [ -n "$_kurl" ]; then
+        echo "ExecStartPre=-/bin/sh -c 'command -v curl >/dev/null 2>&1 || exit 0; for i in \$\$(seq 1 40); do curl -sf -o /dev/null --max-time 2 \"$_kurl\" && exit 0; sleep 2; done; exit 0'"
+      fi
+    } > "$_kdropin" 2>/dev/null \
+      && systemctl daemon-reload 2>/dev/null || true
+    if [ -f "$_kdropin" ]; then
+      log "Installed kiosk boot drop-in: seatd ordering, no start-limit give-up, app wait."
+    else
+      log "WARN: could not install the kiosk boot drop-in."
+    fi
+  else
+    log "WARN: could not create $KIOSK_DROPIN_DIR for the kiosk boot drop-in."
+  fi
+fi
+
 _bsrc="$REPO/scripts/image-build/foodassistant-host-bridge"
 _bdst="$BIN_DIR/foodassistant-host-bridge"
 if [ -f "$_bsrc" ]; then

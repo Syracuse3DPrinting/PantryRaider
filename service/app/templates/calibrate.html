@@ -159,11 +159,13 @@
       });
       const data = await r.json();
       if (data.ok) {
-        // The host bridge restarts the kiosk so the compositor reloads the new
-        // matrix; that relaunches this display at the app, so we usually do not
-        // get here. If the kiosk was not restarted, fall back to navigating.
+        // The host bridge schedules a detached kiosk restart a couple of
+        // seconds out so this response lands first; the compositor then takes
+        // this page down and relaunches at the app. Show the restarting state
+        // meanwhile, and if the restart never materialises (or was skipped),
+        // fall back to navigating back to the app ourselves.
         msgEl.textContent = 'Calibration saved. Restarting the display...';
-        if (!data.kiosk_restarted) setTimeout(window.finishCalibration, 2000);
+        setTimeout(window.finishCalibration, data.kiosk_restarted ? 30000 : 2000);
       } else {
         msgEl.textContent = 'Apply failed: ' + (data.error || 'unknown error');
         setTimeout(window.finishCalibration, 3500);

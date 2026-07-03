@@ -313,6 +313,59 @@ def _reboot_command(which=shutil.which):
     return ["reboot"]
 
 
+def _kiosk_restart_cmd(delay_seconds=2, token="0", which=shutil.which):
+    """The command that schedules a detached, delayed kiosk restart.
+
+    Returns ("transient", argv) when systemd-run is available: the restart
+    runs as its own transient unit a moment out, decoupled from the HTTP
+    request that asked for it. Falls back to ("shell", argv), a sleep+restart
+    to be spawned detached. Pure (the tool probe is injected) so the selection
+    is unit-testable, mirroring _display_power_commands.
+    """
+    delay = int(delay_seconds)
+    if which("systemd-run"):
+        return ("transient", [
+            "systemd-run", "--collect", "--on-active=%ds" % delay,
+            "--unit=fa-kiosk-restart-%s" % token,
+            "systemctl", "restart", "foodassistant-kiosk.service",
+        ])
+    return ("shell", [
+        "/bin/sh", "-c",
+        "sleep %d; systemctl restart foodassistant-kiosk.service" % delay,
+    ])
+
+
+def _schedule_kiosk_restart(delay_seconds=2):
+    """Schedule a kiosk restart without blocking the HTTP response.
+
+    Restarting foodassistant-kiosk.service kills cage and with it the very
+    browser page that made the request (the on-screen calibration flow, or a
+    settings page opened on the kiosk itself). A synchronous systemctl restart
+    tore that page down before the response landed, and on a Pi 3 the
+    half-torn-down compositor could strand the display on the console
+    (FoodAssistant-9ext). Detach and delay instead: the response is written
+    first, the restart fires on its own a couple of seconds later. Returns
+    True when the restart was scheduled.
+    """
+    kind, cmd = _kiosk_restart_cmd(
+        delay_seconds, token=str(int(time.time() * 1000)), which=shutil.which)
+    if kind == "transient":
+        try:
+            r = subprocess.run(cmd, capture_output=True, timeout=10)
+            if r.returncode == 0:
+                return True
+        except Exception:
+            pass
+        # systemd-run refused (e.g. a leftover transient unit); fall back to
+        # the detached shell form.
+        _, cmd = _kiosk_restart_cmd(delay_seconds, which=lambda name: None)
+    try:
+        subprocess.Popen(cmd, start_new_session=True)
+        return True
+    except Exception:
+        return False
+
+
 def _should_blank(now, last_activity, idle_minutes, already_blanked):
     """True when the display has been idle long enough to blank.
 
@@ -1577,16 +1630,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
                 return
             # The compositor only reads the matrix when the touch device is
-            # (re)opened, so restart the live kiosk; skipped when a reboot is
-            # coming anyway.
+            # (re)opened, so restart the live kiosk (detached, so a page shown
+            # on the kiosk itself gets this response before cage goes down);
+            # skipped when a reboot is coming anyway.
             if not reboot and _service_active("foodassistant-kiosk.service"):
-                try:
-                    subprocess.run(
-                        ["systemctl", "restart", "foodassistant-kiosk.service"],
-                        timeout=30,
-                    )
-                except Exception:
-                    pass
+                _schedule_kiosk_restart()
             self._send(200, {"ok": True, "calibration_recomposed": recomposed})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
@@ -1618,17 +1666,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             # The compositor (cage/wlroots) holds the touch device open and only
             # reads LIBINPUT_CALIBRATION_MATRIX when the device is added, so a
             # udevadm trigger alone does not change the live mapping. Restart the
-            # kiosk so cage reopens the device and picks up the new matrix.
+            # kiosk so cage reopens the device and picks up the new matrix. The
+            # restart is scheduled detached: the calibration page that posted
+            # this request lives inside the kiosk browser, so a synchronous
+            # restart killed it before this response could land
+            # (FoodAssistant-9ext).
             restarted = False
             if _service_active("foodassistant-kiosk.service"):
-                try:
-                    subprocess.run(
-                        ["systemctl", "restart", "foodassistant-kiosk.service"],
-                        timeout=30,
-                    )
-                    restarted = True
-                except Exception:
-                    pass
+                restarted = _schedule_kiosk_restart()
             self._send(200, {
                 "ok": True,
                 "message": "Calibration applied to %s." % target,
@@ -1660,14 +1705,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             subprocess.run(["udevadm", "trigger", "--subsystem-match=input"], timeout=10)
             restarted = False
             if _service_active("foodassistant-kiosk.service"):
-                try:
-                    subprocess.run(
-                        ["systemctl", "restart", "foodassistant-kiosk.service"],
-                        timeout=30,
-                    )
-                    restarted = True
-                except Exception:
-                    pass
+                restarted = _schedule_kiosk_restart()
             self._send(200, {"ok": True, "removed": existed, "kiosk_restarted": restarted})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
@@ -1854,14 +1892,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(500, {"ok": False, "error": str(e)})
 
     def _kiosk_restart(self):
-        try:
-            subprocess.run(
-                ["systemctl", "restart", "foodassistant-kiosk.service"],
-                check=True, timeout=30
-            )
-            self._send(200, {"ok": True})
-        except Exception as e:
-            self._send(500, {"ok": False, "error": str(e)})
+        # Scheduled detached rather than run inline: this endpoint can be hit
+        # from a settings page shown on the kiosk display itself, and a
+        # synchronous restart kills that page before the response lands.
+        if _schedule_kiosk_restart():
+            self._send(200, {"ok": True, "scheduled": True})
+        else:
+            self._send(500, {"ok": False, "error": "could not schedule kiosk restart"})
 
     def _mealie_container_up(self):
         """True when the Mealie container exists (compose service 'mealie')."""
