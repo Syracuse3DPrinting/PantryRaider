@@ -7,8 +7,8 @@ compares what has been scanned to the location's expected Grocy stock so
 discrepancies (missing items that were not scanned, unexpected items that do not
 belong here) are obvious.
 
-The session is process-local and in-memory, like the active recipe, the timers,
-and the scanner mode: a restart clears it. The matching logic is kept pure and
+The session is process-local and in-memory, like the active recipe and the
+timers: a restart clears it. The matching logic is kept pure and
 unit-testable (no network), and the expected stock is passed in by the caller so
 this module never talks to Grocy itself.
 """

@@ -120,7 +120,7 @@ commit messages, and UI copy.
 | `recipes_external.py` | TheMealDB / Spoonacular suggestions and ingredient matching |
 | `cameras.py` | Resolve a configured camera to a fetchable feed; HA cameras need a bearer header (not a token in the URL), so the app proxies them |
 | `camera_scan.py` | IP-camera probe |
-| `scanner_mode.py` | In-memory barcode scanner mode: inventory / consume / shopping / audit |
+| `scanner_mode.py` | Barcode scanner mode (inventory / consume / shopping / audit), shared across workers via a state file under data_dir |
 | `audit.py` | In-memory, location-scoped, read-only pantry stock count (scans compared to Grocy stock, never written back) |
 | `nutrition.py` | Food-intake log totals; pairs with the `IntakeLog` model |
 | `weather.py` | Kiosk forecast: Open-Meteo primary, wttr.in fallback; pure parse helpers |

@@ -1,11 +1,13 @@
 """Tests for the barcode scanner mode (FoodAssistant-8jbk).
 
-Covers the in-memory mode store (cycle/set/reset) and the scan endpoint
-dispatch: the default "inventory" mode is unchanged, while "consume" and
-"shopping" route the barcode to Grocy/Mealie and never hard-fail.
+Covers the mode store (cycle/set/reset), its state-file persistence across
+workers and restarts (FoodAssistant-3jxk), and the scan endpoint dispatch:
+the default "inventory" mode is unchanged, while "consume" and "shopping"
+route the barcode to Grocy/Mealie and never hard-fail.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -19,7 +21,11 @@ from app.services import scanner_mode  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
-def _reset_mode():
+def _reset_mode(monkeypatch, tmp_path):
+    # Point the state file at a per-test dir so persistence is exercised
+    # without touching a real data_dir.
+    from app.config import settings
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
     scanner_mode.reset()
     yield
     scanner_mode.reset()
@@ -43,6 +49,54 @@ def test_cycle_wraps_through_all_modes():
 def test_set_unknown_mode_falls_back():
     assert scanner_mode.set_mode("nonsense")["mode"] == "inventory"
     assert scanner_mode.set_mode("consume")["mode"] == "consume"
+
+
+# State-file persistence (FoodAssistant-3jxk) --------------------------------
+
+def _forget_in_memory_state():
+    """Simulate a different worker process (or a restart): the module-level
+    state is back at its import-time default, only the file remains."""
+    scanner_mode._state["mode"] = "inventory"
+    scanner_mode._state["mtime"] = None
+
+
+def test_mode_is_shared_across_workers(tmp_path):
+    scanner_mode.set_mode("shopping")
+    assert (tmp_path / "scanner_mode.json").exists()
+    _forget_in_memory_state()
+    # A worker that never saw the set_mode still reads the shared mode.
+    assert scanner_mode.get_mode() == "shopping"
+
+
+def test_mode_survives_restart(tmp_path):
+    scanner_mode.cycle_mode()   # inventory -> consume
+    _forget_in_memory_state()
+    assert scanner_mode.get_state() == {"mode": "consume", "label": "Use"}
+
+
+def test_cycle_reads_shared_state_first(tmp_path):
+    # Another worker set "shopping"; this worker's cycle must advance from
+    # there (to "audit"), not from its own stale in-memory "inventory".
+    (tmp_path / "scanner_mode.json").write_text(json.dumps({"mode": "shopping"}))
+    assert scanner_mode.cycle_mode()["mode"] == "audit"
+
+
+def test_corrupt_state_file_never_breaks_a_read(tmp_path):
+    scanner_mode.set_mode("consume")
+    _forget_in_memory_state()
+    (tmp_path / "scanner_mode.json").write_text("{not json")
+    # A torn/corrupt file falls back to the in-memory mode instead of raising.
+    assert scanner_mode.get_mode() == "inventory"
+
+
+def test_unwritable_data_dir_degrades_to_in_memory(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "data_dir", "/nonexistent/nowhere", raising=False)
+    scanner_mode._state["mode"] = "inventory"
+    scanner_mode._state["mtime"] = None
+    # No file can be written or read, but the mode still works process-locally.
+    assert scanner_mode.set_mode("audit")["mode"] == "audit"
+    assert scanner_mode.get_mode() == "audit"
 
 
 # Scan dispatch -------------------------------------------------------------
