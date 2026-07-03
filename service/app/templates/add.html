@@ -11,21 +11,23 @@
 
 <!-- Mode tabs: these ARE the shared scanner mode. Picking a tab changes the
      mode for every scanner on the network (USB wedge, Stream Deck key, this
-     page), and the page follows along when the mode is changed elsewhere. -->
+     page), and the page follows along when the mode is changed elsewhere.
+     Each tab leads with the same word the Stream Deck key face shows for the
+     mode (Stock, Use, Shop, Audit), so the two surfaces read as one control. -->
 <ul class="nav nav-pills mb-3" id="modeTabs">
   <li class="nav-item">
     <button class="nav-link active" id="mode-tab-inventory" onclick="selectMode('inventory')">
-      <i class="bi bi-plus-circle me-1"></i>Add stock
+      <i class="bi bi-plus-circle me-1"></i>Stock up
     </button>
   </li>
   <li class="nav-item">
     <button class="nav-link" id="mode-tab-consume" onclick="selectMode('consume')">
-      <i class="bi bi-dash-circle me-1"></i>Consume stock
+      <i class="bi bi-dash-circle me-1"></i>Use stock
     </button>
   </li>
   <li class="nav-item">
     <button class="nav-link" id="mode-tab-shopping" onclick="selectMode('shopping')">
-      <i class="bi bi-cart-plus me-1"></i>Add to shopping list
+      <i class="bi bi-cart-plus me-1"></i>Shopping list
     </button>
   </li>
   <li class="nav-item">
@@ -42,10 +44,10 @@
   Scan with the barcode scanner, or tap <strong>Open on phone</strong> to use your phone's camera.
 </div>
 
-<!-- ============================ Add stock ============================ -->
+<!-- ============================= Stock up ============================= -->
 <div id="mode-pane-inventory">
 
-<!-- Input-method tabs (within Add stock): barcode, photo, manual -->
+<!-- Input-method tabs (within Stock up): barcode, photo, manual -->
 <ul class="nav nav-tabs mb-3" id="inputTabs">
   <li class="nav-item">
     <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tab-barcode">
@@ -256,11 +258,11 @@
 
 </div><!-- /mode-pane-inventory -->
 
-<!-- ============================ Consume stock ============================ -->
+<!-- ============================= Use stock ============================= -->
 <div id="mode-pane-consume" class="d-none">
   <div class="card">
     <div class="card-body">
-      <h6 class="card-title">Consume stock</h6>
+      <h6 class="card-title">Use stock</h6>
       <p class="text-muted small mb-2">
         Scan an item to use it up: each scan takes one off your Grocy stock.
         You can also type the barcode below.
@@ -279,12 +281,12 @@
   </div>
 </div>
 
-<!-- ========================= Add to shopping list ========================= -->
+<!-- ============================ Shopping list ============================ -->
 <div id="mode-pane-shopping" class="d-none">
   {% if mealie_configured %}
   <div class="card">
     <div class="card-body">
-      <h6 class="card-title">Add to shopping list</h6>
+      <h6 class="card-title">Shopping list</h6>
       <p class="text-muted small mb-2">
         Scan an item to put it on your Mealie shopping list, type a barcode,
         or add any item by name.

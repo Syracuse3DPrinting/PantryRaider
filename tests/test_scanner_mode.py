@@ -234,3 +234,100 @@ def test_scanner_mode_endpoints(client):
     assert cycled["mode"] == "consume"
     set_back = client.post("/pending/scanner-mode", json={"mode": "shopping"}).json()
     assert set_back["mode"] == "shopping"
+
+
+def test_cycle_changes_scan_routing_end_to_end(client, monkeypatch):
+    """The whole FoodAssistant-ewyo chain on a server: the cycle endpoint the
+    Stream Deck key posts must change how the very next scan routes, because
+    both read the same shared mode state."""
+    called = {}
+
+    async def _consume(self, barcode, amount=1.0):
+        called["barcode"] = barcode
+        return {"ok": True}
+
+    from app.services.grocy import GrocyClient
+    monkeypatch.setattr(GrocyClient, "consume_by_barcode", _consume)
+    assert client.post("/pending/scanner-mode/cycle").json()["mode"] == "consume"
+    r = client.post("/pending/scan", json={"barcode": "078000035483"})
+    assert r.json()["status"] == "consumed"
+    assert called["barcode"] == "078000035483"
+
+
+# Satellite forwarding (FoodAssistant-ewyo) -----------------------------------
+#
+# On a pi_remote every scanner-mode call and every scan must forward to the
+# main server, the single owner of the mode. If any one of them read or wrote
+# the satellite's local state instead, a deck cycle taken on the satellite and
+# a scan handled by the server would disagree about the active mode.
+
+class _FwdRecorder:
+    """Stands in for pending._fwd_client: records every forwarded request and
+    answers like a main server that just cycled to consume."""
+
+    def __init__(self):
+        self.calls: list[dict] = []
+
+    async def request(self, method, url, headers=None, params=None, content=None):
+        import httpx
+        self.calls.append({
+            "method": method, "url": url,
+            "api_key": (headers or {}).get("X-API-Key", ""),
+        })
+        return httpx.Response(200, json={"mode": "consume", "label": "Use",
+                                         "from": "main-server"})
+
+
+@pytest.fixture
+def sat_client(monkeypatch, tmp_path):
+    cwd = os.getcwd()
+    os.chdir(SERVICE)
+    from app.config import settings
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    monkeypatch.setattr(settings, "auth_password", "", raising=False)
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "deployment_mode", "pi_remote", raising=False)
+    monkeypatch.setattr(settings, "remote_server_url", "http://main.server:9284", raising=False)
+    monkeypatch.setattr(settings, "upstream_api_key", "sat-key", raising=False)
+    from app.routers import pending as pending_router
+    recorder = _FwdRecorder()
+    monkeypatch.setattr(pending_router, "_fwd_client", recorder)
+    from fastapi.testclient import TestClient
+    from app.main import app
+    try:
+        yield TestClient(app), recorder, tmp_path
+    finally:
+        os.chdir(cwd)
+
+
+def test_satellite_forwards_every_scanner_mode_call(sat_client):
+    client, recorder, tmp_path = sat_client
+    responses = [
+        client.get("/pending/scanner-mode"),
+        client.post("/pending/scanner-mode", json={"mode": "consume"}),
+        client.post("/pending/scanner-mode/cycle"),
+        client.post("/pending/scan", json={"barcode": "078000035483"}),
+    ]
+    assert [c["url"] for c in recorder.calls] == [
+        "http://main.server:9284/pending/scanner-mode",
+        "http://main.server:9284/pending/scanner-mode",
+        "http://main.server:9284/pending/scanner-mode/cycle",
+        "http://main.server:9284/pending/scan",
+    ]
+    # Every call authenticates with the satellite's upstream key and returns
+    # the server's answer verbatim (the deck face shows the server's label).
+    assert all(c["api_key"] == "sat-key" for c in recorder.calls)
+    for r in responses:
+        assert r.status_code == 200
+        assert r.json()["from"] == "main-server"
+
+
+def test_satellite_never_touches_local_mode_state(sat_client):
+    client, recorder, tmp_path = sat_client
+    client.post("/pending/scanner-mode", json={"mode": "consume"})
+    client.post("/pending/scanner-mode/cycle")
+    client.post("/pending/scan", json={"barcode": "078000035483"})
+    # The single source of truth is the main server: no local state file may
+    # appear on the satellite, and the in-process mode stays at its default.
+    assert not (tmp_path / "scanner_mode.json").exists()
+    assert scanner_mode._state["mode"] == "inventory"

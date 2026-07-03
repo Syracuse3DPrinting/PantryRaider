@@ -1218,9 +1218,9 @@ ACTIONS: dict[str, ActionSpec] = {
         label="Scan\nMode",
         color="#0369a1",
         kind="scan_mode",
-        description="Cycle the barcode scanner mode (Stock, Use, Shop). The same "
-        "physical scanner then adds to inventory, consumes stock, or adds to the "
-        "shopping list. The key face shows the active mode.",
+        description="Cycle the barcode scanner mode (Stock, Use, Shop, Audit). "
+        "The same physical scanner then adds to inventory, consumes stock, adds "
+        "to the shopping list, or counts stock. The key face shows the active mode.",
     ),
     "shopping_check": ActionSpec(
         name="shopping_check",
@@ -2084,6 +2084,10 @@ class ActionContext:
     # own WeatherState. Default no-ops keep unit contexts that omit them valid.
     weather_cycle: Callable[[str], None] = field(default=lambda _name: None)
     forecast_cycle: Callable[[str], None] = field(default=lambda _name: None)
+    # Paint a new scanner-mode label on the scan_mode key right away, without
+    # waiting for the full status refresh round-trip. Default no-op keeps unit
+    # contexts that omit it valid.
+    scanner_label_set: Callable[[str], None] = field(default=lambda _label: None)
     ha_base_url: str = ""
     ha_token: str = ""
     # Base URL of the host bridge (empty off-Pi). Bridge actions POST here via
@@ -2236,14 +2240,25 @@ async def run_action(spec: ActionSpec, ctx: ActionContext, long_press: bool = Fa
 
     if spec.kind == "scan_mode":
         # Cycle the barcode scanner mode on the app; the face shows the active
-        # mode, refreshed by the poll loop (and right after this press).
+        # mode. On a satellite the app forwards this to the main server, the
+        # single owner of the mode, so the same press changes how every scanner
+        # on the network routes. The new label is painted immediately from the
+        # response; the poll loop keeps it in step afterwards.
         if ctx.client is None:
             return "scan: no client"
         try:
             r = await ctx.client.post(f"{base}/pending/scanner-mode/cycle")
-            data = r.json() if r.status_code == 200 else {}
+            if r.status_code != 200:
+                # A main server too old for the cycle endpoint, or a satellite
+                # that cannot reach it, must not look like a successful press:
+                # scans would keep their old routing while the key face lied.
+                return f"mode cycle failed: HTTP {r.status_code}"
+            data = r.json() or {}
+            label = data.get("label", "")
+            if label:
+                ctx.scanner_label_set(label)
             await ctx.refresh()
-            return data.get("label", "Scan")
+            return label or "Scan"
         except Exception as e:  # noqa: BLE001
             return f"scan err: {e}"
 

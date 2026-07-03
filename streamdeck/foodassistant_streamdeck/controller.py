@@ -239,9 +239,21 @@ class Controller:
         Called both at startup and on every re-init. Re-asserting the callback
         and brightness here (not just at first open) is what makes a re-opened
         deck responsive again after a teardown.
+
+        A deck that arrives already open carries the early boot splash painted
+        by __main__ before the heavy imports (FoodAssistant-krbn); skipping the
+        open+reset pair keeps that splash on screen until the first real page
+        draw, where a reset would blank it back to black for the rest of
+        startup. Re-inits always come through _teardown_deck (which closes the
+        handle), so they still take the full open+reset path.
         """
-        self.deck.open()
-        self.deck.reset()
+        try:
+            already_open = bool(self.deck.is_open())
+        except Exception:  # noqa: BLE001 - no is_open() on this handle/fake
+            already_open = False
+        if not already_open:
+            self.deck.open()
+            self.deck.reset()
         self.deck.set_brightness(BRIGHTNESS_STEPS[self._bright_idx])
         self.deck.set_key_callback(self._on_key)
         self._idle_blanked = False
@@ -905,6 +917,13 @@ class Controller:
             self.meal_today = label
             self._draw_page()
 
+    def _set_scanner_mode_label(self, label: str) -> None:
+        """Paint a just-cycled scanner mode on the scan_mode key immediately,
+        so the face answers the press before the full status refresh lands."""
+        if label and label != self.scanner_mode_label:
+            self.scanner_mode_label = label
+            self._draw_page()
+
     async def _refresh_scanner_mode(self) -> None:
         """Refresh the active scanner mode label for any scan_mode key.
 
@@ -1226,6 +1245,7 @@ class Controller:
             weather_refresh=self._refresh_weather,
             weather_cycle=self._weather_cycle,
             forecast_cycle=self._forecast_cycle,
+            scanner_label_set=self._set_scanner_mode_label,
             ha_base_url=self.config.ha_base_url,
             ha_token=self.config.ha_token,
             host_bridge_url=getattr(self.config, "host_bridge_url", ""),
@@ -1588,8 +1608,13 @@ def find_deck():
     return decks[0] if decks else None
 
 
-async def main_async(config: Config, config_path: Optional[str] = None) -> int:
-    deck = find_deck()
+async def main_async(config: Config, config_path: Optional[str] = None,
+                     deck=None) -> int:
+    """Run the controller. ``deck`` may be a pre-opened handle from the early
+    boot splash (__main__), adopted as-is so the splash survives until the
+    first page draw; when None the first attached deck is opened here."""
+    if deck is None:
+        deck = find_deck()
     if deck is None:
         log.error("No Stream Deck found. Check the USB connection and udev rule.")
         return 1

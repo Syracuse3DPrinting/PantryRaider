@@ -125,7 +125,7 @@ async def inventory_page(request: Request):
 
 @router.get("/add", response_class=HTMLResponse)
 async def add_page(request: Request):
-    # Manage Pantry: one page, four scanner-mode tabs (add stock, consume,
+    # Manage Pantry: one page, four scanner-mode tabs (stock up, use stock,
     # shopping list, audit). The tabs are the shared scanner mode itself, so
     # the page, the USB scanner routing, and the Stream Deck key always agree.
     return templates.TemplateResponse(request, "add.html", {

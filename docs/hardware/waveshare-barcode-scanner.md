@@ -127,7 +127,7 @@ redo the recommended codes above.
 
 ## Using it with Pantry Raider
 
-Once the module is in Sensing Mode, open the **Manage Pantry** page and present a barcode. With the **Add stock** tab active, the
+Once the module is in Sensing Mode, open the **Manage Pantry** page and present a barcode. With the **Stock up** tab active, the
 code is captured anywhere on the page (you do not need to click into a field first), looked
 up against Open Food Facts with your defaults applied, and saved to **Pending**. Review and
 commit from the Pending page. On a Pi Remote the scan is saved on the main server, so it

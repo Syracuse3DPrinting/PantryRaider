@@ -9,9 +9,13 @@ import asyncio
 import logging
 import sys
 
+# Keep this module's imports light: main() paints the boot splash before
+# importing the controller (which drags in httpx and the rest of the heavy
+# startup), so the deck shows the brand mark instead of the Elgato factory
+# logo for the bulk of service startup (FoodAssistant-krbn). config/actions
+# are pure stdlib and cheap; the controller import is the slow one.
 from . import __version__
 from .config import load, resolved_config_path
-from .controller import main_async
 
 
 def _parse_args(argv: list[str]) -> argparse.Namespace:
@@ -53,8 +57,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     config = load(args.config)
     config_path = str(resolved_config_path(args.config))
+    # Paint the splash NOW, before the controller import: on a Pi that import
+    # (httpx and friends) is the bulk of the boot gap, during which the deck
+    # would otherwise keep showing the Elgato factory logo. The open handle is
+    # passed through so the controller adopts it without a reset, keeping the
+    # splash on screen until the first real page draw replaces it.
+    from . import earlysplash
+    deck = earlysplash.open_deck_and_paint(rotation=config.rotation)
+    from .controller import main_async
     try:
-        return asyncio.run(main_async(config, config_path=config_path))
+        return asyncio.run(main_async(config, config_path=config_path, deck=deck))
     except KeyboardInterrupt:
         return 0
 

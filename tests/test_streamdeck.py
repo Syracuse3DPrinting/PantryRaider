@@ -3114,6 +3114,115 @@ def test_splash_tiles_degenerate_returns_empty():
     assert render.splash_tiles(3, 5, (0, 72)) == []
 
 
+# -- early boot splash (FoodAssistant-krbn) ----------------------------------
+#
+# __main__ paints the splash before the heavy controller import, then hands
+# the open deck to the controller, which must not reset it (that would blank
+# the splash for the rest of startup). earlysplash.paint takes an injectable
+# native-format encoder so these tests run without the device library.
+
+
+class _SplashDeck:
+    """Fake deck for earlysplash.paint: records every key image written."""
+
+    def __init__(self, rows=3, cols=5):
+        self._rows, self._cols = rows, cols
+        self.images: dict[int, object] = {}
+
+    def key_layout(self):
+        return (self._rows, self._cols)
+
+    def key_image_format(self):
+        return {"size": (72, 72)}
+
+    def key_count(self):
+        return self._rows * self._cols
+
+    def set_key_image(self, key, image):
+        self.images[key] = image
+
+
+def test_early_splash_paints_every_key():
+    from foodassistant_streamdeck import earlysplash
+
+    deck = _SplashDeck()
+    assert earlysplash.paint(deck, to_native=lambda d, img: img) is True
+    assert sorted(deck.images) == list(range(15))
+
+
+def test_early_splash_honours_rotation():
+    from foodassistant_streamdeck import earlysplash
+
+    deck = _SplashDeck()
+    assert earlysplash.paint(deck, rotation=180, to_native=lambda d, img: img)
+    # Every physical key is still painted exactly once through the same
+    # rotated-index mapping the controller's draw loop uses.
+    assert sorted(deck.images) == list(range(15))
+
+
+def test_early_splash_failure_is_swallowed():
+    from foodassistant_streamdeck import earlysplash
+
+    class _Dead:
+        def key_layout(self):
+            raise OSError("gone")
+
+    assert earlysplash.paint(_Dead(), to_native=lambda d, img: img) is False
+
+
+def test_open_deck_skips_reset_when_deck_arrives_open():
+    # A deck pre-opened by the early splash must be adopted as-is: no open(),
+    # and critically no reset(), which would blank the splash until the first
+    # page draw. Brightness and the key callback are still (re)asserted.
+    ctrl, deck, loop = _make_controller()
+    deck.is_open = lambda: True
+    ctrl._open_deck()
+    assert deck.open_calls == 0
+    assert deck.reset_calls == 0
+    assert deck.brightness_calls, "brightness must still be asserted"
+    assert deck._callback is not None
+    loop.close()
+
+
+def test_open_deck_still_resets_a_closed_deck():
+    # The normal path (no early splash, and every watchdog re-init after a
+    # teardown) keeps the full open+reset sequence.
+    ctrl, deck, loop = _make_controller()
+    deck.is_open = lambda: False
+    ctrl._open_deck()
+    assert deck.open_calls == 1
+    assert deck.reset_calls == 1
+    loop.close()
+
+
+def test_main_async_uses_preopened_deck(monkeypatch):
+    # __main__ passes the early-splash deck through; main_async must adopt it
+    # rather than enumerating (find_deck would need real hardware).
+    from foodassistant_streamdeck import controller as controller_mod
+
+    seen = {}
+
+    class _Ctrl:
+        def __init__(self, deck, cfg, config_path=None):
+            seen["deck"] = deck
+
+        async def run(self):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr(controller_mod, "Controller", _Ctrl)
+    monkeypatch.setattr(
+        controller_mod, "find_deck",
+        lambda: (_ for _ in ()).throw(AssertionError("must not enumerate")),
+    )
+    deck = _SplashDeck()
+    rc = asyncio.run(controller_mod.main_async(config.Config(), deck=deck))
+    assert rc == 0
+    assert seen["deck"] is deck
+
+
 def test_camera_actions_resolve_and_have_icons():
     cam = actions.resolve("camera")
     full = actions.resolve("camera_full")
@@ -3296,19 +3405,52 @@ def test_scan_mode_action_cycles_via_app():
     async def noop():
         pass
 
+    painted = []
     ctx = actions.ActionContext(
         client=_Client(), base_url="http://x", refresh=noop,
         navigate=lambda p: noop(), cycle_brightness=lambda: 0,
         page_next=lambda: None, page_prev=lambda: None,
+        scanner_label_set=painted.append,
     )
     spec = actions.resolve("scan_mode")
     assert spec is not None and spec.kind == "scan_mode"
     msg = asyncio.run(actions.run_action(spec, ctx))
     assert msg == "Use"
     assert posted == ["http://x/pending/scanner-mode/cycle"]
+    # The new label is painted immediately, without waiting for the poll loop.
+    assert painted == ["Use"]
     # It is grouped under Actions in the web key editor.
     items = {i["name"]: i for i in actions.catalog()}
     assert items["scan_mode"]["group"] == "Actions"
+
+
+def test_scan_mode_cycle_failure_is_not_silent():
+    # A main server without the cycle endpoint (version skew) or an unreachable
+    # forward must surface as a failure, not pretend the mode changed
+    # (FoodAssistant-ewyo): scans would keep their old routing while the key
+    # face lied about the active mode.
+    class _Resp:
+        status_code = 404
+        def json(self):
+            return {"detail": "Not Found"}
+
+    class _Client:
+        async def post(self, url, **k):
+            return _Resp()
+
+    async def noop():
+        pass
+
+    painted = []
+    ctx = actions.ActionContext(
+        client=_Client(), base_url="http://x", refresh=noop,
+        navigate=lambda p: noop(), cycle_brightness=lambda: 0,
+        page_next=lambda: None, page_prev=lambda: None,
+        scanner_label_set=painted.append,
+    )
+    msg = asyncio.run(actions.run_action(actions.resolve("scan_mode"), ctx))
+    assert "failed" in msg and "404" in msg
+    assert painted == []
 
 
 def test_overrides_skip_unplaced_and_ignore_id():
