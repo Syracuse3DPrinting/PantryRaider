@@ -89,6 +89,12 @@
     .section-card { background: var(--bs-tertiary-bg); border: 1px solid var(--bs-border-color); border-radius: 0.75rem; padding: 1.5rem; margin-bottom: 1.25rem; }
     .section-title { font-size: 1.05rem; font-weight: 600; margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem; }
     .pane-intro { font-size: 0.85rem; color: var(--bs-secondary-color); margin: -0.25rem 0 1rem; }
+    /* Sub-header inside a section card, matching the editor-dense block-head
+       look so multi-part cards (Backup) read the same as the dense editors. */
+    .subsection-title { font-weight: 600; font-size: 0.9rem; display: flex; align-items: center; gap: 0.35rem; margin-bottom: 0.35rem; }
+    /* A section card that matches the active settings search is outlined so
+       the hit is findable inside a long pane. */
+    .section-card.search-hit { border-color: var(--bs-primary); box-shadow: 0 0 0 1px var(--bs-primary); }
     .test-result { font-size: 0.82rem; margin-top: 0.4rem; min-height: 1.2rem; }
     .badge-req { font-size: 0.65rem; vertical-align: middle; }
     .logo { font-size: 1.5rem; font-weight: 700; letter-spacing: -0.5px; }
@@ -934,6 +940,14 @@
     <!-- Side menu -->
     <div class="col-md-3">
       <div class="side-menu">
+        {# Search box: filters the menu to panes whose title, section headers,
+           or field labels match, across both menu groups at once, and outlines
+           the matching cards when a filtered pane opens. #}
+        <div class="mb-2">
+          <input type="search" class="form-control form-control-sm" id="settings-search"
+                 placeholder="Search settings" autocomplete="off" spellcheck="false"
+                 aria-label="Search settings" oninput="settingsSearch(this.value)">
+        </div>
         {# Group toggle lives inside the sticky menu frame so it stays reachable
            while a long pane scrolls (it never scrolls off with the page). #}
         <div class="btn-group w-100 mb-2" role="group" aria-label="Choose Settings or Personalization">
@@ -2341,7 +2355,7 @@
               </button>
             </div>
             <div class="mb-2">
-              <label class="form-label small mb-1">Restore from a backup zip</label>
+              <div class="subsection-title"><i class="bi bi-file-zip me-1"></i>Restore from a backup zip</div>
               <div class="input-group input-group-sm" style="max-width:520px">
                 <input type="file" class="form-control" id="restore-file" accept=".zip">
                 <button class="btn btn-outline-warning" onclick="restoreBackup(this)">
@@ -2355,7 +2369,7 @@
             </div>
             {% if is_pi %}
             <div class="mb-2 border-top border-secondary pt-3">
-              <label class="form-label small mb-1"><i class="bi bi-hdd-stack me-1"></i>Full restore (Grocy + Mealie)</label>
+              <div class="subsection-title"><i class="bi bi-hdd-stack me-1"></i>Full restore (Grocy + Mealie)</div>
               <div class="input-group input-group-sm" style="max-width:560px">
                 <input type="text" class="form-control font-monospace" id="full-restore-source"
                        placeholder="/path/to/foodassistant-YYYYMMDD.tar.gz  or  rclone:remote:bucket/snapshot.tar.gz">
@@ -2382,7 +2396,7 @@
                 Config is stored at <code>/app/data/rclone.conf</code>.</div>
             </div>
             <div class="mb-2">
-              <label class="form-label">Auto-backup interval <span class="text-secondary small">(hours, 0 = off)</span></label>
+              <label class="form-label">Auto-backup interval <span class="text-secondary small">(hours, 0 = off)</span>{{ info('How often a backup is pushed to the rclone remote above automatically. 0 turns the schedule off; Push to Remote always works on demand.') }}</label>
               <input type="number" class="form-control" id="rclone_schedule_hours" min="0" max="720"
                      value="{{ s.rclone_schedule_hours }}" style="width:120px">
             </div>
@@ -2391,7 +2405,7 @@
             </button>
             <div class="test-result" id="rclone-result"></div>
             <div class="mb-2 border-top border-secondary pt-3 mt-3">
-              <label class="form-label small mb-1"><i class="bi bi-usb-drive me-1"></i>USB drive backup</label>
+              <div class="subsection-title"><i class="bi bi-usb-drive me-1"></i>USB drive backup</div>
               <div class="form-text">Plug a flash drive into this device and Pantry Raider saves backups to a
                 <code>pantryraider-backups</code> folder on it, on a schedule or on demand. The drive just needs
                 to be formatted and mounted; the newest 14 backups are kept, and nothing else on the drive is
@@ -2399,7 +2413,7 @@
                 replacement unit can be restored from it.{% endif %}</div>
               <div class="test-result my-2" id="usb-status"></div>
               <div class="mb-2">
-                <label class="form-label">Automatic USB backup interval <span class="text-secondary small">(hours, 0 = off)</span></label>
+                <label class="form-label">Automatic USB backup interval <span class="text-secondary small">(hours, 0 = off)</span>{{ info('How often a backup is written to the attached USB drive. 0 turns the schedule off; Back up now always works on demand.') }}</label>
                 <input type="number" class="form-control" id="usb_backup_interval_hours" min="0" max="720"
                        value="{{ s.usb_backup_interval_hours }}" style="width:120px">
               </div>
@@ -2814,7 +2828,7 @@ docker compose up -d</code></pre>
             <div class="form-check form-switch mb-2">
               <input class="form-check-input" type="checkbox" role="switch" id="display_touch"
                      {{ 'checked' if s.display_touch else '' }}>
-              <label class="form-check-label" for="display_touch">Touch-compatible display</label>
+              <label class="form-check-label" for="display_touch">Touch-compatible display{{ info('Turn on when the panel accepts touch input. Pick the matching display type above, then use Apply touch driver so the right driver loads.') }}</label>
             </div>
             {% if is_pi %}
             <div class="mb-3" id="touch-provision-row">
@@ -2901,7 +2915,7 @@ docker compose up -d</code></pre>
             </div>
             <div class="row g-3 mb-3">
               <div class="col-sm-6">
-                <label class="form-label">Framebuffer rotation</label>
+                <label class="form-label">Framebuffer rotation{{ info('Rotates the whole display output, including the boot screen and the kiosk browser. Use 90 or 270 for a portrait-mounted panel. Recalibrate the touchscreen after changing it.') }}</label>
                 <select class="form-select" id="kms_rotation">
                   <option value="0">0&deg; (normal)</option>
                   <option value="90">90&deg;</option>
@@ -6036,12 +6050,96 @@ function showKioskWizard() {
   document.getElementById('wizard-root')?.classList.remove('d-none');
 }
 
+// Deep-link compatibility (docs/design/settings-reorg.md): old #pane-* hashes
+// resolve to the current pane id here, so bookmarks, docs links, and in-app
+// links keep landing on the right pane when a pane is renamed. Add a row
+// ('pane-old-name': 'pane-new-name') in the same change that renames a pane.
+const PANE_HASH_ALIASES = {};
+function _resolvePaneHash(hash) {
+  if (!hash || !hash.startsWith('#pane-')) return hash;
+  const id = hash.slice(1);
+  return '#' + (PANE_HASH_ALIASES[id] || id);
+}
+
+// Settings search: filters the side menu to panes whose title, section
+// headers, or field labels contain the query, across both menu groups at
+// once, and outlines the matching section cards so the hit is findable
+// inside a long pane. Clearing the box restores the normal group view.
+let _settingsSearchIndex = null;  // [{pill, panes, text}]
+function _buildSettingsSearchIndex() {
+  _settingsSearchIndex = [];
+  document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(function (pill) {
+    const target = pill.getAttribute('data-bs-target') || '';
+    const pane = target ? document.querySelector(target) : null;
+    if (!pane) return;
+    const panes = [pane];
+    // The Stream Deck pane has no pill of its own; it is reached through the
+    // combined Start & Stream Deck pill, so index its text under that pill.
+    if (pill.id === 'pill-deckstart') {
+      const deck = document.getElementById('pane-streamdeck');
+      if (deck) panes.push(deck);
+    }
+    const parts = [pill.textContent];
+    panes.forEach(function (p) {
+      p.querySelectorAll('.pane-intro, .section-title, .block-head, label').forEach(function (el) {
+        parts.push(el.textContent);
+      });
+    });
+    _settingsSearchIndex.push({ pill: pill, panes: panes, text: parts.join(' ').toLowerCase() });
+  });
+}
+function _clearSearchHits() {
+  document.querySelectorAll('.section-card.search-hit').forEach(function (el) {
+    el.classList.remove('search-hit');
+  });
+}
+function settingsSearch(q) {
+  q = (q || '').trim().toLowerCase();
+  if (_settingsSearchIndex === null) _buildSettingsSearchIndex();
+  _clearSearchHits();
+  if (!q) {
+    // Back to the normal one-group menu (last-used group).
+    var group;
+    try { group = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { group = 'p'; }
+    showSettingsMenu(group);
+    return;
+  }
+  // While a search is active, both groups are searched and the section
+  // headers are hidden; only matching pills stay visible.
+  document.querySelectorAll('.side-menu .menu-section').forEach(function (el) {
+    el.classList.add('d-none');
+  });
+  var firstHit = null;
+  var activeIsHit = false;
+  _settingsSearchIndex.forEach(function (entry) {
+    var hit = entry.text.indexOf(q) !== -1;
+    entry.pill.classList.toggle('d-none', !hit);
+    if (!hit) return;
+    if (!firstHit) firstHit = entry;
+    if (entry.pill.classList.contains('active')) activeIsHit = true;
+    entry.panes.forEach(function (p) {
+      p.querySelectorAll('.section-card').forEach(function (card) {
+        if (card.textContent.toLowerCase().indexOf(q) !== -1) card.classList.add('search-hit');
+      });
+    });
+  });
+  // Show a matching pane so its outlined cards are visible; keep the current
+  // pane when it already matches, to avoid jumping around mid-typing.
+  if (firstHit && !activeIsHit) {
+    try { bootstrap.Tab.getOrCreateInstance(firstHit.pill).show(); }
+    catch (e) { firstHit.pill.click(); }
+  }
+}
+
 // Top toggle: show one side-menu group ('p' Personalization or 's' Settings),
 // hide the other, and activate a pill in the shown group so a pane is visible.
 // Pass an explicit pill to activate (e.g. from a #pane- hash); otherwise the
 // first visible pill of the group is shown.
 function showSettingsMenu(group, activate) {
   group = (group === 'p') ? 'p' : 's';
+  // A group toggle exits any active search.
+  var searchBox = document.getElementById('settings-search');
+  if (searchBox && searchBox.value) { searchBox.value = ''; _clearSearchHits(); }
   try { localStorage.setItem('settingsMenu', group); } catch (e) { }
   var ts = document.getElementById('menu-toggle-s');
   var tp = document.getElementById('menu-toggle-p');
@@ -6078,7 +6176,7 @@ setTimeout(_revealMenu, 1500);
   // group. A #pane-* hash wins (and selects its group); else the last-used
   // choice; else default to Personalization (the everyday screen).
   try {
-    var hash0 = window.location.hash;
+    var hash0 = _resolvePaneHash(window.location.hash);
     var hashBtn0 = (hash0 && hash0.startsWith('#pane-'))
       ? document.querySelector('[data-bs-target="' + hash0 + '"]') : null;
     var startGroup0;
@@ -6131,7 +6229,7 @@ setTimeout(_revealMenu, 1500);
 
   // A bookmark to the (now pill-less) Stream Deck pane still works: open the
   // combined pill and toggle to the deck view.
-  if (window.location.hash === '#pane-streamdeck') {
+  if (_resolvePaneHash(window.location.hash) === '#pane-streamdeck') {
     var dsPill = document.getElementById('pill-deckstart');
     if (dsPill) {
       try { bootstrap.Tab.getOrCreateInstance(dsPill).show(); } catch (e) { dsPill.click(); }
@@ -6140,7 +6238,7 @@ setTimeout(_revealMenu, 1500);
   }
   // If we arrived via a #pane-* hash, scroll it into view (the group was
   // already selected at the top of init()).
-  var hash = window.location.hash;
+  var hash = _resolvePaneHash(window.location.hash);
   if (hash && hash.startsWith('#pane-')) {
     setTimeout(function() {
       var el = document.getElementById(hash.slice(1));
