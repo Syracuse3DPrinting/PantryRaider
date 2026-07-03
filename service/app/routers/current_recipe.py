@@ -50,6 +50,11 @@ class TimerIn(BaseModel):
     seconds: float
 
 
+class ExtendIn(BaseModel):
+    """Add time to a running timer; 60 seconds is the on-screen "+1 min"."""
+    seconds: float = 60
+
+
 class StartSuggestionIn(BaseModel):
     """Start a real timer from a suggestion. Identify the suggestion by
     step_index OR label; seconds is optional and, when omitted, is filled from
@@ -338,6 +343,19 @@ def show_timer(timer_id: int):
     timer = timers.get_timer(timer_id)
     if timer is None:
         return JSONResponse({"detail": "Timer not found"}, status_code=404)
+    return {"timer": timer}
+
+
+@timers_router.post("/{timer_id}/extend")
+def extend_timer(timer_id: int, payload: ExtendIn = Body(...)):
+    """Add seconds to a running timer. An expired timer cannot be extended
+    (dismiss it and start a new one), so it 404s like a missing id."""
+    try:
+        timer = timers.extend_timer(timer_id, payload.seconds)
+    except ValueError as exc:
+        return JSONResponse({"detail": str(exc)}, status_code=400)
+    if timer is None:
+        return JSONResponse({"detail": "Timer not found or already done"}, status_code=404)
     return {"timer": timer}
 
 

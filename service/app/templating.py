@@ -89,6 +89,9 @@ def theme_context(request: Request) -> dict:
         "screensaver_minutes": settings.screensaver_minutes,
         "screensaver_speed": settings.screensaver_speed,
         "screensaver_mode": settings.screensaver_mode,
+        # When on, the saver's idle behaviour runs in every browser viewing
+        # this install, not just kiosk-mode ones (FoodAssistant-xlb3).
+        "screensaver_all_clients": settings.screensaver_all_clients,
         # Where the Stream Deck sits next to the panel, plus its key-grid
         # aspect, so the bouncing logo can glide across both surfaces as one
         # canvas (FoodAssistant-3fdq). "off" (or no deck) keeps the walls at

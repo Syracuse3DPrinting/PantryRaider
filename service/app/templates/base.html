@@ -127,9 +127,10 @@
   <div id="ha-events-config" data-default="{{ '1' if ha_events_enabled else '0' }}" data-popup-seconds="{{ ha_camera_popup_seconds }}" hidden></div>
   <script src="static/js/ha-events.js?v={{ app_version }}"></script>
   {# Kiosk screensaver: after the configured idle minutes the page dims to a
-     floating clock; any touch dismisses it. Runs only in kiosk mode and only
-     when a timeout is set (FoodAssistant-y65x). #}
-  <div id="screensaver-config" data-minutes="{{ screensaver_minutes }}" data-speed="{{ screensaver_speed }}" data-mode="{{ screensaver_mode }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
+     floating clock; any touch dismisses it. Runs in kiosk mode (or in every
+     browser when data-all-clients is on) and only when a timeout is set
+     (FoodAssistant-y65x). #}
+  <div id="screensaver-config" data-minutes="{{ screensaver_minutes }}" data-speed="{{ screensaver_speed }}" data-mode="{{ screensaver_mode }}" data-all-clients="{{ 'true' if screensaver_all_clients else 'false' }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
   <script src="static/js/screensaver.js?v={{ app_version }}"></script>
   <style>
     body { padding-top: 60px; }

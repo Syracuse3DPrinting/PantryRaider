@@ -103,3 +103,46 @@ def test_deadline_epoch_is_satellite_shareable():
     remaining, expired = timers.remaining_from_deadline(t["deadline_epoch"], fake_now)
     assert remaining == 250.0
     assert expired is False
+
+
+# --- extend (FoodAssistant-xlb3) ------------------------------------------
+
+
+def test_extend_timer_moves_both_deadlines_and_total():
+    t = timers.create_timer("Pasta", 60)
+    out = timers.extend_timer(t["id"], 60)
+    assert out is not None
+    # The shared epoch deadline moved by the extension...
+    assert out["deadline_epoch"] == pytest.approx(t["deadline_epoch"] + 60, abs=0.5)
+    # ...and so did our own monotonic countdown (remaining grew past the
+    # original 60s budget), so both clocks agree.
+    assert out["remaining_seconds"] > 60
+    assert out["total_seconds"] == 120
+    assert out["running"] is True and out["expired"] is False
+    # The registry itself was updated, not just the returned snapshot.
+    assert timers.get_timer(t["id"])["deadline_epoch"] == out["deadline_epoch"]
+
+
+def test_extend_timer_missing_returns_none():
+    assert timers.extend_timer(999, 60) is None
+
+
+def test_extend_timer_expired_returns_none():
+    import time as _time
+    t = timers.create_timer("Eggs", 5)
+    # Force expiry without sleeping: move the monotonic deadline into the past.
+    with timers._lock:
+        timers._timers[t["id"]].deadline_monotonic = _time.monotonic() - 1
+    assert timers.extend_timer(t["id"], 60) is None
+    # An expired timer stays listed (it is an alert), it just cannot grow.
+    assert timers.get_timer(t["id"])["expired"] is True
+
+
+def test_extend_timer_rejects_non_positive_and_garbage():
+    t = timers.create_timer("Rice", 60)
+    with pytest.raises(ValueError):
+        timers.extend_timer(t["id"], 0)
+    with pytest.raises(ValueError):
+        timers.extend_timer(t["id"], -30)
+    with pytest.raises(ValueError):
+        timers.extend_timer(t["id"], "soon")

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.106"
+APP_VERSION = "0.7.107"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -367,6 +367,7 @@ _SAVEABLE = [
     "has_streamdeck", "streamdeck_key_count", "display_touch",
     "start_page_enabled", "start_page_keys", "start_page_layout",
     "display_idle_timeout", "streamdeck_idle_timeout", "screensaver_minutes", "screensaver_speed", "screensaver_mode",
+    "screensaver_all_clients",
     "streamdeck_screensaver_layout",
     "wake_on_motion",
     "streamdeck_key_overrides",
@@ -1014,6 +1015,11 @@ class Settings(BaseSettings):
     # "photos" (a slideshow from the attached USB drive's photos folder,
     # falling back to the logo when no drive or no photos are present).
     screensaver_mode: str = "bounce"
+    # Where the screensaver runs: off (the default) keeps the idle behaviour on
+    # kiosk browsers only; on, ANY browser viewing this install (a desktop or a
+    # phone included) dims to the screensaver after the same idle minutes. The
+    # test button and dismissal work the same everywhere either way.
+    screensaver_all_clients: bool = False
     # Where the Stream Deck sits relative to the kiosk panel, so the bouncing
     # screensaver logo can glide off the screen and across the deck keys as one
     # canvas (FoodAssistant-3fdq). One of STREAMDECK_SCREENSAVER_LAYOUTS; "off"

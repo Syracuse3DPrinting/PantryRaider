@@ -54,6 +54,18 @@ a.btn {
   min-height: 48px;
 }
 
+/* ── Timers page ────────────────────────────────────────────────────────────── */
+/* The preset row and the per-timer +1 min / Cancel buttons are the page's main
+ * controls, often pressed mid-cook with messy hands: give them a bigger hit
+ * area than the generic .btn minimum. */
+.timer-preset,
+.timer-card .btn {
+  min-height: 56px;
+  min-width: 88px;
+  padding: 12px 20px;
+  font-size: 1.1rem;
+}
+
 /* ── List groups ────────────────────────────────────────────────────────────── */
 .list-group-item {
   padding: 14px 16px;

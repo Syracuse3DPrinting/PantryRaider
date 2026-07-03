@@ -376,3 +376,65 @@ def test_saved_nav_order_overrides_start_first(monkeypatch):
     monkeypatch.setattr(settings, "custom_nav_tabs", [], raising=False)
     monkeypatch.setattr(settings, "start_page_enabled", True, raising=False)
     assert navigation.visible_tabs()[0]["key"] == "inventory"
+
+
+# -- Timers tab (FoodAssistant-xlb3) -----------------------------------------
+
+def test_timers_tab_registered_with_no_requirement():
+    tab = next(t for t in navigation.NAV_TABS if t["key"] == "timers")
+    assert tab["href"] == "ui/timers"
+    assert tab["icon"] == "bi-stopwatch"
+    assert tab["label"] == "Timers"
+    # No backing service: the tab shows on every install shape.
+    assert "requires" not in tab
+
+
+def test_timers_tab_visible_by_default():
+    keys = [t["key"] for t in navigation.visible_tabs()]
+    assert "timers" in keys
+
+
+def test_timers_tab_appended_to_saved_nav_order(monkeypatch):
+    # A nav_order saved before the Timers tab existed must still show it:
+    # unknown keys are appended after the saved order in registration order.
+    monkeypatch.setattr(settings, "nav_order",
+                        "inventory,shopping,weather,about", raising=False)
+    keys = [t["key"] for t in navigation.visible_tabs()]
+    assert keys[:4] == ["inventory", "shopping", "weather", "about"]
+    assert "timers" in keys
+    assert keys.index("timers") > keys.index("about")
+
+
+def test_timers_tab_survives_saved_nesting_and_hidden(monkeypatch):
+    # Saved customizations from an older install (nesting map without the new
+    # key, some tabs hidden) never swallow the tab.
+    monkeypatch.setattr(settings, "nav_order", "inventory,expiring", raising=False)
+    monkeypatch.setattr(settings, "nav_hidden", "convert,about", raising=False)
+    monkeypatch.setattr(settings, "nav_parents", {"expiring": "inventory"}, raising=False)
+    tree = navigation.build_nav_tree()
+    top_keys = {n["key"] for n in tree}
+    assert "timers" in top_keys  # no saved parent, so it lands top-level
+
+
+@pytest.mark.parametrize("mode", ["", "server", "pi_hosted", "pi_remote"])
+def test_timers_page_renders_active_nav_tab(monkeypatch, mode, tmp_path):
+    # The nav shows the Timers tab and highlights it on its own page, on every
+    # deployment shape (the tab has no requirement to gate it).
+    import os
+    from unittest.mock import patch
+    cwd = os.getcwd()
+    os.chdir(SERVICE)
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "deployment_mode", mode, raising=False)
+    from fastapi.testclient import TestClient
+    from app.main import app
+    try:
+        with patch.object(type(settings), "is_configured", lambda self: True):
+            with TestClient(app) as client:
+                r = client.get("/ui/timers")
+                assert r.status_code == 200
+                # The tab renders and carries the active highlight here.
+                assert '<a class="nav-link active" href="ui/timers">' in r.text
+    finally:
+        os.chdir(cwd)

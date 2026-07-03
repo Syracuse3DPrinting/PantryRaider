@@ -1,6 +1,8 @@
 // Kiosk screensaver (FoodAssistant-y65x, photos FoodAssistant-5w4m).
 //
-// Runs only in kiosk mode. After the configured idle minutes the page fades to
+// Runs in kiosk mode, or in ANY browser viewing the install when the
+// "screensaver on every browser" setting is on (data-all-clients,
+// FoodAssistant-xlb3). After the configured idle minutes the page fades to
 // a near-black overlay, and any touch or key press dismisses it instantly.
 // This is the SOFT layer for panels where full display blanking is unwanted:
 // the separate "Display sleep" setting powers the panel itself off via the
@@ -56,6 +58,8 @@
   var cfg = document.getElementById('screensaver-config');
   if (!cfg) return;
   var minutes = parseInt(cfg.getAttribute('data-minutes') || '0', 10);
+  // "Screensaver on every browser": idle activation stops being kiosk-only.
+  var ALL_CLIENTS = cfg.getAttribute('data-all-clients') === 'true';
 
   var IDLE_MS = (minutes > 0 ? minutes : 0) * 60 * 1000;
   // Glide speed in pixels per second, from the per-device setting.
@@ -759,9 +763,10 @@
     return false;
   }
 
-  // Idle activation only runs on a kiosk with a timeout configured; the test
-  // hook below works everywhere the script loads.
-  if (kiosk && IDLE_MS > 0) {
+  // Idle activation runs on a kiosk with a timeout configured, or in every
+  // browser when the all-clients setting is on; the test hook below works
+  // everywhere the script loads either way.
+  if ((kiosk || ALL_CLIENTS) && IDLE_MS > 0) {
     setInterval(function () {
       if (overlay) return;
       if (cameraOnScreen()) { lastActivity = Date.now(); return; }

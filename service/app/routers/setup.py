@@ -261,6 +261,7 @@ class SetupPayload(BaseModel):
     screensaver_minutes: int = 0
     screensaver_speed: str | None = None
     screensaver_mode: str | None = None
+    screensaver_all_clients: bool = False
     streamdeck_screensaver_layout: str | None = None
     wake_on_motion: str = "auto"
     streamdeck_key_overrides: list = []

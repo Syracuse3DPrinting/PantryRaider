@@ -116,6 +116,11 @@
         : '<span class="badge bg-success fs-5">Running</span>';
       var cancel = '<button type="button" class="btn btn-outline-danger timer-cancel" data-id="' +
         t.id + '">' + (expired ? "Dismiss" : "Cancel") + '</button>';
+      // A running timer offers a one-tap nudge; a finished one has nothing to
+      // extend (the server refuses too), so the button disappears with it.
+      var extend = expired ? '' :
+        '<button type="button" class="btn btn-outline-light timer-extend me-2" data-id="' +
+        t.id + '"><i class="bi bi-plus-lg me-1"></i>1 min</button>';
       html += '<div class="col-12 col-md-6 col-xl-4">' +
         '<div class="card h-100 ' + cls + '">' +
         '<div class="card-body text-center">' +
@@ -123,7 +128,7 @@
         '<span class="timer-label">' + safe + '</span>' + badge +
         '</div>' +
         '<div class="timer-count">' + fmt(remaining) + '</div>' +
-        '<div class="mt-2">' + cancel + '</div>' +
+        '<div class="mt-2">' + extend + cancel + '</div>' +
         '</div></div></div>';
     }
     grid.innerHTML = html;
@@ -165,6 +170,17 @@
     await poll();
   }
 
+  async function extendTimer(id, seconds) {
+    try {
+      await fetch("timers/" + encodeURIComponent(id) + "/extend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ seconds: seconds })
+      });
+    } catch (e) { }
+    await poll();
+  }
+
   // Preset buttons start unnamed timers (the server numbers them). The custom
   // form takes an optional name and a minute count.
   document.querySelectorAll(".timer-preset").forEach(function (btn) {
@@ -180,10 +196,15 @@
     customMinutes.value = "";
   });
 
-  // Cancel/Dismiss buttons are re-rendered every tick, so delegate the click.
+  // The per-timer buttons are re-rendered every tick, so delegate the clicks.
   grid.addEventListener("click", function (ev) {
     var btn = ev.target.closest ? ev.target.closest(".timer-cancel") : null;
-    if (btn && btn.getAttribute("data-id")) cancelTimer(btn.getAttribute("data-id"));
+    if (btn && btn.getAttribute("data-id")) {
+      cancelTimer(btn.getAttribute("data-id"));
+      return;
+    }
+    var ext = ev.target.closest ? ev.target.closest(".timer-extend") : null;
+    if (ext && ext.getAttribute("data-id")) extendTimer(ext.getAttribute("data-id"), 60);
   });
 
   // Tick locally every second for a smooth countdown, and refresh the snapshot

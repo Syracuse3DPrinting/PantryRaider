@@ -2880,6 +2880,11 @@ docker compose up -d</code></pre>
               </select>
               <div class="form-text">Photos plays images from a USB drive's photos folder and falls back to the logo when no drive is present. Put your pictures in a folder named photos or pictures at the top of the drive. This is a per-device choice.</div>
             </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="screensaver_all_clients"
+                     {{ 'checked' if s.screensaver_all_clients else '' }}>
+              <label class="form-check-label" for="screensaver_all_clients">Screensaver on every browser{{ info('Normally the screensaver only runs on the kiosk display. Turn this on to have every browser viewing this install, a desktop or a phone included, dim to the screensaver after the same idle minutes. Any touch, click, or key press brings the page right back.') }}</label>
+            </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
@@ -2922,6 +2927,52 @@ docker compose up -d</code></pre>
             <div class="alert alert-secondary py-2 small mt-3 mb-0">
               <i class="bi bi-info-circle me-1"></i>Run <code>sudo foodassistant-set-rotation 90</code> via SSH for the same effect.
             </div>
+          </div>
+          {% endif %}
+
+          {% if not is_pi %}
+          <div class="section-card mb-3">
+            <div class="section-title"><i class="bi bi-moon-stars text-info"></i> Screensaver</div>
+            <p class="text-secondary small">Dims the page to a floating clock after inactivity. It normally runs only on a kiosk display; the switch below extends it to every browser viewing this install.</p>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_minutes">Screensaver after N minutes idle (0 = off)</label>
+              <input class="form-control form-control-sm" style="max-width:120px" type="number"
+                     id="screensaver_minutes" min="0" max="120" step="1"
+                     value="{{ s.screensaver_minutes }}">
+              <div class="form-text">Any touch, click, or key press brings the page right back.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_speed">Screensaver speed</label>
+              <select class="form-select form-select-sm" style="max-width:280px" id="screensaver_speed">
+                <option value="slow" {{ 'selected' if s.screensaver_speed == 'slow' else '' }}>Slow</option>
+                <option value="normal" {{ 'selected' if s.screensaver_speed == 'normal' or not s.screensaver_speed else '' }}>Normal</option>
+                <option value="fast" {{ 'selected' if s.screensaver_speed == 'fast' else '' }}>Fast</option>
+              </select>
+              <div class="form-text">How quickly the logo glides across the screen.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_mode">Screensaver style</label>
+              <select class="form-select form-select-sm" style="max-width:280px" id="screensaver_mode">
+                <option value="bounce" {{ 'selected' if s.screensaver_mode == 'bounce' or not s.screensaver_mode else '' }}>Bouncing logo</option>
+                <option value="photos" {{ 'selected' if s.screensaver_mode == 'photos' else '' }}>Photo slideshow</option>
+              </select>
+              <div class="form-text">Photos plays images from a USB drive's photos folder on the host and falls back to the logo when none are present.</div>
+            </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="screensaver_all_clients"
+                     {{ 'checked' if s.screensaver_all_clients else '' }}>
+              <label class="form-check-label" for="screensaver_all_clients">Screensaver on every browser{{ info('Normally the screensaver only runs on a kiosk display. Turn this on to have every browser viewing this install, a desktop or a phone included, dim to the screensaver after the same idle minutes.') }}</label>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+              <button class="btn btn-outline-info btn-sm" onclick="saveScreensaverSettings()">
+                <i class="bi bi-check-lg me-1"></i>Save screensaver settings
+              </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="testScreensaver()">
+                <i class="bi bi-moon-stars me-1"></i>Test screensaver
+              </button>
+            </div>
+            <div class="form-text mt-1">Test starts the screensaver on this screen right away with the style and speed picked above; any touch or key press dismisses it.</div>
+            <div class="test-result mt-2" id="screensaver-save-result"></div>
           </div>
           {% endif %}
 
@@ -4842,6 +4893,7 @@ function buildPayload() {
     screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
     screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
     screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
+    screensaver_all_clients: document.getElementById('screensaver_all_clients')?.checked || false,
     wake_on_motion:  document.getElementById('wake_on_motion')?.value || 'auto',
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
@@ -6303,6 +6355,7 @@ async function saveDisplaySettings() {
   const screensaver_minutes = parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10);
   const screensaver_speed = document.getElementById('screensaver_speed')?.value || 'normal';
   const screensaver_mode = document.getElementById('screensaver_mode')?.value || 'bounce';
+  const screensaver_all_clients = document.getElementById('screensaver_all_clients')?.checked || false;
   const wake_on_motion = document.getElementById('wake_on_motion')?.value || 'auto';
   try {
     await fetch('setup/scale', {
@@ -6311,7 +6364,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, wake_on_motion}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, screensaver_all_clients, wake_on_motion}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {
@@ -6333,6 +6386,28 @@ async function saveDisplaySettings() {
 // Start the screensaver on this screen right now with the style and speed
 // currently picked in the form, so choices can be previewed without waiting
 // for the idle timeout (FoodAssistant-fiwc). Any touch or key dismisses it.
+async function saveScreensaverSettings() {
+  // The off-Pi Screensaver card: persist just its own fields, so this save
+  // can never clobber unrelated display settings.
+  const el = document.getElementById('screensaver-save-result');
+  const body = {
+    screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
+    screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
+    screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
+    screensaver_all_clients: document.getElementById('screensaver_all_clients')?.checked || false,
+  };
+  try {
+    const r = await fetch('setup/save', {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Screensaver settings saved.</span>';
+  } catch (e) {
+    if (el) el.innerHTML = '<span class="text-danger"><i class="bi bi-x-circle me-1"></i>Could not save: ' + e + '</span>';
+  }
+}
+
 function testScreensaver() {
   const el = document.getElementById('display-save-result');
   if (typeof window.__screensaverTest !== 'function') {
@@ -8805,7 +8880,7 @@ async function cancelTouchCalibration() {
 </script>
 {# The screensaver script backs the Display pane's Test button
    (window.__screensaverTest) and, on a kiosk, the normal idle behaviour. #}
-<div id="screensaver-config" data-minutes="{{ s.screensaver_minutes }}" data-speed="{{ s.screensaver_speed }}" data-mode="{{ s.screensaver_mode }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
+<div id="screensaver-config" data-minutes="{{ s.screensaver_minutes }}" data-speed="{{ s.screensaver_speed }}" data-mode="{{ s.screensaver_mode }}" data-all-clients="{{ 'true' if s.screensaver_all_clients else 'false' }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
 <script src="static/js/screensaver.js?v={{ version }}"></script>
 </body>
 </html>

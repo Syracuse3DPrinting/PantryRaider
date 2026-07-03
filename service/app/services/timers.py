@@ -112,6 +112,36 @@ def get_timer(timer_id: int) -> dict | None:
         return _serialize(t)
 
 
+def extend_timer(timer_id: int, seconds: float) -> dict | None:
+    """Add `seconds` to a RUNNING timer and return its fresh state.
+
+    Both deadlines move together (the monotonic one that drives our own
+    countdown and the shared epoch one other surfaces subtract their clock
+    from), and total_seconds grows to match so progress displays stay honest.
+    Returns None for a missing or already-expired timer: a finished countdown
+    is an alert waiting to be dismissed, not something to quietly restart.
+    Raises ValueError on a non-positive or unparseable amount."""
+    try:
+        extra = float(seconds)
+    except (TypeError, ValueError):
+        raise ValueError("seconds must be a number")
+    if extra <= 0:
+        raise ValueError("seconds must be greater than 0")
+
+    now_mono = time.monotonic()
+    with _lock:
+        t = _timers.get(timer_id)
+        if t is None:
+            return None
+        _, expired = remaining_from_deadline(t.deadline_monotonic, now_mono)
+        if expired:
+            return None
+        t.deadline_monotonic += extra
+        t.deadline_epoch += extra
+        t.total_seconds += extra
+        return _serialize(t, now_mono)
+
+
 def cancel_timer(timer_id: int) -> bool:
     """Remove a timer. Returns True if it existed, False otherwise."""
     with _lock:

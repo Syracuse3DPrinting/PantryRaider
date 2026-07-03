@@ -164,9 +164,10 @@ and are device-local. They do not apply to a server install.
 | `display_touch` | | Not applicable | Editable | Device-local |
 | `display_idle_timeout` | | Not applicable | Editable | Device-local |
 | `wake_on_motion` | | Not applicable | Editable | Device-local |
-| `screensaver_minutes` | | Not applicable | Editable | Device-local |
-| `screensaver_speed` | | Not applicable | Editable | Device-local |
-| `screensaver_mode` | | Not applicable | Editable | Device-local |
+| `screensaver_minutes` | | Editable | Editable | Device-local |
+| `screensaver_speed` | | Editable | Editable | Device-local |
+| `screensaver_mode` | | Editable | Editable | Device-local |
+| `screensaver_all_clients` | | Editable | Editable | Device-local |
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 | `streamdeck_screensaver_layout` | | Not applicable | Editable | Device-local |
 
@@ -182,6 +183,11 @@ floating clock, a touch brings it back) for panels that should stay powered.
 `screensaver_mode` picks what that layer shows: the bouncing logo (the
 default) or a photo slideshow from an attached USB drive's photos folder,
 which falls back to the logo when no drive or no photos are present.
+`screensaver_all_clients` widens where the saver runs: off (the default)
+keeps the idle behaviour on kiosk browsers only, on lets every browser
+viewing the install (a desktop or a phone included) dim to the screensaver
+after the same idle minutes. Because of that wider reach, the screensaver
+settings are also offered on a server install, not just the Pi modes.
 `wake_on_motion` wakes a sleeping panel when the device is moved or bumped,
 read from the LSM6DSOX accelerometer on kits that include one; `auto` (the
 default) enables it exactly when the sensor is present. A screen touch or a

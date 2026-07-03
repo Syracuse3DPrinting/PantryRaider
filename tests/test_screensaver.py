@@ -253,3 +253,40 @@ def test_screensaver_config_div_carries_deck_layout(client, monkeypatch):
         monkeypatch.setattr(settings, "has_streamdeck", False, raising=False)
         r = client.get("/ui/timers")
         assert 'data-deck-layout="off"' in r.text
+
+
+# -- screensaver on any instance (FoodAssistant-xlb3) --------------------------
+
+
+def test_screensaver_all_clients_is_device_local_and_off_by_default():
+    assert type(settings)().screensaver_all_clients is False
+    assert "screensaver_all_clients" in _SAVEABLE
+    # Like the rest of the screensaver settings, each install decides for
+    # itself; the value never syncs from the main server.
+    assert "screensaver_all_clients" not in SATELLITE_PULL_FIELDS
+
+
+def test_setup_payload_accepts_screensaver_all_clients():
+    from app.routers.setup import SetupPayload
+
+    p = SetupPayload(screensaver_all_clients=True)
+    assert p.screensaver_all_clients is True
+    assert "screensaver_all_clients" not in SetupPayload().model_dump(exclude_unset=True)
+
+
+def test_screensaver_config_carries_all_clients_flag(client, monkeypatch):
+    with patch.object(type(settings), "is_configured", lambda self: True):
+        monkeypatch.setattr(settings, "screensaver_all_clients", True, raising=False)
+        r = client.get("/ui/timers")
+        assert r.status_code == 200
+        assert 'data-all-clients="true"' in r.text
+        monkeypatch.setattr(settings, "screensaver_all_clients", False, raising=False)
+        r = client.get("/ui/timers")
+        assert 'data-all-clients="false"' in r.text
+
+
+def test_screensaver_js_gates_idle_on_kiosk_or_all_clients():
+    js = (SERVICE / "app" / "static" / "js" / "screensaver.js").read_text()
+    assert "data-all-clients" in js
+    # Idle activation: kiosk OR the all-clients setting, still timeout-gated.
+    assert "(kiosk || ALL_CLIENTS) && IDLE_MS > 0" in js
