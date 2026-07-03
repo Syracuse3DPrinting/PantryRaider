@@ -267,7 +267,26 @@ app.add_middleware(SessionMiddleware, secret_key=settings.secret_key, max_age=60
 
 from pathlib import Path
 from fastapi.staticfiles import StaticFiles
-app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
+
+
+class CachedStaticFiles(StaticFiles):
+    """StaticFiles plus a Cache-Control header on successful responses.
+
+    Starlette sends ETag/Last-Modified but no Cache-Control, so every page
+    load revalidates every asset (a conditional request per file). On a Pi
+    kiosk that is a burst of round trips into a single uvicorn worker on each
+    navigation. Template URLs are version-busted (?v=APP_VERSION), so a day
+    of caching is safe: an update changes the URL and skips the cache anyway.
+    """
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        if response.status_code == 200:
+            response.headers.setdefault("Cache-Control", "public, max-age=86400")
+        return response
+
+
+app.mount("/static", CachedStaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
 app.include_router(setup.router)
 app.include_router(admin.router)

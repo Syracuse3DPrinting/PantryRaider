@@ -188,6 +188,9 @@
       }
       function pollTimers() {
         if (!timerKeys.length) return;
+        // Hidden (background tab): the local render tick keeps the visible
+        // countdown honest from deadline_epoch; resync when shown again.
+        if (document.hidden) return;
         fetch(new URL('timers', document.baseURI))
           .then(r => r.json())
           .then(d => { liveTimers = (d && d.timers) || d || []; renderTimerKeys(); })
@@ -197,6 +200,9 @@
         pollTimers();
         setInterval(pollTimers, 3000);
         setInterval(renderTimerKeys, 1000);
+        document.addEventListener('visibilitychange', () => {
+          if (!document.hidden) pollTimers();
+        });
       }
       function fire(el) {
         if (el.dataset.kind === 'builtin') {

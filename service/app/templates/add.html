@@ -421,7 +421,9 @@ async function refreshMode() {
 }
 
 refreshMode();
-setInterval(refreshMode, 5000);
+// The focus/visibility hooks below already resync a returning tab, so the
+// steady poll can skip hidden tabs entirely.
+setInterval(() => { if (!document.hidden) refreshMode(); }, 5000);
 window.addEventListener('focus', refreshMode);
 document.addEventListener('visibilitychange', () => {
   if (!document.hidden) refreshMode();

@@ -134,6 +134,10 @@
     }
 
     function poll() {
+      // A hidden tab skips the network trip; the local render tick keeps the
+      // visible countdowns correct from deadline_epoch, and the chime still
+      // fires on time because expiry is computed locally too.
+      if (document.hidden) return;
       fetch('timers', { cache: 'no-store', headers: { 'Accept': 'application/json' } })
         .then(function (r) { return r.ok ? r.json() : null; })
         .then(function (data) {
@@ -156,6 +160,10 @@
     poll();
     setInterval(poll, POLL_MS);
     setInterval(render, TICK_MS);  // smooth local countdown between polls
+    // Coming back to the tab resyncs right away instead of waiting a cycle.
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) poll();
+    });
   }
 
   if (document.readyState === 'loading') {

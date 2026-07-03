@@ -120,6 +120,14 @@
 
   // --- poll loop ------------------------------------------------------------
   function poll() {
+    // A hidden tab has no screen to pop toasts or camera views on: skip the
+    // fetch and just reschedule. Events are delivered by id (since=lastId),
+    // so anything that arrives while hidden still shows on the next visible
+    // poll rather than being lost.
+    if (document.hidden) {
+      setTimeout(poll, POLL_MS);
+      return;
+    }
     fetch('events/poll?since=' + lastId, { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : null; })
       .then(function (d) {

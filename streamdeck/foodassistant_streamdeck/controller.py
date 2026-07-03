@@ -212,6 +212,15 @@ class Controller:
         # saver on the panel too.
         self._saver_active: bool = False
         self._saver_task: Optional[asyncio.Task] = None
+        # Last face pushed to each physical key, keyed by physical index. The
+        # value is a tuple of everything that goes into rendering that face
+        # (label, colour, count, alert, icon, style, rotation, ...), so an
+        # unchanged key skips both the PIL render and the USB write. On a Pi 3
+        # this matters: while a timer runs, _draw_page fires once a second, and
+        # without this every key on the page was re-rasterised and re-sent even
+        # though only the countdown face changed. Cleared whenever something
+        # paints the deck outside _draw_page (overlays, splash, re-init).
+        self._face_cache: dict[int, tuple] = {}
 
     # -- lifecycle ---------------------------------------------------------
 
@@ -264,6 +273,9 @@ class Controller:
         self.deck.set_brightness(BRIGHTNESS_STEPS[self._bright_idx])
         self.deck.set_key_callback(self._on_key)
         self._idle_blanked = False
+        # A freshly opened (or reset) deck shows nothing we drew, so the next
+        # _draw_page must push every face regardless of what was sent before.
+        self._face_cache.clear()
 
     def _show_splash(self) -> None:
         """Paint the Pantry Raider brand mark across every key.
@@ -387,7 +399,14 @@ class Controller:
 
         rotation = self.config.rotation
         for index, spec in enumerate(self._current()):
+            # The page slot `index` is a visual position; it maps to the
+            # physical key it occupies after the deck is turned, and the face
+            # cache is keyed by that physical index.
+            phys = layout.rotated_index(index, self.key_count, rotation)
             if spec is None:
+                face_key: tuple = ("blank", rotation)
+                if self._face_cache.get(phys) == face_key:
+                    continue
                 image = render.blank_key(*self._key_size())
             else:
                 # Recolour the key's base to match the active web UI theme; the
@@ -490,6 +509,23 @@ class Controller:
                     label = spec.label
                     color = base_color
                     alert = bool(count)
+                # A camera key's face also changes when a fresh snapshot lands,
+                # so the cached JPEG participates in the face key via its hash.
+                cam_cached: Optional[bytes] = None
+                if spec.kind == "camera":
+                    cam_cached = self._cached_snapshot(
+                        self._camera_url_for(getattr(spec, "camera_name", "") or "")
+                    )
+                # Everything render_key (and the camera overlay below) uses to
+                # produce this face. Unchanged means the physical key already
+                # shows exactly this image, so skip the render and the USB push.
+                face_key = (
+                    spec.name, spec.kind, label, color, count, alert, spec.icon,
+                    self.config.key_style, self.config.icon_color, rotation,
+                    hash(cam_cached) if cam_cached is not None else None,
+                )
+                if self._face_cache.get(phys) == face_key:
+                    continue
                 image = render.render_key(
                     *self._key_size(),
                     label=label,
@@ -508,24 +544,18 @@ class Controller:
                 # A camera key paints the latest snapshot over the fallback face
                 # when a frame is cached for its chosen camera; if decoding fails
                 # it keeps the label.
-                if spec.kind == "camera":
-                    cached = self._cached_snapshot(
-                        self._camera_url_for(getattr(spec, "camera_name", "") or "")
-                    )
-                    if cached:
-                        snap = render.image_from_jpeg(cached, self._key_size())
-                        if snap is not None:
-                            image = snap
+                if spec.kind == "camera" and cam_cached:
+                    snap = render.image_from_jpeg(cam_cached, self._key_size())
+                    if snap is not None:
+                        image = snap
             if rotation:
                 # PIL rotates counter-clockwise, so negate to turn the face
                 # clockwise (matching how a user physically turns the deck).
                 # The HDMI/kiosk display rotation is handled separately at the
                 # OS level (xrandr / KMS) and is out of scope here.
                 image = image.rotate(-rotation, expand=True)
-            # The page slot `index` is a visual position; send it to the
-            # physical key it now occupies after the deck is turned.
-            phys = layout.rotated_index(index, self.key_count, rotation)
             self.deck.set_key_image(phys, PILHelper.to_native_format(self.deck, image))
+            self._face_cache[phys] = face_key
 
     def _keypad_face(self, spec: ActionSpec) -> tuple[str, str]:
         """Label and colour for a keypad key.
@@ -1161,6 +1191,10 @@ class Controller:
         """
         from StreamDeck.ImageHelpers import PILHelper
 
+        # The overlay overwrites whatever faces the page draw left behind, so
+        # the next _draw_page must repaint every key from scratch.
+        self._face_cache.clear()
+
         rotation = self.config.rotation
         for index, tile in enumerate(tiles):
             if index >= self.key_count:
@@ -1512,6 +1546,9 @@ class Controller:
             self._idle_blanked = True
             self.deck.set_brightness(0)
             self.deck.reset()
+            # reset() wiped the key images, so the wake-up _draw_page must
+            # repaint every face, not trust the cache of what was showing.
+            self._face_cache.clear()
 
     async def _report_activity(self) -> None:
         """Tell the host bridge a key was pressed so the kiosk display wakes.

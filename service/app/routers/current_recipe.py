@@ -20,12 +20,23 @@ from sqlalchemy.orm import Session
 from ..config import settings
 from ..database import get_db
 from ..services import action_items, current_recipe, recipe_timers, timers
+from ..services.ttl_cache import TTLCache
 
 recipe_router = APIRouter(prefix="/current-recipe", tags=["current-recipe"])
 timers_router = APIRouter(prefix="/timers", tags=["timers"])
 
 # Forwarding client for the satellite -> main server case (see _upstream).
-_fwd_client = httpx.AsyncClient(timeout=20.0)
+# The tight connect timeout matters on a kiosk LAN: a button press should fail
+# fast and report "could not reach the main server" rather than hang the tap.
+_fwd_client = httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=5.0))
+
+# Satellite-only micro-cache for GET /timers. Several surfaces poll it in the
+# same second (Timers page, Start Page faces, screensaver pills, the deck via
+# the app); holding the last upstream body briefly turns that burst into one
+# round trip to the main server. Any mutation forwarded through this satellite
+# invalidates it so a just-started or just-cancelled timer shows immediately.
+_TIMERS_CACHE_TTL = 2.0
+_timers_cache = TTLCache(_TIMERS_CACHE_TTL)
 
 
 def _upstream() -> str | None:
@@ -56,6 +67,11 @@ async def _forward(request: Request, path: str) -> Response:
     if ct:
         headers["Content-Type"] = ct
     body = await request.body()
+    if request.method != "GET":
+        # A mutation is about to land upstream: the cached timer list is stale
+        # the moment it succeeds, so drop it before AND regardless of outcome
+        # (a failed forward just means the next GET refetches, which is fine).
+        _timers_cache.invalidate()
     try:
         up = await _fwd_client.request(
             request.method,
@@ -79,6 +95,7 @@ async def _create_timer_upstream(label: str, seconds: float) -> Response:
     device), but the timer itself must land in the server registry, so we post
     the resolved values to the shared POST /timers endpoint."""
     base = _upstream()
+    _timers_cache.invalidate()
     try:
         up = await _fwd_client.request(
             "POST",
@@ -401,7 +418,14 @@ async def start_suggested_timer(payload: StartSuggestionIn = Body(...)):
 async def get_timers(request: Request):
     """List every timer with a fresh server-computed remaining/state."""
     if _upstream():
-        return await _forward(request, "/timers")
+        hit = _timers_cache.get()
+        if hit is not None:
+            content, status, media = hit
+            return Response(content=content, status_code=status, media_type=media)
+        resp = await _forward(request, "/timers")
+        if resp.status_code == 200:
+            _timers_cache.set((resp.body, resp.status_code, resp.media_type))
+        return resp
     return {"timers": timers.list_timers()}
 
 

@@ -313,10 +313,14 @@ async function saveLeftover(it) {
 }
 
 loadActionItems();
-setInterval(loadActionItems, 30000);
+setInterval(() => { if (!document.hidden) loadActionItems(); }, 30000);
 
 loadPending();
-// Headless scanners add items while this page is open — keep it fresh
-setInterval(loadPending, 15000);
+// Headless scanners add items while this page is open, so keep it fresh. A
+// hidden tab skips the refresh and catches up as soon as it is shown again.
+setInterval(() => { if (!document.hidden) loadPending(); }, 15000);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden) { loadPending(); loadActionItems(); }
+});
 </script>
 {% endblock %}

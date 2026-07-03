@@ -706,6 +706,9 @@
     (function () {
       if (localStorage.getItem('kioskMode') !== 'true') return;
       function poll() {
+        // The physical kiosk display is never hidden; this only spares a
+        // backgrounded browser tab that happens to have kiosk mode latched.
+        if (document.hidden) return;
         fetch('../setup/calibrate/touch/pending', { cache: 'no-store' })
           .then(r => r.json())
           .then(d => {
@@ -729,6 +732,7 @@
     (function () {
       if (localStorage.getItem('kioskMode') !== 'true') return;
       function poll() {
+        if (document.hidden) return;
         fetch('../setup/kiosk/navigate/pending', { cache: 'no-store' })
           .then(r => r.json())
           .then(d => {

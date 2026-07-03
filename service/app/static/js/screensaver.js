@@ -439,6 +439,10 @@
   }
 
   function pollTimers() {
+    // The saver only shows on a visible page; if the browser window is
+    // hidden anyway (display power-off), skip the fetch and let the pills
+    // keep counting locally from deadline_epoch.
+    if (document.hidden) return;
     fetch('timers', { cache: 'no-store' })
       .then(function (r) { return r.json(); })
       .then(function (data) {

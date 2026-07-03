@@ -10,6 +10,9 @@ All notable changes to Pantry Raider are recorded here. The format is based on
 
 ## [Unreleased]
 
+### Changed
+- **Snappier buttons and timers on small devices.** Kiosk screens and the Stream Deck now do noticeably less busywork per second, which matters most on a Pi 3 satellite where everything shares one small CPU. The deck only redraws keys whose face actually changed (a ticking timer no longer repaints the whole deck every second), a satellite answers a burst of timer lookups from every screen with a single trip to the main server, kiosk pages poll a little less often and skip polling entirely while their tab is hidden (countdowns still tick every second, computed locally), and the browser now caches the app's scripts and styles between page loads instead of re-checking each one. A press that cannot reach the main server also gives up and says so sooner instead of leaving the button hanging.
+
 ### Added
 - **A finished timer crosses onto the Stream Deck.** With the screensaver spanning the Stream Deck, a timer that has gone off no longer stays confined to the screen: its pulsing Done pill drifts off the panel edge and across the deck keys just like the gliding raccoon, flashing red and amber with its food icon so an expired timer catches the eye on both surfaces. Running timers keep to the screen; only a finished one earns the extra territory. Pressing any deck key still wakes both surfaces at once.
 - **Clear all timers in one tap.** The Timers page has a Clear all button next to the presets whenever anything is on the clock: it stops every running and finished timer at once, on the Stream Deck and every other screen too, after a confirmation that names how many timers it is about to clear. Handy when dinner is served and three countdowns no longer matter.

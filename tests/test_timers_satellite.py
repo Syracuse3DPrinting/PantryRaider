@@ -70,6 +70,9 @@ def sat_client(monkeypatch, tmp_path):
     from app.routers import current_recipe as cr_router
     recorder = _FwdRecorder()
     monkeypatch.setattr(cr_router, "_fwd_client", recorder)
+    # The GET /timers micro-cache is module-level state; start each test cold
+    # so one test's cached response never answers another test's GET.
+    cr_router._timers_cache.invalidate()
     from fastapi.testclient import TestClient
     from app.main import app
     try:
@@ -271,7 +274,11 @@ def test_deck_sync_reconciles_against_forwarded_timer_list(sat_client, monkeypat
     assert binding.deadline_epoch == pytest.approx(now + 500)
 
     # And when the server (reached through the same forwarding) no longer
-    # lists it, the key clears back to idle.
+    # lists it, the key clears back to idle. The deck's next poll lands after
+    # the satellite's short GET micro-cache has expired; model that here by
+    # dropping the cached entry instead of sleeping out the TTL.
+    from app.routers import current_recipe as cr_router
+    cr_router._timers_cache.invalidate()
     recorder.response = httpx.Response(200, json={"timers": []})
     server_timers = client.get("/timers").json()["timers"]
     changed = actions.sync_timer_bindings(
@@ -279,3 +286,80 @@ def test_deck_sync_reconciles_against_forwarded_timer_list(sat_client, monkeypat
     assert changed is True
     assert binding.timer_id is None
     assert binding.deadline_epoch == 0.0
+
+
+# GET /timers micro-cache (FoodAssistant-3mq) ----------------------------------
+#
+# On a Pi Remote several surfaces poll GET /timers within the same second (the
+# Timers page, Start Page faces, screensaver pills, the deck). A short TTL
+# cache turns that burst into ONE upstream round trip; any timer mutation
+# forwarded through this satellite drops it so changes show immediately.
+
+
+def test_burst_of_timer_gets_forwards_upstream_once(sat_client):
+    client, recorder = sat_client
+    recorder.response = httpx.Response(200, json={"timers": [], "from": "main-server"})
+    first = client.get("/timers")
+    second = client.get("/timers")
+    third = client.get("/timers")
+    # One round trip served all three pollers, each with the identical body.
+    assert len(recorder.calls) == 1
+    assert first.content == second.content == third.content
+    assert second.status_code == 200
+
+
+def test_timer_mutation_invalidates_the_get_cache(sat_client):
+    client, recorder = sat_client
+    recorder.response = httpx.Response(200, json={"timers": []})
+    client.get("/timers")
+    client.post("/timers", json={"label": "Pasta", "seconds": 600})
+    recorder.response = httpx.Response(
+        200, json={"timers": [{"id": 1, "label": "Pasta"}]})
+    listed = client.get("/timers").json()["timers"]
+    # GET, POST, GET: the mutation dropped the cached empty list, so the new
+    # timer is visible on the very next poll, not after the TTL.
+    assert [c["method"] for c in recorder.calls] == ["GET", "POST", "GET"]
+    assert listed == [{"id": 1, "label": "Pasta"}]
+
+
+def test_suggestion_start_also_invalidates_the_get_cache(sat_client):
+    client, recorder = sat_client
+    recorder.response = httpx.Response(200, json={"timers": []})
+    client.get("/timers")
+    current_recipe.set_active({"title": "x", "steps": ["Simmer 20 minutes"]})
+    client.post("/current-recipe/timers/start", json={"step_index": 0})
+    recorder.response = httpx.Response(
+        200, json={"timers": [{"id": 2, "label": "Simmer"}]})
+    listed = client.get("/timers").json()["timers"]
+    assert listed == [{"id": 2, "label": "Simmer"}]
+
+
+def test_unreachable_server_response_is_never_cached(sat_client):
+    client, recorder = sat_client
+    recorder.raise_exc = httpx.ConnectError("boom")
+    assert client.get("/timers").status_code == 502
+    # The server comes back: the next poll must reach it, not replay the 502.
+    recorder.raise_exc = None
+    recorder.response = httpx.Response(200, json={"timers": []})
+    assert client.get("/timers").status_code == 200
+    assert len(recorder.calls) == 2
+
+
+def test_upstream_error_status_is_never_cached(sat_client):
+    client, recorder = sat_client
+    recorder.response = httpx.Response(503, json={"detail": "busy"})
+    assert client.get("/timers").status_code == 503
+    recorder.response = httpx.Response(200, json={"timers": []})
+    assert client.get("/timers").status_code == 200
+    assert len(recorder.calls) == 2
+
+
+def test_server_mode_never_uses_the_forward_cache(server_client, monkeypatch):
+    # On the main server GET /timers reads the local registry directly; the
+    # micro-cache is satellite plumbing and must not delay local reads.
+    from app.routers import current_recipe as cr_router
+    cr_router._timers_cache.invalidate()
+    server_client.post("/timers", json={"label": "Pasta", "seconds": 600})
+    assert len(server_client.get("/timers").json()["timers"]) == 1
+    server_client.delete("/timers")
+    assert server_client.get("/timers").json()["timers"] == []

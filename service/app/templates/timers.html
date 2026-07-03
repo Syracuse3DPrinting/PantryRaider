@@ -150,6 +150,10 @@
   }
 
   async function poll() {
+    // A hidden tab (or a browser window behind others) skips the network
+    // trip; the local render tick keeps the countdown correct from
+    // deadline_epoch, and the next visible poll resyncs the list.
+    if (document.hidden) return;
     try {
       var resp = await fetch("timers", { headers: { "Accept": "application/json" } });
       if (resp.ok) {
@@ -246,11 +250,19 @@
     if (ext && ext.getAttribute("data-id")) extendTimer(ext.getAttribute("data-id"), 60);
   });
 
-  // Tick locally every second for a smooth countdown, and refresh the snapshot
-  // from the server every second so newly created or cancelled timers appear.
+  // Tick locally every second for a smooth countdown (each timer carries
+  // deadline_epoch, so no network is needed between polls). The server
+  // snapshot refreshes every few seconds to pick up timers started or
+  // cancelled elsewhere; local button presses call poll() directly, so their
+  // feedback is immediate either way. On a satellite each poll is a round
+  // trip to the main server, which is why this is not once a second.
   poll();
-  setInterval(poll, 1000);
+  setInterval(poll, 3000);
   setInterval(render, 1000);
+  // Coming back to the tab resyncs right away instead of waiting a cycle.
+  document.addEventListener("visibilitychange", function () {
+    if (!document.hidden) poll();
+  });
 })();
 </script>
 {% endblock %}
