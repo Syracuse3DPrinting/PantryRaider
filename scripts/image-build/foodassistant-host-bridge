@@ -157,6 +157,64 @@ _FIRSTBOOT_CANDIDATES = [
     "/home/foodassistant/FoodAssistant/scripts/image-build/firstboot.sh",
     "/opt/foodassistant-src/scripts/image-build/firstboot.sh",
 ]
+# Helper scripts the bridge shells out to live in /usr/local/bin, installed by
+# firstboot and refreshed by foodassistant-update. A device imaged before a
+# helper existed (and not yet updated) is missing it, so before reporting a
+# failure the bridge self-heals: the git checkout that feeds updates carries
+# every helper under scripts/image-build, and the bridge runs as root, so it
+# can install the missing script on the fly and proceed
+# (FoodAssistant-jppi/9la0).
+_HELPER_BIN_DIR = "/usr/local/bin"
+
+
+def _helper_source_dirs():
+    """Candidate directories holding the checkout copies of the helper
+    scripts, best first. Mirrors the update helper's REPO_CANDIDATES."""
+    dirs = []
+    repo = os.environ.get("REPO_DIR", "").strip()
+    if repo:
+        dirs.append(os.path.join(repo, "scripts", "image-build"))
+    dirs.append("/opt/foodassistant-src/scripts/image-build")
+    dirs.append("/home/foodassistant/FoodAssistant/scripts/image-build")
+    return dirs
+
+
+def _find_helper_source(name, src_dirs=None):
+    """Path to the checkout copy of helper `name`, or None. Pure lookup (the
+    candidate dirs are injectable) so it is unit-testable."""
+    for d in (src_dirs if src_dirs is not None else _helper_source_dirs()):
+        path = os.path.join(d, name)
+        if os.path.isfile(path):
+            return path
+    return None
+
+
+def _ensure_helper(name, bin_dir=_HELPER_BIN_DIR):
+    """Return the installed path of helper `name`, installing it from the git
+    checkout when it is missing under bin_dir. Returns None when the helper is
+    nowhere to be found (no checkout copy either)."""
+    dst = os.path.join(bin_dir, name)
+    if os.path.exists(dst):
+        return dst
+    src = _find_helper_source(name)
+    if not src:
+        return None
+    try:
+        shutil.copyfile(src, dst)
+        os.chmod(dst, 0o755)
+    except OSError:
+        return None
+    return dst
+
+
+# Shown when every display power method failed (helper missing and not
+# recoverable, no vcgencmd/xset). Update refreshes the device helpers.
+_DISPLAY_POWER_ERROR = (
+    "Could not switch the display power: no working method was found on "
+    "this device. Press Update under Backup & Updates to refresh the "
+    "device helpers, then try again."
+)
+
 # Background long-running processes, keyed by step name
 # ("kiosk"/"streamdeck" installs, "mealie" start). Each value is a Popen whose
 # poll() tells us whether the work is still in flight.
@@ -215,22 +273,27 @@ def _write_persisted_idle_minutes(minutes, path=_DISPLAY_IDLE_FILE):
         return False
 
 
-def _display_power_commands(on, which=shutil.which):
+def _display_power_commands(on, which=shutil.which, helper_path=""):
     """Ordered candidate command vectors to switch the display on/off.
 
-    The caller tries each until one succeeds. Kept pure (the tool probe is
-    injected) so the selection is unit-testable.
+    The caller tries each until one succeeds. Kept pure (the tool probe and
+    the self-healed helper path are injected) so the selection is
+    unit-testable.
 
     The compositor-aware helper is preferred (FoodAssistant-8khi): on a cage
     kiosk, vcgencmd cuts the panel below the compositor, dropping it to the
     console with no clean recovery until reboot. foodassistant-display-power
     toggles the output through wlr-randr so cage stays in control. vcgencmd and
     xset remain as fallbacks for setups without the compositor helper (e.g. a
-    bare X11 display or when the kiosk is not running).
+    bare X11 display or when the kiosk is not running). `helper_path` is the
+    freshly self-healed install of the helper, used when PATH does not see it
+    yet (FoodAssistant-9la0).
     """
     cmds = []
     if which("foodassistant-display-power"):
         cmds.append(["foodassistant-display-power", "on" if on else "off"])
+    elif helper_path:
+        cmds.append([helper_path, "on" if on else "off"])
     if which("vcgencmd"):
         cmds.append(["vcgencmd", "display_power", "1" if on else "0"])
     if which("xset"):
@@ -262,8 +325,13 @@ def _should_blank(now, last_activity, idle_minutes, already_blanked):
 
 def _set_display_power(on):
     """Try each candidate command to power the display on/off. Returns True on
-    the first success, False if none worked (or none are available)."""
-    for cmd in _display_power_commands(on):
+    the first success, False if none worked (or none are available). A missing
+    foodassistant-display-power is reinstalled from the source checkout first
+    (devices imaged before the helper existed, FoodAssistant-9la0)."""
+    helper = ""
+    if not shutil.which("foodassistant-display-power"):
+        helper = _ensure_helper("foodassistant-display-power") or ""
+    for cmd in _display_power_commands(on, helper_path=helper):
         try:
             subprocess.run(cmd, check=True, capture_output=True, timeout=10)
             return True
@@ -1068,14 +1136,23 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         ok = _set_display_power(False)
         with _activity_lock:
             _activity_state["display_blanked"] = ok
-        self._send(200, {"ok": ok})
+        # A 500 on failure matters: the Stream Deck's screen-off key reads the
+        # status code, so a 200 with ok=false made it show success while the
+        # display stayed on (FoodAssistant-9la0).
+        if ok:
+            self._send(200, {"ok": True})
+        else:
+            self._send(500, {"ok": False, "error": _DISPLAY_POWER_ERROR})
 
     def _display_wake(self):
         ok = _set_display_power(True)
         with _activity_lock:
             _activity_state["display_blanked"] = False
             _activity_state["last_activity"] = time.time()
-        self._send(200, {"ok": ok})
+        if ok:
+            self._send(200, {"ok": True})
+        else:
+            self._send(500, {"ok": False, "error": _DISPLAY_POWER_ERROR})
 
     def _display_idle_set(self):
         """Set (and persist) the display idle timeout in minutes."""
@@ -1320,7 +1397,18 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(400, {"ok": False, "error": "degrees must be 0, 90, 180, or 270"})
             return
         reboot = bool(body.get("reboot", False))
-        cmd = ["/usr/local/bin/foodassistant-set-rotation", str(degrees)]
+        # Self-heal a device imaged before the rotation helpers existed: they
+        # are reinstalled from the source checkout when missing. apply-rotation
+        # is best effort (set-rotation falls back to a kiosk restart without
+        # it), but set-rotation itself is required.
+        _ensure_helper("foodassistant-apply-rotation")
+        helper = _ensure_helper("foodassistant-set-rotation")
+        if not helper:
+            self._send(500, {"ok": False, "error":
+                "The rotation helper is missing on this device. Press Update "
+                "under Backup & Updates to install it, then try again."})
+            return
+        cmd = [helper, str(degrees)]
         if reboot:
             cmd.append("--reboot")
         try:
@@ -1841,9 +1929,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         # the full text back as "log" so the setup UI can show it. A pull that
         # fails to fast-forward leaves the checkout untouched (the helper still
         # redeploys the current HEAD); we never restart from here directly.
-        helper = "/usr/local/bin/foodassistant-update"
-        if not os.path.exists(helper):
-            self._send(500, {"ok": False, "error": "update helper not installed"})
+        helper = _ensure_helper("foodassistant-update")
+        if not helper:
+            self._send(500, {"ok": False, "error":
+                "The update helper is missing on this device and there is no "
+                "source checkout to restore it from. Re-run the installer "
+                "(install.sh) on this device."})
             return
         try:
             # An update can pull, run pip, and restart, which on a Pi may take a
@@ -1903,9 +1994,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         # from the configured rclone remote first. The helper itself also
         # resolves rclone sources, but we validate the shape here so a bad
         # source fails fast with a clear error and never reaches the stack.
-        helper = "/usr/local/bin/foodassistant-restore"
-        if not os.path.exists(helper):
-            self._send(500, {"ok": False, "error": "restore helper not installed"})
+        helper = _ensure_helper("foodassistant-restore")
+        if not helper:
+            self._send(500, {"ok": False, "error":
+                "The restore helper is missing on this device. Press Update "
+                "under Backup & Updates to install it, then try again."})
             return
         body = self._body()
         kind, value = _classify_restore_source(body.get("source", ""))

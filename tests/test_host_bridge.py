@@ -837,3 +837,98 @@ def test_ap_status_active_when_flag_set_and_no_connectivity(tmp_path, monkeypatc
     assert sent["code"] == 200
     assert sent["body"]["active"] is True
     assert flag.exists()
+# --- Helper self-heal (FoodAssistant-jppi / FoodAssistant-9la0) -------------
+# A device imaged before a helper script existed has nothing under
+# /usr/local/bin for it; the bridge reinstalls it from the source checkout.
+
+
+def test_helper_source_dirs_honors_repo_dir(monkeypatch):
+    monkeypatch.setenv("REPO_DIR", "/custom/repo")
+    dirs = bridge._helper_source_dirs()
+    assert dirs[0] == "/custom/repo/scripts/image-build"
+    assert "/opt/foodassistant-src/scripts/image-build" in dirs
+
+
+def test_helper_source_dirs_without_repo_dir(monkeypatch):
+    monkeypatch.delenv("REPO_DIR", raising=False)
+    dirs = bridge._helper_source_dirs()
+    assert dirs[0] == "/opt/foodassistant-src/scripts/image-build"
+
+
+def test_find_helper_source_prefers_first_dir(tmp_path):
+    a = tmp_path / "a"
+    b = tmp_path / "b"
+    a.mkdir()
+    b.mkdir()
+    (a / "foodassistant-display-power").write_text("#!/bin/sh\necho a\n")
+    (b / "foodassistant-display-power").write_text("#!/bin/sh\necho b\n")
+    found = bridge._find_helper_source(
+        "foodassistant-display-power", src_dirs=[str(a), str(b)])
+    assert found == str(a / "foodassistant-display-power")
+
+
+def test_find_helper_source_none_when_absent(tmp_path):
+    assert bridge._find_helper_source(
+        "foodassistant-display-power", src_dirs=[str(tmp_path)]) is None
+
+
+def test_ensure_helper_returns_existing_install(tmp_path, monkeypatch):
+    dst = tmp_path / "foodassistant-set-rotation"
+    dst.write_text("#!/bin/sh\n")
+    # The checkout lookup must not even be consulted when the install exists.
+    monkeypatch.setattr(
+        bridge, "_find_helper_source",
+        lambda name: (_ for _ in ()).throw(AssertionError("looked up source")))
+    assert bridge._ensure_helper(
+        "foodassistant-set-rotation", bin_dir=str(tmp_path)) == str(dst)
+
+
+def test_ensure_helper_installs_from_checkout(tmp_path, monkeypatch):
+    src_dir = tmp_path / "checkout"
+    bin_dir = tmp_path / "bin"
+    src_dir.mkdir()
+    bin_dir.mkdir()
+    src = src_dir / "foodassistant-display-power"
+    src.write_text("#!/bin/sh\necho hi\n")
+    monkeypatch.setattr(
+        bridge, "_find_helper_source", lambda name: str(src))
+    dst = bridge._ensure_helper(
+        "foodassistant-display-power", bin_dir=str(bin_dir))
+    assert dst == str(bin_dir / "foodassistant-display-power")
+    installed = bin_dir / "foodassistant-display-power"
+    assert installed.read_text() == "#!/bin/sh\necho hi\n"
+    assert installed.stat().st_mode & 0o755 == 0o755
+
+
+def test_ensure_helper_none_when_no_source(tmp_path, monkeypatch):
+    monkeypatch.setattr(bridge, "_find_helper_source", lambda name: None)
+    assert bridge._ensure_helper(
+        "foodassistant-display-power", bin_dir=str(tmp_path)) is None
+
+
+def test_ensure_helper_none_when_install_fails(tmp_path, monkeypatch):
+    src = tmp_path / "foodassistant-display-power"
+    src.write_text("#!/bin/sh\n")
+    monkeypatch.setattr(bridge, "_find_helper_source", lambda name: str(src))
+    missing_bin = tmp_path / "no-such-dir"
+    assert bridge._ensure_helper(
+        "foodassistant-display-power", bin_dir=str(missing_bin)) is None
+
+
+def test_display_power_commands_uses_self_healed_helper_path():
+    # PATH does not see the helper, but the self-heal installed it: the full
+    # path is used and still precedes the firmware fallback.
+    cmds = bridge._display_power_commands(
+        False, which=lambda n: n == "vcgencmd",
+        helper_path="/usr/local/bin/foodassistant-display-power")
+    assert cmds[0] == ["/usr/local/bin/foodassistant-display-power", "off"]
+    assert cmds[1] == ["vcgencmd", "display_power", "0"]
+
+
+def test_display_power_commands_path_helper_wins_over_healed_path():
+    # When PATH already resolves the helper the bare name is kept (existing
+    # behaviour); the healed path is not added twice.
+    cmds = bridge._display_power_commands(
+        True, which=lambda n: True, helper_path="/usr/local/bin/x")
+    assert cmds[0] == ["foodassistant-display-power", "on"]
+    assert ["/usr/local/bin/x", "on"] not in cmds

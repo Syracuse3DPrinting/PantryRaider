@@ -2393,6 +2393,12 @@ async def calibrate_touch_reset():
     try:
         async with httpx.AsyncClient(timeout=40.0) as c:
             r = await c.post(f"{_HOST_BRIDGE}/touch/calibrate/reset")
+        # An old host bridge predates this route and answers 404
+        # {"error": "not found"}; say something actionable instead.
+        if r.status_code == 404:
+            return JSONResponse({"ok": False, "error":
+                "The device helper software is out of date. Press Update "
+                "under Backup & Updates, then try again."})
         return r.json()
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
@@ -2524,7 +2530,15 @@ async def calibrate_touch_apply(payload: TouchMatrixPayload):
                 pass
             return {"ok": True, "message": data.get("message", ""),
                     "kiosk_restarted": data.get("kiosk_restarted", False)}
-        return JSONResponse({"ok": False, "error": data.get("error", f"HTTP {r.status_code}")})
+        # A stale bridge (updated app, old bridge) delegated to a separate
+        # calibrate helper and answered "calibrate helper not installed"
+        # (FoodAssistant-jppi). The current bridge writes the rule itself and
+        # the updater refreshes the bridge, so the fix is one Update away.
+        err = data.get("error", f"HTTP {r.status_code}")
+        if "not installed" in err.lower():
+            err = ("The device helper software is out of date. Press Update "
+                   "under Backup & Updates, then calibrate again.")
+        return JSONResponse({"ok": False, "error": err})
     except Exception as e:
         return JSONResponse({"ok": False, "error": str(e)})
 
