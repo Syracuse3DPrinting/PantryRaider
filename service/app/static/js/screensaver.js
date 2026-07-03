@@ -673,14 +673,19 @@
       // Last minute of a countdown: a gentle vertical hop. Both stage
       // animations run on the pill's face, never its physics shell, so the
       // drift and collisions stay deterministic.
-      '@keyframes ss-timer-hop{' +
-      '0%,100%{transform:translateY(0);}45%{transform:translateY(-1.2vmin);}}' +
+      // Last minute: a pulsing brand-pink glow breathes from behind the
+      // pill (the earlier vertical hop read as swimming; a glow warns just
+      // as clearly without fighting the drift motion).
+      '@keyframes ss-timer-glow{' +
+      '0%,100%{box-shadow:0 0 0 0 rgba(242,0,110,0.0), 0 0 1.2vmin 0.2vmin rgba(242,0,110,0.35);}' +
+      '50%{box-shadow:0 0 0 0.45vmin rgba(242,0,110,0.55), 0 0 3vmin 1vmin rgba(242,0,110,0.75);}}' +
       // Finished: the whole pill turns slowly, 5 seconds per revolution, slow
       // enough that the food icon and Done stay readable mid-spin.
       '@keyframes ss-timer-spin{' +
       'from{transform:rotate(0deg);}to{transform:rotate(360deg);}}' +
       '#kiosk-screensaver .ss-timer-ending .ss-timer-face{' +
-      'animation:ss-timer-hop 0.9s ease-in-out infinite;}' +
+      'animation:ss-timer-glow 1.4s ease-in-out infinite;' +
+      'border-color:rgba(242,0,110,0.8);}' +
       '#kiosk-screensaver .ss-timer-done .ss-timer-face{' +
       'animation:ss-timer-pulse 1.1s ease-in-out infinite,' +
       'ss-timer-spin 5s linear infinite;' +
