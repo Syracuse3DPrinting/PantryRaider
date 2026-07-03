@@ -137,3 +137,26 @@ def test_inventory_key_avoids_the_ui_root_redirect():
     # /ui/ may redirect to the Start Page when it leads the nav, so the Stock key
     # must target the explicit inventory route, not "ui/", or it would loop back.
     assert sp.ACTION_HREF["inventory"] == "ui/inventory"
+
+
+# -- live timer key faces (FoodAssistant-uzra) -------------------------------
+
+def test_custom_timer_buttons_carry_the_registry_label():
+    from app.services.start_page import custom_buttons
+    out = custom_buttons([
+        {"id": "a", "type": "timer", "label": "Tea", "minutes": 3},
+        {"id": "b", "type": "timer", "minutes": 5},
+        {"id": "c", "type": "shopping_add", "item": "Milk"},
+    ])
+    by_id = {c["id"]: c for c in out}
+    assert by_id["a"]["timer_label"] == "Tea"
+    assert by_id["b"]["timer_label"] == "Timer"   # same rule the fire path uses
+    assert "timer_label" not in by_id["c"]
+
+
+def test_resolve_layout_passes_timer_label_through():
+    from app.services.start_page import resolve_layout
+    ovs = [{"id": "a", "type": "timer", "label": "Tea", "minutes": 3}]
+    keys = resolve_layout(["a"], 6, overrides=ovs)
+    assert keys[0]["kind"] == "custom"
+    assert keys[0]["timer_label"] == "Tea"

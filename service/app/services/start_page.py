@@ -177,7 +177,12 @@ def custom_buttons(overrides: list | None = None) -> list[dict]:
             continue
         seen.add(cid)
         m = _custom_meta(ov)
-        out.append({"id": cid, "type": ov.get("type", ""), **m})
+        entry = {"id": cid, "type": ov.get("type", ""), **m}
+        if ov.get("type") == "timer":
+            # The registry label a press creates (see start_actions._fire_timer),
+            # so the key face can adopt the live timer like a deck key does.
+            entry["timer_label"] = str(ov.get("label", "")).strip() or "Timer"
+        out.append(entry)
     return out
 
 
@@ -212,8 +217,11 @@ def resolve_layout(layout: list | None, key_count: int,
             out.append({"kind": "blank"})
         elif tok in customs:
             c = customs[tok]
-            out.append({"kind": "custom", "id": tok, "type": c["type"],
-                        "label": c["label"], "icon": _norm_icon(c["icon"]), "color": c["color"]})
+            entry = {"kind": "custom", "id": tok, "type": c["type"],
+                     "label": c["label"], "icon": _norm_icon(c["icon"]), "color": c["color"]}
+            if "timer_label" in c:
+                entry["timer_label"] = c["timer_label"]
+            out.append(entry)
         elif tok in cat:
             a = cat[tok]
             href = ACTION_HREF.get(tok)
