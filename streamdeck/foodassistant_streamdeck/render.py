@@ -969,3 +969,64 @@ def message_across_deck(
 
 def blank_key(width: int, height: int) -> Image.Image:
     return Image.new("RGB", (width, height), (16, 18, 22))
+
+
+# Boot splash (FoodAssistant-v32r): the Pantry Raider raccoon mark, copied from
+# the app's logo-mark.png into the deck assets so the package is self-contained.
+# Optional like the icon font: a missing file just skips the splash.
+_SPLASH_PATH = _ASSETS_DIR / "splash.png"
+
+# Dark backdrop behind the splash mark; matches blank_key so the frame reads as
+# the deck's own idle face rather than a stray image.
+_SPLASH_BG = (16, 18, 22)
+
+
+def splash_tiles(
+    rows: int,
+    cols: int,
+    key_size: tuple[int, int],
+    spacing: int = 0,
+    logo_path: "Path | str | None" = None,
+) -> list["Image.Image"]:
+    """Per-key tiles of the boot splash: the brand mark centred across the deck.
+
+    The controller paints this as its very first frame after the deck opens, so
+    the boot gap shows the Pantry Raider raccoon instead of the Elgato factory
+    logo; the real page replaces it once the controller finishes starting up.
+    The mark is composited onto a dark full-deck canvas (fit inside the deck's
+    shorter span so it never crops) and sliced with the same spacing-aware
+    geometry as ``slice_full_image``, row-major. Pure and defensive: a missing
+    or unreadable asset returns an empty list so the caller simply skips the
+    splash.
+    """
+    kw, kh = key_size
+    rows = max(0, int(rows))
+    cols = max(0, int(cols))
+    spacing = max(0, int(spacing))
+    if rows == 0 or cols == 0 or kw <= 0 or kh <= 0:
+        return []
+    path = Path(logo_path) if logo_path else _SPLASH_PATH
+    try:
+        with Image.open(path) as src:
+            src.load()
+            logo = src.convert("RGBA")
+    except (OSError, ValueError):
+        return []
+    full_w = cols * kw + (cols - 1) * spacing
+    full_h = rows * kh + (rows - 1) * spacing
+    canvas = Image.new("RGB", (full_w, full_h), _SPLASH_BG)
+    box = int(min(full_w, full_h) * 0.80)
+    if box > 0 and logo.width > 0 and logo.height > 0:
+        # Scale (up or down) so the mark fills the box; thumbnail() only
+        # shrinks, which would leave the 128px source tiny on a large deck.
+        scale = box / max(logo.width, logo.height)
+        logo = logo.resize(
+            (max(1, round(logo.width * scale)), max(1, round(logo.height * scale))),
+            Image.LANCZOS,
+        )
+        canvas.paste(
+            logo,
+            ((full_w - logo.width) // 2, (full_h - logo.height) // 2),
+            logo,
+        )
+    return slice_full_image(canvas, rows, cols, key_size, spacing)

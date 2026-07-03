@@ -209,6 +209,9 @@ class Controller:
         async with httpx.AsyncClient(timeout=8.0, headers=headers) as client:
             self.client = client
             self._open_deck()
+            # First frame before any network work: replace the factory logo
+            # with the Pantry Raider splash while the status polls run.
+            self._show_splash()
             await self._poll_once()
             await self._refresh_weather()
             await self._refresh_ha_entities()
@@ -237,6 +240,24 @@ class Controller:
         self.deck.set_brightness(BRIGHTNESS_STEPS[self._bright_idx])
         self.deck.set_key_callback(self._on_key)
         self._idle_blanked = False
+
+    def _show_splash(self) -> None:
+        """Paint the Pantry Raider brand mark across every key.
+
+        Called right after the deck opens, before the first status poll, so
+        the boot gap shows the raccoon splash instead of the Elgato factory
+        logo (FoodAssistant-v32r). Best-effort: any failure just leaves the
+        deck as-is, and the real page replaces the splash as soon as the
+        controller finishes booting.
+        """
+        try:
+            rows, cols = self.deck.key_layout()
+            key_size = self.deck.key_image_format()["size"]
+            tiles = render.splash_tiles(rows, cols, key_size)
+            if tiles:
+                self._set_full_deck_tiles(tiles)
+        except Exception:  # noqa: BLE001 - a splash must never block boot
+            pass
 
     def _teardown_deck(self) -> None:
         """Reset and close the HID handle, swallowing any error.

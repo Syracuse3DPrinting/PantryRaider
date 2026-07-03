@@ -26,7 +26,7 @@ GET  /streamdeck/actions     list assignable deck actions (for the web editor)
 POST /kiosk/restart        restart the kiosk browser (apply scale/rotation)
 GET  /mealie/status        Mealie state: not-installed / starting / running
 POST /mealie/start         start Mealie in the background (docker compose --profile with-mealie up -d)
-GET  /logs/<name>          tail of an install/start log (name in mealie/kiosk/streamdeck)
+GET  /logs/<name>          tail of an install/start log (name in mealie/kiosk/streamdeck/grocy)
 GET  /hardware/status      display/Stream Deck presence + service/install state
 GET  /system/health        power/thermal/disk warnings (vcgencmd get_throttled, temp, df)
 POST /kiosk/install        provision the kiosk service (display attached later)
@@ -226,11 +226,16 @@ _INSTALL_PROCS = {}
 # Log files the background steps stream their stdout/stderr into. The setup UI
 # tails these (via GET /logs/<name>) to show live install/start output. The
 # Mealie start writes the first path; the kiosk/streamdeck installs use the
-# foodassistant-<name>-install.log pattern that _provision() opens.
+# foodassistant-<name>-install.log pattern that _provision() opens. "grocy" is
+# the firstboot provisioner log: the Grocy/stack install runs inside firstboot
+# (deploy_stack), so tailing its log is what shows the operator that install's
+# progress while the setup wizard waits for Grocy to come up
+# (FoodAssistant-n5ky).
 _LOG_PATHS = {
     "mealie": "/var/log/foodassistant-mealie-start.log",
     "kiosk": "/var/log/foodassistant-kiosk-install.log",
     "streamdeck": "/var/log/foodassistant-streamdeck-install.log",
+    "grocy": "/var/log/foodassistant-firstboot.log",
 }
 
 # Cap the bytes we read off the tail of a log so a long-running install cannot

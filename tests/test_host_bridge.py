@@ -202,6 +202,22 @@ def test_tail_log_caps_bytes_and_drops_partial_first_line(monkeypatch, tmp_path)
     assert lines[-1] == "CCCCCCCCCC"
 
 
+def test_tail_log_grocy_points_at_firstboot_log():
+    # The Grocy/stack install runs inside firstboot (deploy_stack), so the
+    # setup wizard's live Grocy install window tails that log
+    # (FoodAssistant-n5ky).
+    assert bridge._LOG_PATHS["grocy"] == "/var/log/foodassistant-firstboot.log"
+
+
+def test_tail_log_grocy_reads_firstboot_output(monkeypatch, tmp_path):
+    p = tmp_path / "firstboot.log"
+    p.write_text("[firstboot] deploy_stack\npulling grocy image\n")
+    monkeypatch.setitem(bridge._LOG_PATHS, "grocy", str(p))
+    assert bridge._tail_log("grocy") == [
+        "[firstboot] deploy_stack", "pulling grocy image",
+    ]
+
+
 def test_tail_log_handles_non_utf8(monkeypatch, tmp_path):
     p = tmp_path / "sd.log"
     p.write_bytes(b"ok line\n\xff\xfe bad bytes\n")

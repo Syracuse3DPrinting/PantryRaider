@@ -3074,6 +3074,46 @@ def test_slice_full_image_degenerate_returns_empty():
     assert render.slice_full_image(image, 3, 0, (40, 40)) == []
 
 
+# -- boot splash (FoodAssistant-v32r) ---------------------------------------
+
+
+def test_splash_asset_is_bundled():
+    # The splash mark ships with the deck package (copied from the app's
+    # logo-mark) so the boot frame never depends on the service tree.
+    assert render._SPLASH_PATH.is_file()
+
+
+def test_splash_tiles_shape_and_size():
+    tiles = render.splash_tiles(3, 5, (72, 72))
+    assert len(tiles) == 15
+    assert all(t.size == (72, 72) for t in tiles)
+
+
+def test_splash_tiles_honour_spacing():
+    tiles = render.splash_tiles(4, 8, (96, 96), spacing=8)
+    assert len(tiles) == 32
+    assert all(t.size == (96, 96) for t in tiles)
+
+
+def test_splash_tiles_center_carries_the_mark():
+    # The mark is centred across the deck, so the middle tile must not be a
+    # flat background fill while a far corner stays (near) background.
+    rows, cols = 3, 5
+    tiles = render.splash_tiles(rows, cols, (72, 72))
+    centre = tiles[(rows // 2) * cols + cols // 2]
+    assert len(set(centre.getdata())) > 1, "centre tile should show the mark"
+
+
+def test_splash_tiles_missing_asset_returns_empty(tmp_path):
+    assert render.splash_tiles(3, 5, (72, 72), logo_path=tmp_path / "nope.png") == []
+
+
+def test_splash_tiles_degenerate_returns_empty():
+    assert render.splash_tiles(0, 5, (72, 72)) == []
+    assert render.splash_tiles(3, 0, (72, 72)) == []
+    assert render.splash_tiles(3, 5, (0, 72)) == []
+
+
 def test_camera_actions_resolve_and_have_icons():
     cam = actions.resolve("camera")
     full = actions.resolve("camera_full")

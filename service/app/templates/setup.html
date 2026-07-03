@@ -579,6 +579,8 @@
         <i class="bi bi-cpu me-1"></i>Appliance mode: Grocy is running locally on this device.
         On the very first boot it can take a minute or two to finish starting,
         so if Test connection fails right away, wait a moment and try again.
+        <div class="test-result" id="grocy-install-result"></div>
+        <pre class="install-log d-none bg-body-tertiary border rounded p-2 small mt-2 mb-0" data-log="grocy"></pre>
       </div>
       <div class="mb-3">
         <label class="form-label">Grocy API Key <span class="badge bg-danger badge-req ms-1">Required</span></label>
@@ -2815,6 +2817,13 @@ docker compose up -d</code></pre>
                      value="{{ s.display_idle_timeout }}">
               <div class="form-text">Blanks the kiosk screen after inactivity. A touch, key press, or a Stream Deck button press wakes it. The Stream Deck has its own separate timeout. 0 disables.</div>
             </div>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_minutes">Screensaver after N minutes idle (0 = off)</label>
+              <input class="form-control form-control-sm" style="max-width:120px" type="number"
+                     id="screensaver_minutes" min="0" max="120" step="1"
+                     value="{{ s.screensaver_minutes }}">
+              <div class="form-text">Dims the page to a floating clock after inactivity; any touch brings the page right back. Unlike Display sleep above, which switches the panel off, the screensaver keeps the display on, so it suits panels that wake slowly or misbehave when powered off. This is a per-device choice.</div>
+            </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
@@ -4705,6 +4714,7 @@ function buildPayload() {
     streamdeck_idle_timeout: parseInt(document.getElementById('streamdeck_idle_timeout')?.value || '0', 10),
     display_touch:   document.getElementById('display_touch')?.checked || false,
     display_idle_timeout: parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10),
+    screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
     api_key:         secretVal('api_key'),
@@ -5669,11 +5679,51 @@ function _wizApplyInstallMode() {
       urlField.value = PI_GROCY_DEFAULT;
     }
     if (applianceNote) applianceNote.classList.remove('d-none');
+    _watchGrocyInstall();
   } else {
     if (applianceNote) applianceNote.classList.add('d-none');
   }
   // Update "Open Grocy" link
   _updateGrocyOpenLink();
+}
+
+// While the appliance's Grocy is still being installed/started (the first
+// boot pulls and starts the whole stack), show the live install log instead
+// of leaving the operator staring at nothing (FoodAssistant-n5ky). Polls the
+// local Grocy probe; once it serves HTTP the log stops and a ready line shows.
+let _grocyWatchActive = false;
+async function _watchGrocyInstall() {
+  if (_grocyWatchActive) return;
+  if (document.documentElement.getAttribute('data-is-pi') !== '1') return;
+  if (!document.querySelector('.install-log[data-log="grocy"]')) return;
+  _grocyWatchActive = true;
+  let serving = false;
+  try {
+    const s = await fetch('setup/grocy/local-status').then(x => x.json());
+    if (!s || s.ok === false || s.serving) return;  // ready (or unknowable): no log needed
+  } catch (e) { return; }
+  setResult('grocy-install-result', true,
+    'Grocy is still installing on this device. Live progress below; this step finishes on its own.');
+  const stopLog = _startLogPolling('grocy', () => serving);
+  try {
+    // Poll every ~3s for up to ~10 minutes; a first boot pull can be slow.
+    for (let i = 0; i < 200 && !serving; i++) {
+      await _sleep(3000);
+      let s;
+      try {
+        s = await fetch('setup/grocy/local-status').then(x => x.json());
+      } catch (e) { continue; }
+      if (s && s.ok !== false && s.serving) serving = true;
+    }
+    if (serving) {
+      setResult('grocy-install-result', true, 'Grocy is up. Open it to create an API key, then paste it below.');
+    } else {
+      setResult('grocy-install-result', false, 'Grocy is taking longer than expected. Check the log above; it may still come up.');
+    }
+  } finally {
+    serving = true;
+    stopLog();
+  }
 }
 
 // Build the Step 7 summary list
@@ -6005,6 +6055,7 @@ async function saveDisplaySettings() {
   const display_touch = document.getElementById('display_touch')?.checked || false;
   const display_type = document.getElementById('display_type')?.value || 'generic';
   const display_idle_timeout = parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10);
+  const screensaver_minutes = parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10);
   try {
     await fetch('setup/scale', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -6012,7 +6063,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {

@@ -84,6 +84,9 @@ def theme_context(request: Request) -> dict:
         # On-screen Home Assistant event channel (notifications + camera pop-ups).
         "ha_events_enabled": settings.ha_events_enabled,
         "ha_camera_popup_seconds": settings.ha_camera_popup_seconds,
+        # Kiosk screensaver (FoodAssistant-y65x): minutes idle before the soft
+        # on-screen clock layer shows; 0 keeps it off. Read by screensaver.js.
+        "screensaver_minutes": settings.screensaver_minutes,
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,

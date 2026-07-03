@@ -154,11 +154,16 @@ and are device-local. They do not apply to a server install.
 | `streamdeck_key_count` | | Not applicable | Editable | Device-local |
 | `display_touch` | | Not applicable | Editable | Device-local |
 | `display_idle_timeout` | | Not applicable | Editable | Device-local |
+| `screensaver_minutes` | | Not applicable | Editable | Device-local |
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 
 The display and Stream Deck panes are shown only on the Pi modes (the
 `peripherals` feature flag is Pi-only). `device_hostname` is offered on every
 mode because it controls how browser links are built.
+
+`display_idle_timeout` switches the panel itself off after the idle period;
+`screensaver_minutes` is the softer on-screen layer (the page dims to a
+floating clock, a touch brings it back) for panels that should stay powered.
 
 ## Stream Deck
 

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.77"
+APP_VERSION = "0.7.78"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -365,7 +365,8 @@ _SAVEABLE = [
     "display_type",
     "has_streamdeck", "streamdeck_key_count", "display_touch",
     "start_page_enabled", "start_page_keys", "start_page_layout",
-    "display_idle_timeout", "streamdeck_idle_timeout", "streamdeck_key_overrides",
+    "display_idle_timeout", "streamdeck_idle_timeout", "screensaver_minutes",
+    "streamdeck_key_overrides",
     "streamdeck_weather_location", "streamdeck_weather_units", "weather_api_base",
     "streamdeck_key_style", "streamdeck_icon_color",
     "streamdeck_cameras",
@@ -904,6 +905,13 @@ class Settings(BaseSettings):
     # a key press.
     display_idle_timeout: int = 0
     streamdeck_idle_timeout: int = 0
+
+    # On-screen kiosk screensaver (FoodAssistant-y65x), minutes idle before it
+    # shows, 0 = off. Unlike display_idle_timeout (which powers the panel off
+    # via the host bridge), the screensaver is a soft layer drawn by the kiosk
+    # browser: the page dims to a floating clock and any touch dismisses it.
+    # For panels where full blanking is unwanted (slow wake, backlight quirks).
+    screensaver_minutes: int = 0
 
     # On-screen floating navigation menu (FoodAssistant-bzuu). position is the
     # server default ("off" hides it; otherwise a corner: top-left, top-right,

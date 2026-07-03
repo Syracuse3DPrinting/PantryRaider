@@ -255,6 +255,7 @@ class SetupPayload(BaseModel):
     # Deck weather never persisted through /save. Declared so they round-trip.
     streamdeck_idle_timeout: int = 0
     display_idle_timeout: int = 0
+    screensaver_minutes: int = 0
     streamdeck_key_overrides: list = []
     streamdeck_weather_location: str = ""
     streamdeck_weather_units: str = "f"
@@ -1779,12 +1780,26 @@ async def mealie_status():
         return {"ok": False, "error": str(e)}
 
 
-_LOG_NAMES = {"mealie", "kiosk", "streamdeck"}
+_LOG_NAMES = {"mealie", "kiosk", "streamdeck", "grocy"}
+
+
+@router.get("/grocy/local-status")
+async def grocy_local_status():
+    """Whether the appliance's local Grocy answers HTTP yet (Pi appliance only).
+
+    The setup wizard polls this on a pi_hosted device while the first-boot
+    Grocy/stack install is still running, so it can show the live install log
+    until Grocy starts serving (FoodAssistant-n5ky). Returns {ok, serving}.
+    """
+    if not is_raspberry_pi():
+        return {"ok": False, "error": "Not available on this platform."}
+    return {"ok": True, "serving": bool(await _detect_local_grocy())}
 
 
 @router.get("/logs/{name}")
 async def install_logs(name: str):
-    """Tail of an install/start log (mealie / kiosk / streamdeck), via the bridge.
+    """Tail of an install/start log (mealie / kiosk / streamdeck / grocy), via
+    the bridge.
 
     Mirrors the /mealie/status proxy: the setup UI polls this while a start or
     install is in flight to show live output. Returns {ok, name, running,
