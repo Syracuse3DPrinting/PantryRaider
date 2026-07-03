@@ -26,7 +26,7 @@ from pathlib import Path
 PAGES: list[tuple[str, str, str, str]] = [
     ("README.md",                               "Home",                  "Overview",  "Home"),
     ("docs/platforms.md",                       "Platforms",             "Overview",  "Platforms & deployment modes"),
-    ("docs/personalization.md",                 "Personalization",       "Overview",  "Appearance & on-screen features"),
+    ("docs/personalization.md",                 "Personalization",       "Overview",  "Personalization & on-screen features"),
     ("docs/settings-matrix.md",                 "Settings-Reference",    "Overview",  "Settings reference"),
     ("docs/recipe-backend-comparison.md",       "Recipe-Backends",       "Overview",  "Recipe backends"),
     ("docs/hardware.md",                        "Hardware",              "Hardware",  "Hardware overview"),

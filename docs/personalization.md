@@ -1,13 +1,16 @@
-# Appearance and On-screen Features
+# Personalization and On-screen Features
 
-The Settings page groups everything by what you are trying to do: one menu
-with sections like Appearance, Screen & Sleep, and Devices, plus a search box
-that filters the menu as you type. This page covers the appearance and
-on-screen features and where each lives in that menu.
+The Settings page has two menus behind a toggle at the top. Personalization
+(the default) holds the things you change often: Appearance, Screen & Sleep,
+the Start Page & Stream Deck editors, and Recipe Preferences. Settings holds
+the set-and-forget administration: connections, security, backups, and the
+like. A search box above the menu filters both menus as you type and jumps
+to the match. This page covers the appearance and on-screen features and
+where each lives.
 
 ## Themes
 
-Settings, Appearance. Pick a colour theme for the whole app; it
+Settings, Personalization, Appearance. Pick a colour theme for the whole app; it
 applies on every page and device because it is stored on the server.
 
 - **Built-in themes:** a default dark and light, plus several bundled
@@ -24,15 +27,15 @@ buttons, and the status badges stay legible.
 
 ## Background image
 
-Settings, Appearance, Background image. Paint an optional photo
+Settings, Personalization, Appearance, Background image. Paint an optional photo
 behind the whole UI. Upload a JPG, PNG, WebP, or GIF (up to 8 MB) or paste an
 image URL, and use the opacity slider so the interface stays readable over it.
 It applies on every page.
 
 ## Navigation
 
-Settings, Appearance holds the tab editor; the on-screen navigation bar
-lives under Screen & Sleep.
+Settings, Personalization, Appearance holds the tab editor; the on-screen
+navigation bar lives under Personalization, Screen & Sleep.
 
 - **Tab editor:** drag a row to reorder it, or use the up/down buttons. Drop a
   tab onto a folder (or onto any tab already inside one) to nest it; the parent
@@ -50,7 +53,7 @@ lives under Screen & Sleep.
 
 ## Start Page (on-screen Stream Deck)
 
-Settings, Devices, Start Page. The Start Page is an optional
+Settings, Personalization, Start Page & Stream Deck. The Start Page is an optional
 full-screen launcher that works like an on-screen Stream Deck, served at
 `/ui/start`. It is off by default.
 
@@ -72,8 +75,8 @@ full-screen launcher that works like an on-screen Stream Deck, served at
   (paging, brightness) are skipped and named in the toast. Purely hardware-bound
   keys still note that they run on a connected Stream Deck.
 
-The Devices section shows a toggle at the top to switch between this device,
-the on-screen Start Page, and (on a Pi appliance) the physical deck.
+On a Pi appliance the section shows a toggle at the top to switch between
+the on-screen Start Page and the physical deck's editor.
 
 ## Weather
 

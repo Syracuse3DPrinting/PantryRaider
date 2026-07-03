@@ -197,7 +197,7 @@ async function loadEquipment() {
   });
   if (missing.size) {
     miss.textContent = 'You may not have: ' + [...missing].join(', ') +
-      '. Update your kitchen in Settings > Recipes > My Kitchen Appliances.';
+      '. Update your kitchen in Settings > Personalization > Recipe Preferences.';
     miss.classList.remove('d-none');
   } else { miss.classList.add('d-none'); }
   wrap.classList.remove('d-none');

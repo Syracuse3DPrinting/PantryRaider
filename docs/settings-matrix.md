@@ -170,10 +170,11 @@ and are device-local. They do not apply to a server install.
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 | `streamdeck_screensaver_layout` | | Not applicable | Editable | Device-local |
 
-The kiosk display cards (Settings, Screen & Sleep) and the Stream Deck
-editor (Settings, Devices) are shown only on the Pi modes (the `peripherals`
-feature flag is Pi-only). `device_hostname` is offered on every mode (Settings,
-Devices) because it controls how browser links are built.
+The kiosk display cards (Settings, Personalization, Screen & Sleep) and the
+Stream Deck editor (Settings, Personalization, Start Page & Stream Deck) are
+shown only on the Pi modes (the `peripherals` feature flag is Pi-only).
+`device_hostname` is offered on every mode (Settings, Devices & Fleet)
+because it controls how browser links are built.
 
 `display_idle_timeout` switches the panel itself off after the idle period;
 `screensaver_minutes` is the softer on-screen layer (the page dims to a

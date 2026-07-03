@@ -272,7 +272,7 @@ def auto_hidden_groups() -> list[dict]:
             continue
         if not _requirement_met(t):
             if req not in groups:
-                _pane = {"mealie": "pane-recipes"}.get(req, req)
+                _pane = {"mealie": "pane-connections"}.get(req, req)
                 groups[req] = {"service": req, "tab_labels": [], "setup_href": f"setup#{_pane}"}
             groups[req]["tab_labels"].append(t["label"])
     return list(groups.values())

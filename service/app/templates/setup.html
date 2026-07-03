@@ -942,16 +942,28 @@
     <!-- Side menu -->
     <div class="col-md-3">
       <div class="side-menu">
+        {# Top toggle: two menus, Plex-style (docs/design/settings-reorg.md,
+           iteration 2). Personalization holds the everyday, taste-level panes;
+           Settings the set-and-forget administration. One menu shows at a
+           time; the last choice is remembered per device. #}
+        <div class="btn-group w-100 mb-2" role="group" aria-label="Choose Personalization or Settings">
+          <button type="button" class="btn btn-outline-primary btn-sm" id="menu-toggle-p" onclick="showSettingsMenu('p')">
+            <i class="bi bi-sliders me-1"></i>Personalization
+          </button>
+          <button type="button" class="btn btn-outline-primary btn-sm" id="menu-toggle-s" onclick="showSettingsMenu('s')">
+            <i class="bi bi-gear me-1"></i>Settings
+          </button>
+        </div>
         {# Search box: filters the menu to panes whose title, section headers,
-           or field labels match, and outlines the matching cards when a
-           filtered pane opens. #}
+           or field labels match, across both menus at once, and outlines the
+           matching cards when a filtered pane opens. #}
         <div class="mb-2">
           <input type="search" class="form-control form-control-sm" id="settings-search"
                  placeholder="Search settings" autocomplete="off" spellcheck="false"
                  aria-label="Search settings" oninput="settingsSearch(this.value)">
         </div>
-        {# One menu, grouped by intent (docs/design/settings-reorg.md): ten
-           panes, each named for what the user is trying to do. #}
+        {# Panes grouped by intent (docs/design/settings-reorg.md):
+           data-mgroup 'p' = Personalization, 's' = Settings. #}
         {# inline status: True = configured, False/None = needs attention #}
         {% set inv_ok = features.satellite or (s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80') %}
         {% set ai_ok  = s.vision_provider and s.vision_provider != 'none' %}
@@ -959,47 +971,53 @@
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
         {% set rem_ok = s.remote_server_url and s.upstream_api_key %}
         <div class="nav flex-column nav-pills gap-1" role="tablist">
-          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-appearance" type="button">
+          {# --- Personalization: touched often, shown by default ---------- #}
+          <button class="nav-link active d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-appearance" type="button">
             <i class="bi bi-palette me-2"></i>Appearance
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-screen" type="button"{% if is_pi %} onclick="loadDisplayStatus(); loadHardwareStatus()"{% endif %}>
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-screen" type="button"{% if is_pi %} onclick="loadDisplayStatus(); loadHardwareStatus()"{% endif %}>
             <i class="bi bi-display me-2"></i>Screen &amp; Sleep
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-scanning" type="button">
-            <i class="bi bi-upc-scan me-2"></i>Scanning &amp; Intake
+          {# The Start Page and (on a Pi) Stream Deck editors share one pill: a
+             toggle at the top of the pane flips between them, and they share
+             one custom-button library. The pill keeps id "pill-deckstart" so
+             deck/start deep links and the search index can reach it. #}
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-start-page" type="button" id="pill-deckstart" onclick="showDeckStart('start');{% if is_pi %} _sdLoadProfiles();{% endif %}">
+            <i class="bi bi-grid-3x3-gap me-2"></i>{% if is_pi %}Start Page &amp; Stream Deck{% else %}Start Page{% endif %}
+          </button>
+          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-recipes" type="button">
+            <i class="bi bi-sliders me-2"></i>Recipe Preferences
+          </button>
+
+          {# --- Settings: set-and-forget server administration ------------ #}
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-connections" type="button" onclick="_camPresetChanged(); _camPrefillScanCidr()">
+            <i class="bi bi-broadcast me-2"></i>Connections
+            <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Mealie configured' if rec_ok else 'Mealie optional' }}"></i>
+          </button>
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-scanning" type="button">
+            <i class="bi bi-upc-scan me-2"></i>AI &amp; Scanning
             <i class="bi bi-{{ 'check-circle-fill text-success' if ai_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'AI configured' if ai_ok else 'AI optional' }}"></i>
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-recipes" type="button">
-            <i class="bi bi-journal-richtext me-2"></i>Recipes &amp; Meals
-            <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if rec_ok else 'Optional' }}"></i>
-          </button>
           {% if not features.satellite %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
             <i class="bi bi-fridge me-2"></i>Inventory &amp; Storage
             <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
           </button>
           {% endif %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-connections" type="button" onclick="_camPresetChanged(); _camPrefillScanCidr()">
-            <i class="bi bi-broadcast me-2"></i>Connections
-          </button>
-          {# Devices holds the Start Page and Stream Deck editors as sub-areas:
-             a toggle at the top of the pane flips between them, and they share
-             one custom-button library. The pill keeps id "pill-deckstart" so
-             deck/start deep links and the search index can reach it. #}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-devices" type="button" id="pill-deckstart" onclick="showDeckStart('devices'); _startEditorInit(); {% if not features.satellite %}loadDevices(); {% endif %}{% if is_pi %}loadNetworkStatus(); loadHardwareDetect(); loadHardwareStatus(); _sdLoadProfiles();{% endif %}">
-            <i class="bi bi-hdd-stack me-2"></i>Devices
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-devices" type="button" onclick="{% if not features.satellite %}loadDevices(); {% endif %}{% if is_pi %}loadNetworkStatus(); loadHardwareDetect(); loadHardwareStatus();{% endif %}">
+            <i class="bi bi-hdd-stack me-2"></i>Devices &amp; Fleet
             {% if features.satellite %}
             <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Main server configured' if rem_ok else 'Server URL + key required' }}"></i>
             {% endif %}
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
             <i class="bi bi-shield-lock me-2"></i>Security &amp; Access
             <i class="bi bi-{{ 'check-circle-fill text-success' if sec_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if sec_ok else 'Password required' }}"></i>
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-backups" type="button">
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-backups" type="button">
             <i class="bi bi-cloud-arrow-down me-2"></i>Backups &amp; Updates
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-advanced" type="button">
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-advanced" type="button">
             <i class="bi bi-tools me-2"></i>Advanced
           </button>
         </div>
@@ -1193,7 +1211,7 @@
           {% endif %}
         </div>
 
-        <!-- Scanning & Intake: the barcode scanner, enrichment, and the AI
+        <!-- AI & Scanning: the barcode scanner, enrichment, and the AI
              models that read photos, receipts, and barcodes -->
         <div class="tab-pane fade" id="pane-scanning">
           <p class="pane-intro">How items get into the pantry: the barcode scanner, barcode enrichment, and the AI models that read your food photos and receipts.</p>
@@ -1337,7 +1355,7 @@
                   Auto-check Mealie shopping list when item is scanned and committed
                 </label>
               </div>
-              <div class="form-text">Needs a Mealie connection, set up under Recipes &amp; Meals.</div>
+              <div class="form-text">Needs a Mealie connection, set up under Connections.</div>
             </div>
             <div class="mb-3">
               <label class="form-label">Provider Override <span class="text-secondary small">(optional)</span></label>
@@ -1404,10 +1422,12 @@
           </div>
         </div>
 
-        <!-- Recipes & Meals: sources, Mealie, and suggestion tuning -->
-        <div class="tab-pane fade" id="pane-recipes">
-          <p class="pane-intro">Recipe sources, the Mealie connection, and how "What can I cook?" ranks recipes against your stock.</p>
-
+        {# Mealie and the external recipe sources render inside Connections
+           (docs/design/settings-reorg.md, iteration 2): they are service
+           hookups, while the taste-level tuning lives in Personalization
+           under Recipe Preferences. The macro keeps the cards defined here
+           and drops them into the Connections pane below. #}
+        {% macro recipe_connection_cards() %}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-journal-richtext text-primary"></i> Mealie — Recipe Manager
               <span class="badge bg-secondary badge-req">Optional</span></div>
@@ -1496,11 +1516,16 @@
           </button>
           <div class="test-result mt-2" id="recipes-save-result"></div>
           {% endif %}
+        {% endmacro %}
 
-          {# Suggestion tuning + the kitchen appliances checklist share the pane
-             with the recipe sources: they all shape the same Cook page. On a
-             satellite the inputs are read-only (managed on the main server). #}
-          <div class="section-card mt-3">
+        <!-- Recipe Preferences: how "What can I cook?" ranks recipes -->
+        <div class="tab-pane fade" id="pane-personalization-recipes">
+          <p class="pane-intro">How "What can I cook?" picks and ranks recipes: your pantry staples, your tastes, and the kitchen you cook in.</p>
+
+          {# Suggestion tuning + the kitchen appliances checklist share the
+             card: they all shape the same Cook page. On a satellite the
+             inputs are read-only (managed on the main server). #}
+          <div class="section-card">
             <div class="section-title"><i class="bi bi-sliders text-primary"></i> Suggestion Tuning</div>
             <div class="mb-3">
               <label class="form-label">Pantry Staples <span class="text-secondary small">(comma-separated)</span></label>
@@ -1778,9 +1803,12 @@
           </div>
         </div>
 
-        <!-- Connections: Home Assistant, cameras, remote access, and the phone QR code -->
+        <!-- Connections: Mealie and recipe sources, Home Assistant, cameras,
+             remote access, and the phone QR code -->
         <div class="tab-pane fade" id="pane-connections">
-          <p class="pane-intro">Links to the world around the app: Home Assistant, camera feeds, remote access from outside your network, and the "add from your phone" QR code.</p>
+          <p class="pane-intro">Links to the world around the app: Mealie and the recipe sources, Home Assistant, camera feeds, remote access from outside your network, and the "add from your phone" QR code.</p>
+
+          {{ recipe_connection_cards() }}
 
           <div class="alert alert-secondary d-flex align-items-center gap-2 mt-2">
             <i class="bi bi-info-circle"></i>
@@ -2517,24 +2545,22 @@ docker compose up -d</code></pre>
         </div>
 
 
-        {# Shared sub-area toggle for the Devices pane: This Device, the
-           on-screen Start Page, and (on a Pi) the physical Stream Deck. The
-           Start Page and Stream Deck editors stay separate tab-panes so their
-           long editors keep working; showDeckStart() flips between them. #}
+        {# Sub-area toggle for the Start Page & Stream Deck pane: the two
+           editors stay separate tab-panes so their long editors keep working;
+           showDeckStart() flips between them. Off-Pi there is no deck, so the
+           Start Page stands alone and no toggle renders. #}
         {% macro ds_toggle(active) %}
-        <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between this device, the Start Page, and the Stream Deck">
-          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'devices' else '' }}" data-ds="devices" onclick="showDeckStart('devices')"><i class="bi bi-hdd-stack me-1"></i>This Device</button>
-          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'start' else '' }}" data-ds="start" onclick="_startEditorInit(); showDeckStart('start')"><i class="bi bi-display me-1"></i>Start Page</button>
-          {% if is_pi %}
+        {% if is_pi %}
+        <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between the Start Page and the Stream Deck">
+          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'start' else '' }}" data-ds="start" onclick="showDeckStart('start')"><i class="bi bi-display me-1"></i>Start Page</button>
           <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'deck' else '' }}" data-ds="deck" onclick="showDeckStart('deck')"><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</button>
-          {% endif %}
         </div>
+        {% endif %}
         {% endmacro %}
 
-        <!-- Devices: this device's hardware and network, the Start Page and
-             Stream Deck editors, and the satellite fleet -->
+        <!-- Devices & Fleet: this device's hardware and network, and the
+             satellite fleet -->
         <div class="tab-pane fade" id="pane-devices">
-          {{ ds_toggle('devices') }}
           {% if features.satellite %}
           <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main Pantry Raider server.</p>
           {{ upstream_cards() }}
@@ -2678,7 +2704,7 @@ docker compose up -d</code></pre>
         <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
         {% endif %}
 
-        <!-- On-screen Start Page: a sub-area of the Devices pane -->
+        <!-- On-screen Start Page: the Start Page & Stream Deck pill's home -->
         <div class="tab-pane fade" id="pane-start-page">
           {{ ds_toggle('start') }}
           <p class="pane-intro">An optional full-screen launcher that works like an on-screen Stream Deck. It opens at <a href="ui/start" target="_blank">/ui/start</a> and replaces the fixed and floating menus while shown.</p>
@@ -2972,7 +2998,8 @@ docker compose up -d</code></pre>
         </div>
 
         {% if is_pi %}
-        <!-- Stream Deck (Pi appliance only): a sub-area of the Devices pane -->
+        <!-- Stream Deck (Pi appliance only): a sub-area of the Start Page &
+             Stream Deck pill, reached through its toggle -->
         <div class="tab-pane fade" id="pane-streamdeck">
           {{ ds_toggle('deck') }}
           <p class="pane-intro">Configure the Elgato Stream Deck attached to this appliance.</p>
@@ -4321,7 +4348,7 @@ function savePaneRecipes(btn) {
 }
 
 // Recipe suggestion tuning + the kitchen appliances checklist: the Suggestion
-// Tuning card of the Recipes & Meals pane, saved by its own button.
+// Tuning card of the Recipe Preferences pane, saved by its own button.
 function savePaneRecipePrefs(btn) {
   return savePane({
     staple_items:      optVal('staple_items'),
@@ -4470,37 +4497,29 @@ function resetNavEditor(btn) {
   if (out) out.innerHTML = '<span class="text-secondary"><i class="bi bi-info-circle me-1"></i>Reset to defaults. Click Save Navigation to keep it.</span>';
 }
 
-// Devices pane sub-areas: a top toggle switches between This Device
-// (#pane-devices), the on-screen Start Page (#pane-start-page), and the
-// physical Stream Deck editor (#pane-streamdeck). Only the Devices pane has a
-// sidebar pill; the other two are shown via this toggle, so their active
-// classes are flipped manually.
+// Start Page & Stream Deck sub-areas: the pane toggle switches between the
+// on-screen Start Page (#pane-start-page, the pill's own target) and the
+// physical Stream Deck editor (#pane-streamdeck). The deck pane has no pill of
+// its own, so its active classes are flipped manually.
 function showDeckStart(which) {
-  const v = document.getElementById('pane-devices');
   const s = document.getElementById('pane-start-page');
   const d = document.getElementById('pane-streamdeck');
   if (which === 'deck' && d) {
     // Bring any custom keys built on the Start Page across to the deck before
     // showing it, so a key made in one editor appears in the other with no reload.
     _deckStartSyncDefs('start-overrides', 'streamdeck-overrides', _sdOverrideRow);
-    if (v) v.classList.remove('active', 'show');
     if (s) s.classList.remove('active', 'show');
     d.classList.add('active', 'show');
     _sdRefreshCustom();
-  } else if (which === 'start' && s) {
-    if (v) v.classList.remove('active', 'show');
+  } else {
+    which = 'start';
     if (d) d.classList.remove('active', 'show');
-    s.classList.add('active', 'show');
+    if (s) s.classList.add('active', 'show');
     _startEditorInit();
     // ...and the same the other way: deck-built custom keys show on the Start Page.
     _deckStartSyncDefs('streamdeck-overrides', 'start-overrides', _startBuildRow);
     _startRenderPalette();
     _startEditorRender();
-  } else {
-    which = 'devices';
-    if (s) s.classList.remove('active', 'show');
-    if (d) d.classList.remove('active', 'show');
-    if (v) v.classList.add('active', 'show');
   }
   document.querySelectorAll('.ds-toggle [data-ds]').forEach(b =>
     b.classList.toggle('active', b.dataset.ds === which));
@@ -6042,21 +6061,26 @@ function showKioskWizard() {
 // links keep landing on the right pane when a pane is renamed. Add a row
 // ('pane-old-name': 'pane-new-name') in the same change that renames a pane.
 const PANE_HASH_ALIASES = {
+  // Original (pre-reorg) pane ids:
   'pane-theme': 'pane-appearance',
   'pane-navigation': 'pane-appearance',
   'pane-display': 'pane-screen',
   'pane-ai': 'pane-scanning',
   'pane-hardware': 'pane-scanning',
-  'pane-personalization-recipes': 'pane-recipes',
   'pane-personalization-storage': 'pane-inventory',
   'pane-homeassistant': 'pane-connections',
   'pane-cameras': 'pane-connections',
   'pane-tunnel': 'pane-connections',
-  'pane-start-page': 'pane-devices',
-  'pane-streamdeck': 'pane-devices',
   'pane-network': 'pane-devices',
   'pane-upstream': 'pane-devices',
   'pane-data': 'pane-backups',
+  // The Stream Deck editor is a sub-area of the Start Page pill; init() flips
+  // the toggle to the deck when the raw hash names it.
+  'pane-streamdeck': 'pane-start-page',
+  // The one-menu iteration merged Mealie, the recipe sources, and the tuning
+  // into a single Recipes & Meals pane; its sources half now lives in
+  // Connections (the tuning is back at #pane-personalization-recipes).
+  'pane-recipes': 'pane-connections',
 };
 function _resolvePaneHash(hash) {
   if (!hash || !hash.startsWith('#pane-')) return hash;
@@ -6064,10 +6088,50 @@ function _resolvePaneHash(hash) {
   return '#' + (PANE_HASH_ALIASES[id] || id);
 }
 
+// Two side menus behind the top toggle (docs/design/settings-reorg.md,
+// iteration 2): Personalization ('p', data-mgroup) holds the everyday
+// taste-level panes; Settings ('s') the set-and-forget administration. One
+// menu shows at a time; the last choice is remembered per device and a
+// #pane-* hash, an in-page link, or a search hit selects the right menu.
+let _menuGroup = 'p';
+function _menuToggleButtons() {
+  document.getElementById('menu-toggle-p')?.classList.toggle('active', _menuGroup === 'p');
+  document.getElementById('menu-toggle-s')?.classList.toggle('active', _menuGroup === 's');
+}
+function _applyMenuGroup() {
+  _menuToggleButtons();
+  document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(function (el) {
+    el.classList.toggle('d-none', (el.getAttribute('data-mgroup') || 's') !== _menuGroup);
+  });
+}
+function _setMenuGroup(group) {
+  _menuGroup = (group === 's') ? 's' : 'p';
+  try { localStorage.setItem('settingsMenu', _menuGroup); } catch (e) { }
+}
+function showSettingsMenu(group, activate) {
+  _setMenuGroup(group);
+  _applyMenuGroup();
+  // Keep the already-active pane when it belongs to this menu; otherwise
+  // activate the requested pill, falling back to the menu's first pane.
+  var pill = null, first = null;
+  document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(function (el) {
+    if ((el.getAttribute('data-mgroup') || 's') !== _menuGroup) return;
+    if (!first) first = el;
+    if (!pill && el.classList.contains('active')) pill = el;
+  });
+  if (activate && (activate.getAttribute('data-mgroup') || 's') === _menuGroup) pill = activate;
+  pill = pill || first;
+  if (pill) {
+    try { bootstrap.Tab.getOrCreateInstance(pill).show(); }
+    catch (e) { pill.click(); }
+  }
+}
+
 // Settings search: filters the side menu to panes whose title, section
-// headers, or field labels contain the query, and outlines the matching
-// section cards so the hit is findable inside a long pane. Clearing the box
-// restores the full menu.
+// headers, or field labels contain the query, searching both menus at once
+// (hits from the other menu appear in the list and switch the toggle when
+// opened), and outlines the matching section cards so the hit is findable
+// inside a long pane. Clearing the box restores the chosen menu.
 let _settingsSearchIndex = null;  // [{pill, panes, text}]
 function _buildSettingsSearchIndex() {
   _settingsSearchIndex = [];
@@ -6076,13 +6140,11 @@ function _buildSettingsSearchIndex() {
     const pane = target ? document.querySelector(target) : null;
     if (!pane) return;
     const panes = [pane];
-    // The Start Page and Stream Deck panes have no pill of their own; they are
-    // reached through the Devices pill, so index their text under that pill.
+    // The Stream Deck editor has no pill of its own; it is reached through
+    // the Start Page pill's toggle, so index its text under that pill.
     if (pill.id === 'pill-deckstart') {
-      ['pane-start-page', 'pane-streamdeck'].forEach(function (id) {
-        const sub = document.getElementById(id);
-        if (sub) panes.push(sub);
-      });
+      const sub = document.getElementById('pane-streamdeck');
+      if (sub) panes.push(sub);
     }
     const parts = [pill.textContent];
     panes.forEach(function (p) {
@@ -6103,10 +6165,8 @@ function settingsSearch(q) {
   if (_settingsSearchIndex === null) _buildSettingsSearchIndex();
   _clearSearchHits();
   if (!q) {
-    // Back to the full menu; the active pane stays where it is.
-    document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(function (el) {
-      el.classList.remove('d-none');
-    });
+    // Back to the chosen menu's pills; the active pane stays where it is.
+    _applyMenuGroup();
     return;
   }
   var firstHit = null;
@@ -6141,17 +6201,48 @@ function _revealMenu() {
 setTimeout(_revealMenu, 1500);
 
 (function init() {
-  // Activate the pane a #pane-* hash asks for, then reveal the content, so a
-  // later failure in any optional init step cannot leave the page blank.
-  // Renamed panes resolve through PANE_HASH_ALIASES first.
+  // Keep the top toggle honest: whichever pill just showed (a click, a search
+  // hit, a hash, or an in-page link) decides the visible menu. During an
+  // active search only the toggle buttons move; the pill list stays filtered.
+  // Attached before the hash activation below so the very first show (which
+  // can fire without a transition while the menu is still hidden) is caught.
+  document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(p => {
+    p.addEventListener('shown.bs.tab', () => {
+      _setMenuGroup(p.getAttribute('data-mgroup') || 's');
+      const q = document.getElementById('settings-search');
+      if (q && q.value.trim()) _menuToggleButtons(); else _applyMenuGroup();
+      // The Stream Deck pane has no pill of its own (it is reached through
+      // the Start Page pill's toggle), so make sure it never lingers visible
+      // when any other pane opens.
+      if (p.id !== 'pill-deckstart') {
+        const deck = document.getElementById('pane-streamdeck');
+        if (deck) deck.classList.remove('active', 'show');
+      }
+    });
+  });
+  // Opening the Start Page & Stream Deck pill programmatically (a hash or a
+  // search hit skips its onclick) still initializes the right sub-area; a raw
+  // #pane-streamdeck hash lands on the deck editor.
+  const _dsPill = document.getElementById('pill-deckstart');
+  if (_dsPill) _dsPill.addEventListener('shown.bs.tab', () =>
+    showDeckStart(window.location.hash === '#pane-streamdeck' ? 'deck' : 'start'));
+
+  // Pick the visible menu and activate the pane a #pane-* hash asks for, then
+  // reveal the content, so a later failure in any optional init step cannot
+  // leave the page blank. Renamed panes resolve through PANE_HASH_ALIASES
+  // first; a hash pill selects its own menu, else the last-used choice wins,
+  // else Personalization (the everyday menu).
   try {
     var hash0 = _resolvePaneHash(window.location.hash);
     var hashBtn0 = (hash0 && hash0.startsWith('#pane-'))
-      ? document.querySelector('[data-bs-target="' + hash0 + '"]') : null;
+      ? document.querySelector('.side-menu [data-bs-target="' + hash0 + '"]') : null;
+    var group0;
     if (hashBtn0) {
-      try { bootstrap.Tab.getOrCreateInstance(hashBtn0).show(); }
-      catch (e) { hashBtn0.click(); }
+      group0 = hashBtn0.getAttribute('data-mgroup') || 's';
+    } else {
+      try { group0 = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { group0 = 'p'; }
     }
+    showSettingsMenu(group0, hashBtn0);
   } catch (e) { }
   _revealMenu();
 
@@ -6159,19 +6250,6 @@ setTimeout(_revealMenu, 1500);
   showRecipeSource();
   scannerTypeChanged();
   renderNavEditor();
-  // Devices sub-areas: the Start Page and Stream Deck panes have no pill of
-  // their own (they are reached through the Devices pill's toggle), so make
-  // sure they never linger visible when any sidebar pill is clicked.
-  document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(p => {
-    p.addEventListener('click', () => {
-      ['pane-streamdeck', 'pane-start-page'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el) el.classList.remove('active', 'show');
-      });
-    });
-  });
-  const _dsPill = document.getElementById('pill-deckstart');
-  if (_dsPill) _dsPill.addEventListener('shown.bs.tab', () => showDeckStart('devices'));
   {% if not is_satellite %}
   tunnelModeChanged();
   _initTunnelStatus();
@@ -6195,19 +6273,9 @@ setTimeout(_revealMenu, 1500);
   toggleAuthRequired();
   {% endif %}
 
-  // A bookmark to the (pill-less) Start Page or Stream Deck panes still works:
-  // open the Devices pill, then flip its toggle to the right sub-area. The raw
-  // hash is checked here because the alias map sends both to #pane-devices.
-  var rawHash = window.location.hash;
-  if (rawHash === '#pane-streamdeck' || rawHash === '#pane-start-page') {
-    var dsPill = document.getElementById('pill-deckstart');
-    if (dsPill) {
-      try { bootstrap.Tab.getOrCreateInstance(dsPill).show(); } catch (e) { dsPill.click(); }
-      setTimeout(function () { showDeckStart(rawHash === '#pane-streamdeck' ? 'deck' : 'start'); }, 60);
-    }
-  }
-  // If we arrived via a #pane-* hash, scroll it into view (the group was
-  // already selected at the top of init()).
+  // If we arrived via a #pane-* hash, scroll it into view (the menu and pane
+  // were already selected at the top of init(); a #pane-streamdeck bookmark
+  // flips to the deck editor via the pill's shown handler above).
   var hash = _resolvePaneHash(window.location.hash);
   if (hash && hash.startsWith('#pane-')) {
     setTimeout(function() {

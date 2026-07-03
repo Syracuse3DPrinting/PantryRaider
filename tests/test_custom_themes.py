@@ -157,10 +157,10 @@ def test_display_settings_live_in_screen_pane(client, monkeypatch):
     screen = html.split('id="pane-screen"', 1)[1].split('id="pane-', 1)[0]
     assert 'id="ui_scale"' in screen
     assert 'id="screensaver_minutes"' in screen
-    # The Start Page and Stream Deck have no pill of their own: they are
-    # reached via the Devices pill and the in-pane toggle.
+    # The Start Page & Stream Deck pill targets the Start Page; the deck
+    # editor has no pill of its own and is reached via the in-pane toggle.
     assert 'data-bs-target="#pane-streamdeck"' not in html
-    assert 'data-bs-target="#pane-start-page"' not in html
+    assert 'data-bs-target="#pane-start-page"' in html
     assert 'onclick="showDeckStart(\'deck\')"' in html
     assert "showDeckStart('start')" in html
 

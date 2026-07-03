@@ -1,13 +1,17 @@
 """Settings reorganization (docs/design/settings-reorg.md, FoodAssistant-y78w).
 
-The Settings page has one menu of ten intent groups (the old Settings /
-Personalization toggle is gone). These tests guard the new structure:
+Iteration 2: the Settings page has two menus behind a top toggle, in the
+Plex/Jellyfin mold. Personalization (default) holds the everyday taste-level
+panes; Settings holds the set-and-forget administration. These tests guard
+that structure:
 
-* every group pill renders for the shapes it applies to,
-* no form control from the pre-reorg page was lost in the move (the id lists
+* every pane pill renders in the right menu (``data-mgroup``) for the shapes
+  it applies to, and the top toggle is present with Personalization first,
+* no form control from the pre-reorg page was lost in the moves (the id lists
   below were collected from the old template, per deployment shape),
-* old ``#pane-*`` deep links resolve through the ``PANE_HASH_ALIASES`` map,
-* the Devices pane keeps the This Device / Start Page / Stream Deck toggle.
+* both the original pre-reorg ``#pane-*`` deep links and the one-menu
+  iteration's links resolve through the ``PANE_HASH_ALIASES`` map,
+* the Start Page & Stream Deck pane keeps its two-editor toggle.
 """
 from __future__ import annotations
 
@@ -53,18 +57,21 @@ def _render(client, monkeypatch, *, mode: str, is_pi: bool) -> str:
 
 SHAPES = [("server", False), ("pi_hosted", True), ("pi_remote", True)]
 
-# The ten intent groups and which shapes get a pill for each.
-GROUP_PILLS = {
-    "pane-appearance": {"server", "pi_hosted", "pi_remote"},
-    "pane-screen": {"server", "pi_hosted", "pi_remote"},
-    "pane-scanning": {"server", "pi_hosted", "pi_remote"},
-    "pane-recipes": {"server", "pi_hosted", "pi_remote"},
-    "pane-inventory": {"server", "pi_hosted"},
-    "pane-connections": {"server", "pi_hosted", "pi_remote"},
-    "pane-devices": {"server", "pi_hosted", "pi_remote"},
-    "pane-security": {"server", "pi_hosted", "pi_remote"},
-    "pane-backups": {"server", "pi_hosted", "pi_remote"},
-    "pane-advanced": {"server", "pi_hosted", "pi_remote"},
+# Menu membership: pane -> (menu group, shapes that get the pill).
+MENU_PILLS = {
+    # Personalization: touched often, the default menu.
+    "pane-appearance": ("p", {"server", "pi_hosted", "pi_remote"}),
+    "pane-screen": ("p", {"server", "pi_hosted", "pi_remote"}),
+    "pane-start-page": ("p", {"server", "pi_hosted", "pi_remote"}),
+    "pane-personalization-recipes": ("p", {"server", "pi_hosted", "pi_remote"}),
+    # Settings: set-and-forget server administration.
+    "pane-connections": ("s", {"server", "pi_hosted", "pi_remote"}),
+    "pane-scanning": ("s", {"server", "pi_hosted", "pi_remote"}),
+    "pane-inventory": ("s", {"server", "pi_hosted"}),
+    "pane-devices": ("s", {"server", "pi_hosted", "pi_remote"}),
+    "pane-security": ("s", {"server", "pi_hosted", "pi_remote"}),
+    "pane-backups": ("s", {"server", "pi_hosted", "pi_remote"}),
+    "pane-advanced": ("s", {"server", "pi_hosted", "pi_remote"}),
 }
 
 # Every form-control id the settings side (below the side menu) rendered
@@ -141,15 +148,28 @@ EXPECTED_IDS = {
 }
 
 
-def test_single_menu_with_ten_groups(client, monkeypatch):
+def test_two_menus_with_grouped_pills(client, monkeypatch):
     for mode, is_pi in SHAPES:
         html = _render(client, monkeypatch, mode=mode, is_pi=is_pi)
-        for pane, shapes in GROUP_PILLS.items():
-            pill = f'data-bs-target="#{pane}"' in html
-            assert pill == (mode in shapes), (mode, pane, pill)
-        # The Settings / Personalization toggle is gone.
-        assert "showSettingsMenu(" not in html
-        assert 'data-mgroup="p"' not in html
+        for pane, (group, shapes) in MENU_PILLS.items():
+            pill = re.search(
+                r'data-mgroup="([ps])" data-bs-toggle="pill" '
+                rf'data-bs-target="#{pane}"',
+                html,
+            )
+            if mode in shapes:
+                assert pill, (mode, pane, "pill missing")
+                assert pill.group(1) == group, (mode, pane, pill.group(1))
+            else:
+                assert not pill, (mode, pane, "unexpected pill")
+        # The dissolved Recipes & Meals pane has no pill and no pane div.
+        assert 'data-bs-target="#pane-recipes"' not in html
+        assert 'id="pane-recipes"' not in html
+        # The top toggle is back, with Personalization as the default menu.
+        assert 'id="menu-toggle-p"' in html
+        assert 'id="menu-toggle-s"' in html
+        assert "showSettingsMenu(" in html
+        assert "localStorage.getItem('settingsMenu') || 'p'" in html
 
 
 def test_no_setting_lost_in_reorg(client, monkeypatch):
@@ -170,44 +190,74 @@ def test_no_setting_lost_in_reorg(client, monkeypatch):
 def test_old_pane_hashes_have_aliases(client, monkeypatch):
     html = _render(client, monkeypatch, mode="server", is_pi=False)
     for old, new in {
+        # Original (pre-reorg) anchors.
         "pane-theme": "pane-appearance",
         "pane-navigation": "pane-appearance",
         "pane-display": "pane-screen",
         "pane-ai": "pane-scanning",
         "pane-hardware": "pane-scanning",
-        "pane-personalization-recipes": "pane-recipes",
         "pane-personalization-storage": "pane-inventory",
         "pane-homeassistant": "pane-connections",
         "pane-cameras": "pane-connections",
         "pane-tunnel": "pane-connections",
-        "pane-start-page": "pane-devices",
-        "pane-streamdeck": "pane-devices",
         "pane-network": "pane-devices",
         "pane-upstream": "pane-devices",
         "pane-data": "pane-backups",
+        "pane-streamdeck": "pane-start-page",
+        # One-menu iteration anchor whose pane dissolved.
+        "pane-recipes": "pane-connections",
     }.items():
         assert f"'{old}': '{new}'," in html, f"missing alias {old} -> {new}"
-    # Dissolved panes leave no dead pane divs behind (start-page/streamdeck
-    # keep their ids as Devices sub-areas).
+    # Every iteration-1 anchor still lands: as a live pane div, or via alias.
+    for anchor in ("pane-appearance", "pane-screen", "pane-scanning",
+                   "pane-inventory", "pane-connections", "pane-devices",
+                   "pane-security", "pane-backups", "pane-advanced",
+                   "pane-start-page"):
+        assert f'id="{anchor}"' in html, f"iteration-1 anchor lost: {anchor}"
+    # Revived panes must not shadow themselves in the alias map.
+    assert "'pane-personalization-recipes':" not in html
+    assert "'pane-start-page':" not in html
+    # Dissolved panes leave no dead pane divs behind.
     for gone in ("pane-theme", "pane-navigation", "pane-display", "pane-ai",
-                 "pane-hardware", "pane-personalization-recipes",
-                 "pane-personalization-storage", "pane-homeassistant",
-                 "pane-cameras", "pane-tunnel", "pane-network",
-                 "pane-upstream", "pane-data"):
+                 "pane-hardware", "pane-personalization-storage",
+                 "pane-homeassistant", "pane-cameras", "pane-tunnel",
+                 "pane-network", "pane-upstream", "pane-data",
+                 "pane-recipes"):
         assert f'id="{gone}"' not in html, f"stale pane div: {gone}"
 
 
-def test_devices_pane_sub_toggle(client, monkeypatch):
-    # On a Pi all three sub-areas are offered; off-Pi there is no deck button.
+def test_start_deck_pane_sub_toggle(client, monkeypatch):
+    # On a Pi the pill offers both editors through the pane toggle; off-Pi
+    # there is no deck, so the Start Page stands alone with no toggle.
     pi = _render(client, monkeypatch, mode="pi_hosted", is_pi=True)
-    assert "showDeckStart('devices')" in pi
     assert "showDeckStart('start')" in pi
     assert "showDeckStart('deck')" in pi
     assert 'id="pane-start-page"' in pi and 'id="pane-streamdeck"' in pi
+    assert "Start Page &amp; Stream Deck" in pi
     srv = _render(client, monkeypatch, mode="server", is_pi=False)
-    assert "showDeckStart('devices')" in srv
     assert 'id="pane-start-page"' in srv
     assert 'id="pane-streamdeck"' not in srv
+    assert 'class="btn-group mb-3 ds-toggle"' not in srv
+    # The old three-way This Device toggle is gone everywhere.
+    assert "showDeckStart('devices')" not in pi
+    assert "showDeckStart('devices')" not in srv
+
+
+def test_recipe_split_between_menus(client, monkeypatch):
+    """Mealie + external sources live in Connections (Settings menu); the
+    suggestion tuning lives in Recipe Preferences (Personalization menu)."""
+    html = _render(client, monkeypatch, mode="server", is_pi=False)
+    conn = html.split('id="pane-connections"', 1)[1].split('id="pane-', 1)[0]
+    for field in ("mealie_base_url", "mealie_api_key", "recipe_source",
+                  "themealdb_api_key", "spoonacular_api_key"):
+        assert field in conn, f"{field} not in Connections"
+    assert 'onclick="savePaneRecipes(this)"' in conn
+    prefs = html.split('id="pane-personalization-recipes"', 1)[1] \
+                .split('id="pane-', 1)[0]
+    for field in ("staple_items", "cook_ai_context", "kitchen-appliances",
+                  "perishable_days", "expiring_soon_days", "suggest_per_tier"):
+        assert field in prefs, f"{field} not in Recipe Preferences"
+    assert 'onclick="savePaneRecipePrefs(this)"' in prefs
 
 
 def test_satellite_devices_pane_holds_main_server(client, monkeypatch):
@@ -215,7 +265,7 @@ def test_satellite_devices_pane_holds_main_server(client, monkeypatch):
     dev = sat.split('id="pane-devices"', 1)[1].split('id="pane-', 1)[0]
     assert "remote_server_url" in dev
     assert "syncFromUpstream" in dev
-    # The kiosk PIN moved to Security & Access.
+    # The kiosk PIN stays in Security & Access.
     sec = sat.split('id="pane-security"', 1)[1].split('id="pane-', 1)[0]
     assert "kiosk_pin" in sec
     assert "kiosk_readonly_when_locked" in sec

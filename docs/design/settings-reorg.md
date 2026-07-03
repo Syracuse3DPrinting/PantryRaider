@@ -229,3 +229,47 @@ setting between panes:
    Display and Backup panes that had no help text.
 
 Everything in section 3 (the actual moves and merges) waits for review.
+
+## 6. Iteration 2 (Dan's review)
+
+Dan reviewed the one-menu layout on-device and rejected the single menu:
+"I like settings and personalizations as separate since users won't be
+changing server settings and such often." The model to follow is Plex and
+Jellyfin, which split user preferences (touched often) from server
+administration (touched rarely). So the top toggle is back, showing one
+side menu at a time, defaulting to Personalization and remembering the
+last choice per device. Everything else the reorganization achieved stays:
+intent-named panes, the search box, per-card saves, anchor aliases, and
+the no-setting-lost guarantee.
+
+### The two menus
+
+| Menu | Pane | Contents |
+| --- | --- | --- |
+| Personalization (default) | Appearance | theme, custom themes, background image, nav tab editor |
+| Personalization | Screen & Sleep | unchanged from iteration 1 |
+| Personalization | Start Page & Stream Deck | the two editors, promoted out of Devices; the pane toggle is trimmed to just Start Page / Stream Deck (the This Device option is gone) |
+| Personalization | Recipe Preferences | the Suggestion Tuning card: staples, AI recipe context, appliances, thresholds (`pane-personalization-recipes`, its pre-reorg id) |
+| Settings | Connections | gains Mealie and the external recipe sources; keeps HA + events, cameras, tunnel, QR address |
+| Settings | AI & Scanning | `pane-scanning` renamed; contents unchanged |
+| Settings | Inventory & Storage | unchanged (Grocy card + storage categories; the categories are setup-ish, so they stay with Grocy) |
+| Settings | Devices & Fleet | satellite registry, LAN scan, attached hardware, device hostname, Wi-Fi/network; the satellite's Main Server + Sync cards |
+| Settings | Security & Access | unchanged, including the kiosk PIN |
+| Settings | Backups & Updates | unchanged |
+| Settings | Advanced | unchanged |
+
+### Changes relative to iteration 1
+
+- `pane-recipes` dissolved: Mealie + external sources render in
+  `pane-connections`, the tuning card in the revived
+  `pane-personalization-recipes`. The alias map gains
+  `pane-recipes -> pane-connections`.
+- `pane-start-page` is a pill target again (Personalization); the deck
+  editor stays a pill-less sub-pane behind the two-way toggle, and
+  `pane-streamdeck` aliases to `pane-start-page` (init still flips the
+  toggle to the deck for a raw `#pane-streamdeck` hash).
+- The `pane-personalization-recipes` and `pane-start-page` alias rows are
+  removed (both are live panes again); every other original and
+  iteration-1 anchor keeps resolving.
+- The search box indexes both menus at once; opening a hit from the other
+  menu switches the top toggle to match.

@@ -23,7 +23,7 @@ What Pantry Raider adds on top of Grocy:
 
 - [Platforms and deployment](platforms.md): the server and Raspberry Pi
   appliance modes, hosting the stack, AI providers, Home Assistant, and HTTPS.
-- [Appearance and on-screen features](personalization.md): themes,
+- [Personalization and on-screen features](personalization.md): themes,
   background images, the navigation editor, the Start Page, weather, and on-screen
   Home Assistant events.
 - [Settings matrix](settings-matrix.md): every persisted setting and where it

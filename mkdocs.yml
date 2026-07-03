@@ -16,7 +16,7 @@ theme:
 nav:
   - Home: index.md
   - Platforms and deployment: platforms.md
-  - Appearance and on-screen features: personalization.md
+  - Personalization and on-screen features: personalization.md
   - Settings matrix: settings-matrix.md
   - API reference: api.md
   - Hardware:

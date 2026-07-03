@@ -835,14 +835,14 @@ def test_streamdeck_count_endpoints_degrade_when_unconfigured(client):
 
 
 def test_settings_menu_has_intent_groups(client):
-    """The single settings menu renders the ten intent-group pills on a
-    normal server (docs/design/settings-reorg.md)."""
+    """The two settings menus render their intent-group pills on a normal
+    server (docs/design/settings-reorg.md, iteration 2)."""
     r = client.get("/setup")
     assert r.status_code == 200
-    for pane in ("pane-appearance", "pane-screen", "pane-scanning",
-                 "pane-recipes", "pane-inventory", "pane-connections",
-                 "pane-devices", "pane-security", "pane-backups",
-                 "pane-advanced"):
+    for pane in ("pane-appearance", "pane-screen", "pane-start-page",
+                 "pane-personalization-recipes", "pane-scanning",
+                 "pane-inventory", "pane-connections", "pane-devices",
+                 "pane-security", "pane-backups", "pane-advanced"):
         assert f'data-bs-target="#{pane}"' in r.text, f"missing pill: {pane}"
     # Satellite-only Main Server card is not shown on a normal server.
     assert 'id="remote_server_url"' not in r.text
