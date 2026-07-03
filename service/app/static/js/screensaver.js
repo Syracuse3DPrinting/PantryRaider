@@ -1,15 +1,19 @@
 // Kiosk screensaver (FoodAssistant-y65x).
 //
 // Runs only in kiosk mode. After the configured idle minutes the page fades to
-// a near-black overlay with a floating clock (and the brand mark), and any
-// touch or key press dismisses it instantly. This is the SOFT layer for panels
-// where full display blanking is unwanted: the separate "Display sleep"
-// setting powers the panel itself off via the host bridge, while this one
-// keeps the display lit and just covers the page. The clock drifts to a new
-// spot every minute so a static image never burns into the panel.
+// a near-black overlay with the Pantry Raider logo bouncing slowly around the
+// screen (clock and date riding under it), and any touch or key press
+// dismisses it instantly. This is the SOFT layer for panels where full display
+// blanking is unwanted: the separate "Display sleep" setting powers the panel
+// itself off via the host bridge, while this one keeps the display lit and
+// just covers the page. The constant motion is the burn-in guard.
 //
 // The timeout comes from #screensaver-config (data-minutes, rendered from the
 // per-device saved setting); 0 or a missing config leaves this a no-op.
+//
+// Planned phases (separate beads): slideshow of images from an attached USB
+// drive, and a mode that spans the Stream Deck keys and the panel as one large
+// canvas.
 (function () {
   try {
     if (localStorage.getItem('kioskMode') !== 'true') return;
@@ -22,11 +26,11 @@
   if (!minutes || minutes <= 0) return;
 
   var IDLE_MS = minutes * 60 * 1000;
-  var DRIFT_MS = 60 * 1000; // move the clock once a minute (burn-in guard)
+  var SPEED = 30; // pixels per second: a slow, calm glide
   var lastActivity = Date.now();
   var overlay = null;
   var clockTimer = null;
-  var driftTimer = null;
+  var rafId = null;
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
@@ -41,15 +45,38 @@
     });
   }
 
-  function drift() {
-    if (!overlay) return;
-    var block = overlay.querySelector('.ss-block');
-    if (!block) return;
-    // Keep the block fully on screen: pick a spot in the middle 60% band.
-    var x = 10 + Math.random() * 60;
-    var y = 15 + Math.random() * 55;
-    block.style.left = x + '%';
-    block.style.top = y + '%';
+  // DVD-style bounce: the block glides at constant speed and reflects off the
+  // viewport edges. Frame-time based so the speed is the same on a slow Pi
+  // and a fast desktop; transform keeps the motion on the compositor.
+  function startBounce(block) {
+    var x = null, y = null, dx = 1, dy = 1, last = null;
+    function step(ts) {
+      if (!overlay) return;
+      var w = window.innerWidth, h = window.innerHeight;
+      var r = block.getBoundingClientRect();
+      var maxX = Math.max(0, w - r.width);
+      var maxY = Math.max(0, h - r.height);
+      if (x === null) {
+        x = Math.random() * maxX;
+        y = Math.random() * maxY;
+        var a = (Math.random() * 0.5 + 0.4); // avoid near-flat angles
+        dx = (Math.random() < 0.5 ? -1 : 1) * a;
+        dy = (Math.random() < 0.5 ? -1 : 1) * Math.sqrt(1 - a * a || 0.5);
+      }
+      if (last !== null) {
+        var dt = Math.min(100, ts - last) / 1000;
+        x += dx * SPEED * dt;
+        y += dy * SPEED * dt;
+        if (x <= 0) { x = 0; dx = Math.abs(dx); }
+        if (x >= maxX) { x = maxX; dx = -Math.abs(dx); }
+        if (y <= 0) { y = 0; dy = Math.abs(dy); }
+        if (y >= maxY) { y = maxY; dy = -Math.abs(dy); }
+      }
+      last = ts;
+      block.style.transform = 'translate(' + x + 'px,' + y + 'px)';
+      rafId = requestAnimationFrame(step);
+    }
+    rafId = requestAnimationFrame(step);
   }
 
   function show() {
@@ -58,23 +85,22 @@
     overlay.id = 'kiosk-screensaver';
     overlay.style.cssText =
       'position:fixed;inset:0;z-index:2147483000;background:#000;' +
-      'opacity:0;transition:opacity 1.2s ease;cursor:none;';
+      'opacity:0;transition:opacity 1.2s ease;cursor:none;overflow:hidden;';
     var block = document.createElement('div');
     block.className = 'ss-block';
     block.style.cssText =
-      'position:absolute;left:50%;top:40%;transform:translate(-50%,-50%);' +
-      'text-align:center;color:#9aa0a6;font-family:inherit;' +
-      'transition:left 2s ease, top 2s ease;';
+      'position:absolute;left:0;top:0;text-align:center;color:#9aa0a6;' +
+      'font-family:inherit;will-change:transform;';
     var mark = document.createElement('img');
     mark.src = 'static/icons/logo-mark.png';
     mark.alt = '';
-    mark.style.cssText = 'width:56px;height:56px;opacity:0.35;display:block;margin:0 auto 10px;';
+    mark.style.cssText = 'width:18vmin;height:18vmin;opacity:0.85;display:block;margin:0 auto 1.5vmin;';
     var time = document.createElement('div');
     time.className = 'ss-time';
-    time.style.cssText = 'font-size:14vmin;font-weight:600;line-height:1;color:#cfd3d8;';
+    time.style.cssText = 'font-size:6vmin;font-weight:600;line-height:1;color:#cfd3d8;';
     var date = document.createElement('div');
     date.className = 'ss-date';
-    date.style.cssText = 'font-size:3.5vmin;margin-top:1vmin;opacity:0.7;';
+    date.style.cssText = 'font-size:2.4vmin;margin-top:0.8vmin;opacity:0.7;';
     block.appendChild(mark);
     block.appendChild(time);
     block.appendChild(date);
@@ -86,7 +112,7 @@
       if (overlay) overlay.style.opacity = '1';
     });
     clockTimer = setInterval(updateClock, 5000);
-    driftTimer = setInterval(drift, DRIFT_MS);
+    startBounce(block);
   }
 
   function hide() {
@@ -94,7 +120,8 @@
     var el = overlay;
     overlay = null;
     clearInterval(clockTimer);
-    clearInterval(driftTimer);
+    if (rafId) cancelAnimationFrame(rafId);
+    rafId = null;
     if (el.parentNode) el.parentNode.removeChild(el);
   }
 
