@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.89"
+APP_VERSION = "0.7.90"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -352,6 +352,7 @@ _SAVEABLE = [
     "grocy_base_url", "grocy_api_key", "grocy_public_url",
     "mealie_base_url", "mealie_api_key", "mealie_public_url",
     "device_hostname",
+    "qr_url_mode", "qr_public_url",
     "recipe_source", "themealdb_api_key", "spoonacular_api_key",
     "staple_items", "cook_ai_context", "kitchen_appliances",
     "perishable_days", "expiring_soon_days", "suggest_per_tier",
@@ -778,6 +779,17 @@ class Settings(BaseSettings):
     # a stable name when there are several appliances on one LAN, so the link
     # never depends on the device being named "foodassistant".
     device_hostname: str = ""
+
+    # Which address the phone QR code encodes (the "Add items from your phone"
+    # modal and the /ui/qr default). "auto" swaps a loopback request host (the
+    # kiosk browser reaches the app at localhost) for this device's LAN IP so a
+    # scanned code works from a phone on the same network. "public" encodes the
+    # public URL below instead, for phones that reach the app from outside.
+    qr_url_mode: str = "auto"
+    # External address to encode when qr_url_mode is "public", e.g. a
+    # reverse-proxied https URL. Empty falls back to the tunnel URL when one is
+    # active, then to the auto behavior.
+    qr_public_url: str = ""
 
     def _server_lan_host(self) -> str:
         """The main server's LAN host for building satellite browser links.

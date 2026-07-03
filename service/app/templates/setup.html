@@ -1834,6 +1834,18 @@
             <div class="form-text">When on, a finished kitchen timer is shown only by highlighting it in the timer window, with no audible chime. This setting is per device, so each kiosk can be loud or silent.</div>
           </div>
 
+          <div class="mb-3">
+            <label class="form-label" for="qr_url_mode">Phone QR code address{{ info('Which address the "Add items from your phone" QR code points at. Auto uses this device\'s network address, so a phone on the same network can open it even when the kiosk itself browses at localhost. Public URL encodes the external address below, for phones that reach this app through a reverse proxy or tunnel.') }}</label>
+            <select class="form-select form-select-sm" id="qr_url_mode" style="max-width:320px">
+              <option value="auto"   {{ 'selected' if (s.qr_url_mode or 'auto') == 'auto' else '' }}>Auto (this device's network address)</option>
+              <option value="public" {{ 'selected' if s.qr_url_mode == 'public' else '' }}>Public URL</option>
+            </select>
+            <input type="url" class="form-control form-control-sm mt-2" id="qr_public_url"
+                   placeholder="https://pantry.yourdomain.com" style="max-width:420px"
+                   value="{{ s.qr_public_url }}">
+            <div class="form-text">Public URL to encode when the mode above is Public URL. Leave it empty to use the remote-access tunnel address when one is active.</div>
+          </div>
+
           <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNavigation(this)">
             <i class="bi bi-check-lg me-1"></i>Save Navigation
           </button>
@@ -4326,6 +4338,8 @@ function savePaneRecipePrefs(btn) {
 function savePaneNavigation(btn) {
   return savePane({
     quiet_mode: chk('quiet_mode'),
+    qr_url_mode: optVal('qr_url_mode'),
+    qr_public_url: optVal('qr_public_url'),
     ...navPayload(),
   }, btn, 'interface-save-result');
 }

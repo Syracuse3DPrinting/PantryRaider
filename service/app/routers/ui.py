@@ -213,22 +213,27 @@ async def expiring_page(request: Request, days: int = 7):
         "items": items,
         "days": days,
         "active": "expiring",
+        "mealie_configured": settings.mealie_configured(),
         "message": request.query_params.get("msg"),
         "message_type": request.query_params.get("msg_type", "success"),
     })
 
 
 @router.post("/consume/{product_id}")
-async def consume_item(request: Request, product_id: int, amount: float = Form(1.0)):
+async def consume_item(request: Request, product_id: int, amount: float = Form(1.0),
+                       name: str = Form("")):
     grocy = GrocyClient()
     try:
         await grocy.consume_stock(product_id, amount)
-        msg = "Item marked as consumed."
+        # Name the product in the toast so it is clear what just left stock
+        # (an icon-only button plus a vague toast read wrong, FoodAssistant-w0kh).
+        msg = f"{name} marked as consumed." if name.strip() else "Item marked as consumed."
         msg_type = "success"
     except Exception as e:
         msg = f"Error: {e}"
         msg_type = "danger"
-    return ingress_redirect(request, f"/ui/expiring?msg={msg}&msg_type={msg_type}")
+    from urllib.parse import quote
+    return ingress_redirect(request, f"/ui/expiring?msg={quote(msg)}&msg_type={msg_type}")
 
 
 @router.get("/journal", response_class=HTMLResponse)

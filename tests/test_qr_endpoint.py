@@ -67,3 +67,72 @@ def test_qr_rejects_non_http_url(qr_client):
     assert r.status_code == 200
     assert "javascript:alert" not in r.text
     assert "/ui/add" in r.text
+
+
+# --- phone_base_url: pick an address a phone can actually reach (75ak) -------
+
+def _phone_base_url():
+    from app.routers.qr import phone_base_url
+    return phone_base_url
+
+
+def test_phone_base_swaps_localhost_for_lan_ip(qr_client):
+    # The kiosk browser hits the app at localhost; the QR must encode the LAN
+    # address instead so a phone scanning it lands somewhere reachable.
+    f = _phone_base_url()
+    assert f("localhost:9284", "auto", "", "192.168.1.42") == "http://192.168.1.42:9284"
+    assert f("127.0.0.1:9284", "auto", "", "192.168.1.42") == "http://192.168.1.42:9284"
+    assert f("0.0.0.0:9284", "auto", "", "192.168.1.42") == "http://192.168.1.42:9284"
+
+
+def test_phone_base_keeps_reachable_host(qr_client):
+    f = _phone_base_url()
+    assert f("192.168.1.50:9284", "auto", "", "192.168.1.42") == "http://192.168.1.50:9284"
+    assert f("kitchen-pi.local:9284", "auto", "", "192.168.1.42") == "http://kitchen-pi.local:9284"
+
+
+def test_phone_base_localhost_without_lan_ip_is_kept(qr_client):
+    # No LAN IP available: keep the request host rather than emit a broken URL.
+    f = _phone_base_url()
+    assert f("localhost:9284", "auto", "", "") == "http://localhost:9284"
+
+
+def test_phone_base_drops_default_ports(qr_client):
+    f = _phone_base_url()
+    assert f("localhost:80", "auto", "", "192.168.1.42") == "http://192.168.1.42"
+    assert f("localhost", "auto", "", "192.168.1.42") == "http://192.168.1.42"
+
+
+def test_phone_base_public_mode_uses_public_url(qr_client):
+    f = _phone_base_url()
+    assert f("localhost:9284", "public", "https://pantry.example.com/",
+             "192.168.1.42") == "https://pantry.example.com"
+    # An empty public URL falls back to the auto behavior.
+    assert f("localhost:9284", "public", "", "192.168.1.42") == "http://192.168.1.42:9284"
+
+
+def test_qr_endpoint_swaps_localhost_host(qr_client, monkeypatch):
+    from app.routers import qr as qr_module
+    monkeypatch.setattr(qr_module, "_lan_ip", lambda: "192.168.1.42")
+    r = qr_client.get("/ui/qr", headers={"host": "localhost:9284"})
+    assert r.status_code == 200
+    assert "http://192.168.1.42:9284/ui/add" in r.text
+    assert "localhost" not in r.text
+
+
+def test_qr_url_endpoint_reports_encoded_url(qr_client, monkeypatch):
+    from app.routers import qr as qr_module
+    monkeypatch.setattr(qr_module, "_lan_ip", lambda: "192.168.1.42")
+    r = qr_client.get("/ui/qr/url", headers={"host": "127.0.0.1:9284"})
+    assert r.status_code == 200
+    assert r.json()["url"] == "http://192.168.1.42:9284/ui/add"
+
+
+def test_qr_endpoint_public_mode(qr_client, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "qr_url_mode", "public", raising=False)
+    monkeypatch.setattr(settings, "qr_public_url", "https://pantry.example.com", raising=False)
+    r = qr_client.get("/ui/qr", headers={"host": "localhost:9284"})
+    assert r.status_code == 200
+    assert "https://pantry.example.com/ui/add" in r.text

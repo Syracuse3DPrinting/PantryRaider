@@ -5,8 +5,8 @@
   <h4 class="mb-0"><i class="bi bi-clock-history me-2"></i>Expiring Items</h4>
   <div class="d-flex gap-2 align-items-center">
     <button class="btn btn-sm btn-outline-success" id="btn-use-it-up" onclick="loadUseItUp()"
-            title="Ideas for using up what is about to expire">
-      <i class="bi bi-recycle me-1"></i>Use it up
+            title="Recipe ideas and tips for food that is about to expire. Looking at ideas never changes your stock.">
+      <i class="bi bi-recycle me-1"></i>Use-it-up ideas
     </button>
     <label class="mb-0 text-muted small">Show items expiring within</label>
     <select class="form-select form-select-sm w-auto" onchange="location='?days='+this.value">
@@ -22,7 +22,7 @@
 <div class="card mb-4 d-none" id="use-it-up-card">
   <div class="card-header d-flex align-items-center">
     <i class="bi bi-recycle me-2 text-success"></i>
-    <span class="fw-semibold">Use it up</span>
+    <span class="fw-semibold">Use-it-up ideas</span>
     <button type="button" class="btn-close ms-auto" aria-label="Close"
             onclick="document.getElementById('use-it-up-card').classList.add('d-none')"></button>
   </div>
@@ -104,9 +104,12 @@
           {% endif %}
         </td>
         <td>
-          <form method="post" action="ui/consume/{{ item.product_id }}" class="d-inline">
+          {% set pname = item.product.name if item.product else 'this item' %}
+          <form method="post" action="ui/consume/{{ item.product_id }}" class="d-inline"
+                onsubmit="return confirm({{ ('Mark all ' ~ pname ~ ' as consumed? This removes it from your stock.') | tojson }})">
             <input type="hidden" name="amount" value="{{ item.amount }}">
-            <button type="submit" class="btn btn-sm btn-outline-success btn-icon" title="Mark all consumed">
+            <input type="hidden" name="name" value="{{ pname }}">
+            <button type="submit" class="btn btn-sm btn-outline-success btn-icon" title="Mark all {{ pname | e }} consumed (removes it from stock)">
               <i class="bi bi-check-lg"></i>
             </button>
           </form>
@@ -131,11 +134,17 @@ function escHtml(s) {
     .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// Whether a suggestion can be turned into a full recipe on the Cook page
+// (AI generates it; Mealie stores it).
+const CAN_COOK = {{ 'true' if ai_configured and mealie_configured else 'false' }};
+const AI_CONFIGURED = {{ 'true' if ai_configured else 'false' }};
+
 async function loadUseItUp() {
   const card = document.getElementById('use-it-up-card');
   const body = document.getElementById('use-it-up-body');
   const btn = document.getElementById('btn-use-it-up');
   card.classList.remove('d-none');
+  card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
   body.innerHTML = '<div class="text-secondary"><span class="spinner-border spinner-border-sm me-2"></span>Thinking of ways to use these up…</div>';
   btn.disabled = true;
   try {
@@ -149,23 +158,33 @@ async function loadUseItUp() {
     const tips = d.tips || [];
     let htmlOut = '';
     if (d.items && d.items.length) {
-      htmlOut += `<div class="small text-secondary mb-2">Targeting: ${d.items.map(escHtml).join(', ')}</div>`;
+      htmlOut += `<div class="small text-secondary mb-2">Recipe ideas for: ${d.items.map(escHtml).join(', ')}</div>`;
     }
     if (sug.length) {
       htmlOut += '<div class="row g-2 row-cols-1 row-cols-md-2 row-cols-lg-3 mb-3">' + sug.map(s => `
-        <div class="col"><div class="card h-100"><div class="card-body py-2">
+        <div class="col"><div class="card h-100"><div class="card-body py-2 d-flex flex-column">
           <div class="fw-semibold">${escHtml(s.name)}</div>
           ${s.description ? `<div class="small text-secondary mt-1">${escHtml(s.description)}</div>` : ''}
           ${(s.uses||[]).length ? `<div class="small text-success mt-1"><i class="bi bi-check2 me-1"></i>${s.uses.map(escHtml).join(', ')}</div>` : ''}
+          ${CAN_COOK ? `<div class="mt-auto pt-2">
+            <a class="btn btn-sm btn-outline-primary" href="ui/cook?generate=${encodeURIComponent(s.name)}">
+              <i class="bi bi-stars me-1"></i>Cook this
+            </a>
+          </div>` : ''}
         </div></div></div>`).join('') + '</div>';
     } else if (d.message) {
       htmlOut += `<div class="text-secondary mb-2">${escHtml(d.message)}</div>`;
+    } else if (!AI_CONFIGURED) {
+      htmlOut += '<div class="text-secondary mb-2">Recipe ideas need an AI provider (see Settings). The quick tips below always work.</div>';
+    } else {
+      htmlOut += '<div class="text-secondary mb-2">No recipe ideas came back this time. Try again in a moment.</div>';
     }
     if (tips.length) {
       htmlOut += '<div class="small fw-semibold text-secondary mb-1"><i class="bi bi-lightbulb me-1"></i>Quick tips</div>'
         + '<ul class="small mb-0">' + tips.map(t => `<li>${escHtml(t)}</li>`).join('') + '</ul>';
     }
     body.innerHTML = htmlOut || '<div class="text-secondary">No ideas right now.</div>';
+    card.scrollIntoView({behavior: 'smooth', block: 'nearest'});
   } catch (e) {
     body.innerHTML = `<div class="alert alert-danger mb-0">Could not load ideas: ${escHtml(e.message)}</div>`;
   } finally {

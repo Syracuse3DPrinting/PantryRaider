@@ -215,6 +215,93 @@ def test_use_it_up_returns_static_tips(client):
     assert "suggestions" in d
 
 
+def test_use_it_up_never_touches_stock(client, monkeypatch):
+    """Use-it-up is read-only: it suggests recipes and tips for expiring items
+    and must never consume anything (FoodAssistant-w0kh)."""
+    from app.services.grocy import GrocyClient
+
+    async def _expiring(self, days=7):
+        return [{"name": "Milk", "product_id": 1, "amount": 1}]
+
+    calls = []
+
+    async def _consume(self, product_id, amount=1.0):
+        calls.append(product_id)
+        return {}
+
+    monkeypatch.setattr(GrocyClient, "get_expiring", _expiring)
+    monkeypatch.setattr(GrocyClient, "consume_stock", _consume)
+    r = client.post("/mealie/use-it-up", json={"days": 7})
+    assert r.status_code == 200
+    assert calls == [], "use-it-up must never consume stock"
+    d = r.json()
+    assert d["items"] == ["Milk"]
+    assert len(d["tips"]) > 0
+
+
+def test_expiring_consume_confirms_and_names_the_item(client, monkeypatch):
+    """The per-row checkmark on Expiring removes the whole stock amount, so it
+    must ask before doing it and the toast must say which product went
+    (FoodAssistant-w0kh)."""
+    from app.services.grocy import GrocyClient
+
+    async def _expiring(self, days=7):
+        return [{
+            "product_id": 42,
+            "amount": 2,
+            "days_remaining": 1,
+            "best_before_date": "2026-07-04",
+            "product": {"name": "Greek Yogurt"},
+        }]
+
+    monkeypatch.setattr(GrocyClient, "get_expiring", _expiring)
+    r = client.get("/ui/expiring")
+    assert r.status_code == 200
+    assert "confirm(" in r.text
+    assert "Mark all Greek Yogurt as consumed" in r.text
+    # The form posts the product name so the redirect toast can include it.
+    assert 'name="name" value="Greek Yogurt"' in r.text
+
+
+def test_consume_redirect_names_the_product(client, monkeypatch):
+    from app.services.grocy import GrocyClient
+
+    consumed = []
+
+    async def _consume(self, product_id, amount=1.0):
+        consumed.append((product_id, amount))
+        return {}
+
+    monkeypatch.setattr(GrocyClient, "consume_stock", _consume)
+    r = client.post("/ui/consume/42", data={"amount": "2", "name": "Greek Yogurt"},
+                    follow_redirects=False)
+    assert r.status_code in (302, 303, 307)
+    assert consumed == [(42, 2.0)]
+    assert "Greek%20Yogurt%20marked%20as%20consumed" in r.headers["location"]
+
+
+def test_expiring_use_it_up_button_copy(client):
+    """The header button offers ideas, not an action on stock; its copy and the
+    result cards must say so (FoodAssistant-w0kh)."""
+    r = client.get("/ui/expiring")
+    assert r.status_code == 200
+    assert "Use-it-up ideas" in r.text
+    assert "never changes your stock" in r.text
+
+
+def test_cook_page_generate_deep_link(client, monkeypatch):
+    """/ui/cook?generate=<dish> opens the AI preview for that dish, so the
+    Expiring page's Cook this buttons land on a real outcome."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "mealie_base_url", "http://mealie.test", raising=False)
+    monkeypatch.setattr(settings, "mealie_api_key", "test-key", raising=False)
+    r = client.get("/ui/cook")
+    assert r.status_code == 200
+    assert ".get('generate')" in r.text
+    assert "openAiPreview(dish.trim())" in r.text
+
+
 def test_timers_page_has_empty_state(client):
     r = client.get("/ui/timers")
     assert r.status_code == 200

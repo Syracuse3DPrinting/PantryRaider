@@ -136,10 +136,19 @@ scale, and display rotation are device-local hardware/look choices.
 | `display_rotation` | | Editable | Editable | Device-local |
 | `display_type` | | Editable | Editable | Device-local |
 | `quiet_mode` | | Editable | Editable | Device-local |
+| `qr_url_mode` | | Editable | Editable | Device-local |
+| `qr_public_url` | | Editable | Editable | Device-local |
 | `convert_custom_rows` | | Editable | Editable | Device-local |
 
 Note: `convert_custom_rows` (the Conversions cheat-sheet rows) is intentionally
 left device-local so each kiosk keeps its own reference list.
+
+`qr_url_mode` picks which address the "Add items from your phone" QR code
+encodes: `auto` (the default) uses the device's own network address, so a
+phone on the same network can open it even when the kiosk browses at
+localhost; `public` encodes `qr_public_url` (or the active tunnel URL when
+that field is empty). Both stay device-local so every kiosk's QR code points
+at the device that shows it.
 
 ## Display and peripherals
 

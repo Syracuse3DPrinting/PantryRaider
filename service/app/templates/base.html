@@ -591,7 +591,14 @@
   <script>
     (function () {
       var urlEl = document.getElementById('qr-url');
-      if (urlEl) { urlEl.textContent = 'http://' + window.location.host + '/ui/add'; }
+      if (!urlEl) return;
+      // Fallback first, then the server's answer: the kiosk browser reaches the
+      // app at localhost, so the server computes the phone-reachable address
+      // that matches what the QR code actually encodes.
+      urlEl.textContent = 'http://' + window.location.host + '/ui/add';
+      fetch('ui/qr/url').then(function (r) { return r.json(); }).then(function (d) {
+        if (d && d.url) { urlEl.textContent = d.url; }
+      }).catch(function () {});
     })();
   </script>
 

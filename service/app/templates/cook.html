@@ -1292,6 +1292,16 @@ async function saveAiRecipe(btn) {
 
 loadPrefs();
 loadSuggestions();
+
+// Deep link from the Expiring page's use-it-up ideas (FoodAssistant-w0kh):
+// ?generate=<dish name> opens the AI preview for that dish right away, so
+// "Cook this" on an idea lands on a full generated recipe, not a blank page.
+{% if ai_configured %}
+(function () {
+  const dish = new URLSearchParams(window.location.search).get('generate');
+  if (dish && dish.trim()) openAiPreview(dish.trim());
+})();
+{% endif %}
 </script>
 {% endif %}
 {% endblock %}

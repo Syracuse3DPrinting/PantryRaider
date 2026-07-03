@@ -477,8 +477,10 @@ async def use_it_up(payload: UseItUpPayload = Body(default_factory=UseItUpPayloa
         + ". Prioritize recipes and methods that use these up before they spoil, "
         "such as soups, stocks, sauces, casseroles, and bakes. Note when an item "
         "freezes well to extend its life.")
-    provider = get_enrich_provider()
     try:
+        # Building the provider can raise too (none configured, missing SDK),
+        # so it belongs inside the try: the page still gets its tips.
+        provider = get_enrich_provider()
         suggestions = await provider.suggest_from_inventory(
             item_names, limit=settings.suggest_per_tier, preferences=prefs)
         result["suggestions"] = suggestions or []

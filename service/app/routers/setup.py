@@ -198,6 +198,8 @@ class SetupPayload(BaseModel):
     grocy_api_key: str = ""
     grocy_public_url: str = ""
     device_hostname: str = ""
+    qr_url_mode: str = "auto"
+    qr_public_url: str = ""
     mealie_base_url: str = ""
     mealie_api_key: str = ""
     mealie_public_url: str = ""
@@ -1094,6 +1096,16 @@ async def save_setup(payload: SetupPayload):
     # Drop an unknown nav-visibility value (empty/invalid keeps the stored one).
     if "nav_visibility" in data and data["nav_visibility"] not in NAV_VISIBILITY:
         data.pop("nav_visibility", None)
+    # Drop an unknown QR address mode (empty/invalid keeps the stored one).
+    if "qr_url_mode" in data and data["qr_url_mode"] not in ("auto", "public"):
+        data.pop("qr_url_mode", None)
+    # The QR public URL must be a plain http(s) address (or empty to clear it).
+    if "qr_public_url" in data:
+        u = (data["qr_public_url"] or "").strip()
+        if u and not (u.startswith("http://") or u.startswith("https://")):
+            data.pop("qr_public_url", None)
+        else:
+            data["qr_public_url"] = u.rstrip("/")
     # Timezone: "" (auto/system) or a valid IANA name; drop anything else so a
     # typo never breaks timestamp rendering.
     if "timezone" in data and data["timezone"]:
