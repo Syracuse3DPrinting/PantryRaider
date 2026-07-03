@@ -33,6 +33,20 @@
 // its keys. The kiosk stays the animation driver; the deck is a slower echo.
 // The state replies also carry a dismiss flag, so a deck key press wakes the
 // panel's saver too.
+//
+// Floating kitchen timers (FoodAssistant-8c6m): while the saver is up, every
+// active timer from the shared /timers registry rides the screen as a small
+// bouncing pill (label + live countdown) in BOTH styles. Pills reflect off
+// the panel edges with the same zoom-aware layout-unit walls the logo uses,
+// bounce off each other with simple equal-mass elastic collisions, and in
+// bounce mode also carom off the logo block (which never changes course, so
+// the classic straight-line glide survives). The registry is polled every few
+// seconds; between polls each pill counts down locally from deadline_epoch,
+// the same shareable formula the Stream Deck uses. A finished timer pulses
+// red/amber with a Done readout so it reads from across the kitchen. At most
+// six pills are simulated (Pi 3 budget); the rest collapse into a static
+// "+N more" pill. Timers are panel-only for now: the deck's saver slice
+// stays the raccoon mark.
 (function () {
   var kiosk = false;
   try {
@@ -92,6 +106,21 @@
       .catch(function () { });
   }
 
+  // The layout-pixel viewport, the space translate() coordinates render in:
+  // the visual viewport divided by the kiosk interface scale's zoom
+  // (kiosk-display.js sets html.style.zoom; 1 everywhere else). Read per
+  // frame so a live scale change just tightens the walls without a jump.
+  // Mixing window.innerWidth (visual pixels) with translate coordinates
+  // (layout pixels) broke the walls whenever a zoom applied
+  // (FoodAssistant-vf4f), so every wall below comes through here.
+  function layoutSize() {
+    var z = 1;
+    try {
+      z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
+    } catch (e) { /* keep 1 */ }
+    return { w: window.innerWidth / z, h: window.innerHeight / z };
+  }
+
   // Old-school DVD bounce: the block travels in a dead-straight line at
   // constant speed until it HITS an edge, then reflects (angle in = angle
   // out) and carries on; nothing else ever changes its course. Frame-time
@@ -99,12 +128,8 @@
   // block size is measured each frame so a viewport resize or font load just
   // tightens the walls without a jump. Transform keeps motion compositor-side.
   //
-  // Every measurement here lives in LAYOUT pixels, the space the translate()
-  // coordinates render in: the visual viewport divided by the kiosk interface
-  // scale's zoom for the walls, and offsetWidth/Height for the block. Mixing
-  // window.innerWidth (visual pixels) with translate coordinates (layout
-  // pixels) broke the walls whenever a zoom applied, stopping the bounce
-  // short of (or past) the right and bottom edges (FoodAssistant-vf4f).
+  // Every measurement here lives in LAYOUT pixels: layoutSize() for the
+  // walls (the vf4f zoom fix) and offsetWidth/Height for the block.
   //
   // With a Stream Deck in the canvas (DECK_LAYOUT not 'off'), the wall on the
   // deck's side moves out by a band sized from the deck's key grid, so the
@@ -112,16 +137,11 @@
   function startBounce(block, mark) {
     var x = null, y = null, dx = 0, dy = 0, last = null;
     var lastPost = 0;
+    bounceActive = true;  // this loop drives the timer pills too
     function step(ts) {
       if (!overlay) return;
-      // Effective zoom from the kiosk interface scale (kiosk-display.js sets
-      // html.style.zoom); 1 everywhere else. Read each frame so a live scale
-      // change just tightens the walls without a jump.
-      var z = 1;
-      try {
-        z = parseFloat(getComputedStyle(document.documentElement).zoom) || 1;
-      } catch (e) { /* keep 1 */ }
-      var w = window.innerWidth / z, h = window.innerHeight / z;
+      var vp = layoutSize();
+      var w = vp.w, h = vp.h;
       var bw = block.offsetWidth, bh = block.offsetHeight;
       // Off-screen band for the deck's side of the canvas, in layout px. For
       // above/below the deck's width spans the panel width, so the band is
@@ -164,6 +184,12 @@
       var sx = x - (DECK_LAYOUT === 'left' ? bandPx : 0);
       var sy = y - (DECK_LAYOUT === 'above' ? bandPx : 0);
       block.style.transform = 'translate(' + sx + 'px,' + sy + 'px)';
+      // The timer pills ride this same frame step (one rAF loop total). They
+      // carom off the logo block, approximated as a circle in on-screen
+      // coordinates; the logo itself never changes course.
+      stepTimerBodies(ts, w, h, {
+        cx: sx + bw / 2, cy: sy + bh / 2, r: (bw + bh) / 4,
+      });
       if (DECK_LAYOUT !== 'off' && bandPx > 0 && ts - lastPost >= STATE_POST_MS) {
         lastPost = ts;
         // Share just the raccoon mark's box (not the clock under it), in
@@ -184,6 +210,319 @@
     }
     rafId = requestAnimationFrame(step);
   }
+
+  // -- floating kitchen timers (FoodAssistant-8c6m) -------------------------
+
+  var TIMER_POLL_MS = 3000;   // registry poll cadence while the saver is up
+  var TIMER_CAP = 6;          // Pi 3 budget: simulate at most this many pills
+  var DONE_SPEEDUP = 1.35;    // a finished timer drifts a little faster
+  var timerPollId = null;
+  var timerRafId = null;      // photos-mode loop; bounce mode rides step()
+  var timerLast = null;       // last physics timestamp, for dt
+  var timerBodies = [];       // simulated pills, positions in layout px
+  var timerOverflow = null;   // the static "+N more" pill
+  var bounceActive = false;   // true while the logo loop is driving physics
+
+  // Food icon for a timer label: pure keyword-to-emoji lookup, so a "Pasta"
+  // timer reads as pasta from across the room. Labels are tokenized on
+  // non-letters, lowercased, and a trailing s is tried singular (Eggs, Wings);
+  // the first token with a mapping wins. No food word gets the stopwatch.
+  var TIMER_FOOD_ICONS = {
+    egg: '\u{1F95A}',
+    pasta: '\u{1F35D}', noodle: '\u{1F35D}', spaghetti: '\u{1F35D}',
+    macaroni: '\u{1F35D}',
+    rice: '\u{1F35A}',
+    pizza: '\u{1F355}',
+    bread: '\u{1F35E}', dough: '\u{1F35E}', loaf: '\u{1F35E}',
+    toast: '\u{1F35E}',
+    chicken: '\u{1F357}', wing: '\u{1F357}',
+    beef: '\u{1F969}', steak: '\u{1F969}',
+    pork: '\u{1F953}', bacon: '\u{1F953}',
+    fish: '\u{1F41F}', salmon: '\u{1F41F}',
+    shrimp: '\u{1F364}',
+    soup: '\u{1F372}', stew: '\u{1F372}', simmer: '\u{1F372}',
+    sauce: '\u{1F372}',
+    tea: '\u{1F375}',
+    coffee: '☕',
+    cookie: '\u{1F36A}',
+    cake: '\u{1F9C1}', muffin: '\u{1F9C1}',
+    pie: '\u{1F967}',
+    potato: '\u{1F954}',
+    corn: '\u{1F33D}',
+    veggie: '\u{1F966}', broccoli: '\u{1F966}',
+    turkey: '\u{1F983}',
+    lamb: '\u{1F356}',
+    // Looser bucket: the label names the cooking method, not the food.
+    oven: '\u{1F525}', roast: '\u{1F525}', bake: '\u{1F525}',
+    broil: '\u{1F525}', grill: '\u{1F525}',
+  };
+  var TIMER_DEFAULT_ICON = '⏱️';  // stopwatch: not obviously food
+
+  function timerFoodIcon(label) {
+    var tokens = String(label || '').toLowerCase().split(/[^a-z]+/);
+    for (var i = 0; i < tokens.length; i++) {
+      var t = tokens[i];
+      if (!t) continue;
+      if (!Object.prototype.hasOwnProperty.call(TIMER_FOOD_ICONS, t) &&
+          t.length > 3 && t.charAt(t.length - 1) === 's') {
+        t = t.slice(0, -1);  // Eggs -> egg, Wings -> wing
+      }
+      if (Object.prototype.hasOwnProperty.call(TIMER_FOOD_ICONS, t)) {
+        return TIMER_FOOD_ICONS[t];
+      }
+    }
+    return TIMER_DEFAULT_ICON;
+  }
+  // Test-only: lets the automated probe assert the label-to-icon mapping.
+  window.__timerFoodIcon = timerFoodIcon;
+
+  function fmtRemaining(s) {
+    s = Math.max(0, Math.ceil(s));
+    var h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60);
+    return (h > 0 ? h + ':' + pad(m) : m) + ':' + pad(s % 60);
+  }
+
+  // A pill's collision radius: the average of its half-width and half-height.
+  // The circle approximation is deliberately loose; it just has to look right
+  // at glide speed.
+  function timerRadius(b) { return (b.w + b.h) / 4; }
+
+  function makeTimerPill(t) {
+    var el = document.createElement('div');
+    el.className = 'ss-timer';
+    el.style.cssText =
+      'position:absolute;left:0;top:0;z-index:4;display:flex;' +
+      'align-items:center;gap:1.4vmin;padding:1.1vmin 2.4vmin;' +
+      'border-radius:999px;background:rgba(24,26,32,0.88);' +
+      'border:1px solid rgba(255,255,255,0.18);color:#e8eaed;' +
+      'white-space:nowrap;will-change:transform;';
+    var icon = document.createElement('span');
+    icon.className = 'ss-timer-icon';
+    icon.style.cssText = 'font-size:4.2vmin;line-height:1;';
+    icon.textContent = timerFoodIcon(t.label);
+    var col = document.createElement('div');
+    col.style.cssText = 'text-align:left;';
+    var lab = document.createElement('div');
+    lab.className = 'ss-timer-label';
+    lab.style.cssText = 'font-size:2.1vmin;opacity:0.75;max-width:34vmin;' +
+      'overflow:hidden;text-overflow:ellipsis;';
+    lab.textContent = t.label || 'Timer';
+    var time = document.createElement('div');
+    time.className = 'ss-timer-time';
+    time.style.cssText = 'font-size:3.4vmin;font-weight:600;line-height:1.15;' +
+      'font-variant-numeric:tabular-nums;';
+    col.appendChild(lab);
+    col.appendChild(time);
+    el.appendChild(icon);
+    el.appendChild(col);
+    return { el: el, iconEl: icon, labelEl: lab, timeEl: time };
+  }
+
+  // A finished timer (expired, still listed until dismissed) must read from
+  // across the kitchen: the pill pulses red/amber (the ss-timer-done rule
+  // injected in show()), the countdown swaps to "Done", the food icon stays,
+  // and the drift picks up a little.
+  function markTimerDone(b) {
+    if (b.done) return;
+    b.done = true;
+    b.el.classList.add('ss-timer-done');
+    b.timeEl.textContent = 'Done';
+    b.vx *= DONE_SPEEDUP;
+    b.vy *= DONE_SPEEDUP;
+  }
+
+  function spawnTimerBody(t, w, h) {
+    var parts = makeTimerPill(t);
+    overlay.appendChild(parts.el);
+    var pw = parts.el.offsetWidth || 1, ph = parts.el.offsetHeight || 1;
+    // A handful of random tries for a spot clear of the other pills; if the
+    // screen is crowded the collision solver separates whatever overlaps.
+    var x = 0, y = 0;
+    for (var tries = 0; tries < 24; tries++) {
+      x = Math.random() * Math.max(0, w - pw);
+      y = Math.random() * Math.max(0, h - ph);
+      var clear = true;
+      for (var i = 0; i < timerBodies.length; i++) {
+        var o = timerBodies[i];
+        var dx = (x + pw / 2) - (o.x + o.w / 2);
+        var dy = (y + ph / 2) - (o.y + o.h / 2);
+        var minD = (pw + ph) / 4 + timerRadius(o);
+        if (dx * dx + dy * dy < minD * minD) { clear = false; break; }
+      }
+      if (clear) break;
+    }
+    // Same 30-60 degree launch as the logo, at the configured glide speed.
+    var ang = (30 + Math.random() * 30) * Math.PI / 180;
+    var b = {
+      id: t.id, el: parts.el, timeEl: parts.timeEl,
+      x: x, y: y, w: pw, h: ph,
+      vx: (Math.random() < 0.5 ? -1 : 1) * Math.cos(ang) * SPEED,
+      vy: (Math.random() < 0.5 ? -1 : 1) * Math.sin(ang) * SPEED,
+      deadline: t.deadline_epoch, done: false, shown: '',
+    };
+    if (t.expired) markTimerDone(b);
+    timerBodies.push(b);
+  }
+
+  // Reconcile the simulated pills with a fresh registry list: new timers
+  // spawn at a random free spot, dismissed ones despawn, deadlines refresh,
+  // and anything past the body cap collapses into the static "+N more" pill.
+  function syncTimerBodies(list) {
+    if (!overlay) return;
+    var vp = layoutSize();
+    var shown = list.slice(0, TIMER_CAP);
+    var seen = {};
+    for (var i = 0; i < shown.length; i++) {
+      var t = shown[i];
+      seen[t.id] = true;
+      var b = null;
+      for (var j = 0; j < timerBodies.length; j++) {
+        if (timerBodies[j].id === t.id) { b = timerBodies[j]; break; }
+      }
+      if (!b) { spawnTimerBody(t, vp.w, vp.h); continue; }
+      b.deadline = t.deadline_epoch;
+      if (t.expired) markTimerDone(b);
+    }
+    for (var k = timerBodies.length - 1; k >= 0; k--) {
+      if (seen[timerBodies[k].id]) continue;
+      var el = timerBodies[k].el;
+      if (el.parentNode) el.parentNode.removeChild(el);
+      timerBodies.splice(k, 1);
+    }
+    var extra = list.length - shown.length;
+    if (extra > 0) {
+      if (!timerOverflow) {
+        timerOverflow = document.createElement('div');
+        timerOverflow.className = 'ss-timer-more';
+        timerOverflow.style.cssText =
+          'position:absolute;left:50%;bottom:2.5vmin;transform:translateX(-50%);' +
+          'z-index:4;padding:0.8vmin 2vmin;border-radius:999px;' +
+          'background:rgba(24,26,32,0.85);border:1px solid rgba(255,255,255,0.15);' +
+          'color:#9aa0a6;font-size:2.2vmin;';
+        overlay.appendChild(timerOverflow);
+      }
+      timerOverflow.textContent = '+' + extra + ' more';
+    } else if (timerOverflow) {
+      if (timerOverflow.parentNode) timerOverflow.parentNode.removeChild(timerOverflow);
+      timerOverflow = null;
+    }
+  }
+
+  function pollTimers() {
+    fetch('timers', { cache: 'no-store' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (!overlay) return;  // dismissed while fetching
+        syncTimerBodies((data && data.timers) || []);
+      })
+      .catch(function () {
+        // Offline poll: keep the pills we have, they count down from their
+        // epoch deadlines without the server.
+      });
+  }
+
+  // Equal-mass elastic collision between two pills: swap the velocity
+  // components along the collision normal (only while approaching, so a
+  // resolved pair does not re-collide), then split the overlap so nothing
+  // sticks.
+  function collideTimerPair(a, c) {
+    var dx = (c.x + c.w / 2) - (a.x + a.w / 2);
+    var dy = (c.y + c.h / 2) - (a.y + a.h / 2);
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var minD = timerRadius(a) + timerRadius(c);
+    if (dist >= minD) return;
+    if (dist < 0.001) { dx = 1; dy = 0; dist = 1; }  // stacked: pick a normal
+    var nx = dx / dist, ny = dy / dist;
+    var van = a.vx * nx + a.vy * ny;
+    var vcn = c.vx * nx + c.vy * ny;
+    if (van - vcn > 0) {
+      a.vx += (vcn - van) * nx; a.vy += (vcn - van) * ny;
+      c.vx += (van - vcn) * nx; c.vy += (van - vcn) * ny;
+    }
+    var push = (minD - dist) / 2;
+    a.x -= nx * push; a.y -= ny * push;
+    c.x += nx * push; c.y += ny * push;
+  }
+
+  // The logo block is effectively infinite mass: the pill reflects off it and
+  // is pushed fully clear; the logo's dead-straight DVD line never bends.
+  function collideTimerWithLogo(b, logo) {
+    var dx = (b.x + b.w / 2) - logo.cx;
+    var dy = (b.y + b.h / 2) - logo.cy;
+    var dist = Math.sqrt(dx * dx + dy * dy);
+    var minD = timerRadius(b) + logo.r;
+    if (dist >= minD) return;
+    if (dist < 0.001) { dx = 1; dy = 0; dist = 1; }
+    var nx = dx / dist, ny = dy / dist;
+    var vn = b.vx * nx + b.vy * ny;
+    if (vn < 0) { b.vx -= 2 * vn * nx; b.vy -= 2 * vn * ny; }
+    b.x += nx * (minD - dist);
+    b.y += ny * (minD - dist);
+  }
+
+  // One physics step for the pills: integrate, reflect off the panel walls
+  // (layout units, panel only: the deck band is the logo's territory), solve
+  // collisions, then render transforms and the local countdowns. In bounce
+  // mode this is called from the logo's step; in photos mode from its own
+  // small loop. Countdown text between polls is deadline_epoch minus the
+  // panel's own clock, the same formula every other surface uses.
+  function stepTimerBodies(ts, w, h, logo) {
+    if (!timerBodies.length) { timerLast = ts; return; }
+    var dt = timerLast === null ? 0 : Math.min(100, ts - timerLast) / 1000;
+    timerLast = ts;
+    var i, b;
+    for (i = 0; i < timerBodies.length; i++) {
+      b = timerBodies[i];
+      b.w = b.el.offsetWidth || b.w;
+      b.h = b.el.offsetHeight || b.h;
+      b.x += b.vx * dt;
+      b.y += b.vy * dt;
+    }
+    for (i = 0; i < timerBodies.length; i++) {
+      for (var j = i + 1; j < timerBodies.length; j++) {
+        collideTimerPair(timerBodies[i], timerBodies[j]);
+      }
+      if (logo) collideTimerWithLogo(timerBodies[i], logo);
+    }
+    var nowSec = Date.now() / 1000;
+    for (i = 0; i < timerBodies.length; i++) {
+      b = timerBodies[i];
+      // Walls last, so a collision separation can never leave a pill drawn
+      // past the edge: reflect exactly at the wall, like the logo does.
+      var maxX = Math.max(0, w - b.w), maxY = Math.max(0, h - b.h);
+      if (b.x <= 0) { b.x = 0; b.vx = Math.abs(b.vx); }
+      else if (b.x >= maxX) { b.x = maxX; b.vx = -Math.abs(b.vx); }
+      if (b.y <= 0) { b.y = 0; b.vy = Math.abs(b.vy); }
+      else if (b.y >= maxY) { b.y = maxY; b.vy = -Math.abs(b.vy); }
+      b.el.style.transform = 'translate(' + b.x + 'px,' + b.y + 'px)';
+      if (b.done) continue;
+      if (b.deadline - nowSec <= 0) { markTimerDone(b); continue; }
+      var txt = fmtRemaining(b.deadline - nowSec);
+      if (txt !== b.shown) { b.shown = txt; b.timeEl.textContent = txt; }
+    }
+  }
+
+  // Photos mode has no rAF of its own, so the pills get a small dedicated
+  // loop there; it stands down if the bounce fallback takes over mid-run.
+  function startTimerLoop() {
+    if (timerRafId) return;
+    function tstep(ts) {
+      if (!overlay || bounceActive) { timerRafId = null; return; }
+      var vp = layoutSize();
+      stepTimerBodies(ts, vp.w, vp.h, null);
+      timerRafId = requestAnimationFrame(tstep);
+    }
+    timerRafId = requestAnimationFrame(tstep);
+  }
+
+  // Test-only view of the simulated pills (layout px, px/s), sampled by the
+  // automated physics probe to check walls and collisions.
+  window.__screensaverTimers = function () {
+    return timerBodies.map(function (b) {
+      return { id: b.id, x: b.x, y: b.y, vx: b.vx, vy: b.vy,
+               w: b.w, h: b.h, done: b.done };
+    });
+  };
 
   // Build the bouncing logo+clock block inside the overlay (the default
   // style, and the fallback when the photo list is empty or unreachable).
@@ -238,6 +577,7 @@
       'font-weight:600;color:#e8eaed;text-shadow:0 0 1.2vmin rgba(0,0,0,0.9);';
     overlay.appendChild(clock);
     updateClock();
+    startTimerLoop();  // photos have no rAF of their own; the pills need one
 
     function kenBurns(img) {
       // Random start/end offsets small enough that the 1.12x scale always
@@ -299,7 +639,16 @@
     // cursor parked before the overlay appeared would otherwise stay drawn.
     var style = document.createElement('style');
     style.id = 'kiosk-screensaver-cursor';
-    style.textContent = 'body.ss-active, body.ss-active * { cursor: none !important; }';
+    style.textContent =
+      'body.ss-active, body.ss-active * { cursor: none !important; }' +
+      // Finished-timer alarm: the pill pulses between red and amber with a
+      // matching glow, unmistakable from across the kitchen.
+      '@keyframes ss-timer-pulse{' +
+      '0%,100%{background:#a4231b;box-shadow:0 0 3vmin rgba(255,80,40,0.8);}' +
+      '50%{background:#b36a00;box-shadow:0 0 5.5vmin rgba(255,170,0,0.9);}}' +
+      '#kiosk-screensaver .ss-timer-done{' +
+      'animation:ss-timer-pulse 1.1s ease-in-out infinite;' +
+      'border-color:rgba(255,200,120,0.85);color:#fff;}';
     document.head.appendChild(style);
     document.body.classList.add('ss-active');
     overlay = document.createElement('div');
@@ -313,6 +662,11 @@
       if (overlay) overlay.style.opacity = '1';
     });
     clockTimer = setInterval(updateClock, 5000);
+    // Active timers ride the saver as bouncing pills: poll the shared
+    // registry only while the saver is showing, starting right away so the
+    // pills appear with the fade-in.
+    pollTimers();
+    timerPollId = setInterval(pollTimers, TIMER_POLL_MS);
     if (MODE === 'photos') {
       // The list is fetched fresh at every saver start so plugging in or
       // pulling the drive takes effect on the next idle, no restart needed.
@@ -341,6 +695,14 @@
     rafId = null;
     if (photoTimer) clearTimeout(photoTimer);
     photoTimer = null;
+    clearInterval(timerPollId);
+    timerPollId = null;
+    if (timerRafId) cancelAnimationFrame(timerRafId);
+    timerRafId = null;
+    timerLast = null;
+    timerBodies = [];       // the pill elements go down with the overlay
+    timerOverflow = null;
+    bounceActive = false;
     if (el.parentNode) el.parentNode.removeChild(el);
     document.body.classList.remove('ss-active');
     var style = document.getElementById('kiosk-screensaver-cursor');

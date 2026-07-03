@@ -85,6 +85,43 @@ def test_screensaver_config_rendered_on_pages(client, monkeypatch):
         assert "screensaver.js" in r.text
 
 
+# -- floating kitchen timers on the saver (FoodAssistant-8c6m) ----------------
+
+
+def test_screensaver_js_floats_timer_pills():
+    js = (SERVICE / "app" / "static" / "js" / "screensaver.js").read_text()
+    # The saver polls the shared registry only while it is showing, and counts
+    # down locally between polls with the satellite-shareable formula.
+    assert "fetch('timers'" in js
+    assert "TIMER_POLL_MS" in js
+    assert "deadline_epoch" in js
+    # Pi 3 budget: at most six simulated pills, the rest fold into "+N more".
+    assert "TIMER_CAP = 6" in js
+    assert "' more'" in js
+    # Real bounce physics: panel walls in layout units, equal-mass elastic
+    # pill collisions, and a carom off the logo block in bounce mode.
+    assert "layoutSize" in js
+    assert "collideTimerPair" in js
+    assert "collideTimerWithLogo" in js
+    # A finished timer pulses red/amber and reads Done.
+    assert "ss-timer-done" in js
+    assert "ss-timer-pulse" in js
+    # The automated physics probe samples the simulated bodies through this.
+    assert "window.__screensaverTimers" in js
+
+
+def test_screensaver_js_maps_timer_labels_to_food_icons():
+    js = (SERVICE / "app" / "static" / "js" / "screensaver.js").read_text()
+    # A "Pasta" timer should read as pasta from across the room: a pure
+    # keyword-to-emoji map, with a stopwatch for labels that name no food.
+    assert "TIMER_FOOD_ICONS" in js
+    assert "timerFoodIcon" in js
+    assert "TIMER_DEFAULT_ICON" in js
+    # The deck's preset timer labels (Eggs, Pasta, Rice) must all hit.
+    for token in ("egg:", "pasta:", "rice:", "chicken:", "coffee:"):
+        assert token in js
+
+
 # -- shared canvas with the Stream Deck (FoodAssistant-3fdq) -----------------
 
 
