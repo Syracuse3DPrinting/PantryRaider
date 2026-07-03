@@ -1007,6 +1007,53 @@ def _drm_connected(root="/sys/class/drm"):
     return names
 
 
+def _streamdeck_config_toml(cfg):
+    """Serialize the posted Stream Deck config dict to the controller's TOML.
+
+    Scalars and flat lists are written as inline keys; a list of dicts (e.g.
+    key_overrides) becomes an array of tables so the controller's TOML loader
+    reads it back as configured slots. A list INSIDE a table entry (a macro
+    key's "actions") is written as an inline TOML array; it used to be
+    stringified, which turned the macro's action names into one unusable
+    string after a round trip. Nested dicts are dropped (nothing produces
+    them). Pure, so the round trip is unit-testable with tomllib.
+    """
+    def _scalar(v):
+        if isinstance(v, bool):
+            return "true" if v else "false"
+        if isinstance(v, int):
+            return str(v)
+        if isinstance(v, float):
+            return repr(v)
+        # Strings (and anything else) are emitted as escaped strings.
+        s = str(v).replace("\\", "\\\\").replace('"', '\\"')
+        return '"%s"' % s
+
+    def _value(v):
+        if isinstance(v, list):
+            return "[%s]" % ", ".join(_scalar(x) for x in v)
+        return _scalar(v)
+
+    lines = []
+    table_blocks = []
+    for k, v in cfg.items():
+        if isinstance(v, list) and any(isinstance(x, dict) for x in v):
+            for entry in v:
+                if not isinstance(entry, dict):
+                    continue
+                table_blocks.append("[[%s]]" % k)
+                for ek, ev in entry.items():
+                    if isinstance(ev, dict):
+                        continue
+                    table_blocks.append("%s = %s" % (ek, _value(ev)))
+                table_blocks.append("")
+        elif isinstance(v, list):
+            lines.append("%s = %s" % (k, _value(v)))
+        elif isinstance(v, (bool, int, float, str)):
+            lines.append("%s = %s" % (k, _scalar(v)))
+    return "\n".join(lines + [""] + table_blocks).rstrip("\n") + "\n"
+
+
 def _streamdeck_info(usb_root="/sys/bus/usb/devices"):
     """Return (present, model) for an attached Stream Deck under usb_root.
 
@@ -2419,39 +2466,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         try:
             body = self._body()
             cfg = body.get("config", {})
+            toml_str = _streamdeck_config_toml(cfg)
 
-            def _scalar(v):
-                if isinstance(v, bool):
-                    return "true" if v else "false"
-                if isinstance(v, int):
-                    return str(v)
-                if isinstance(v, float):
-                    return repr(v)
-                # Strings (and anything else) are emitted as escaped strings.
-                s = str(v).replace("\\", "\\\\").replace('"', '\\"')
-                return f'"{s}"'
-
-            # Scalars and string/number lists are written as inline keys; a list
-            # of dicts (e.g. key_overrides) is written as an array of tables so
-            # the controller's TOML loader reads it back as configured slots.
-            lines = []
-            table_blocks = []
-            for k, v in cfg.items():
-                if isinstance(v, list) and any(isinstance(x, dict) for x in v):
-                    for entry in v:
-                        if not isinstance(entry, dict):
-                            continue
-                        table_blocks.append(f"[[{k}]]")
-                        for ek, ev in entry.items():
-                            table_blocks.append(f"{ek} = {_scalar(ev)}")
-                        table_blocks.append("")
-                elif isinstance(v, list):
-                    items = ", ".join(_scalar(x) for x in v)
-                    lines.append(f"{k} = [{items}]")
-                elif isinstance(v, (bool, int, float, str)):
-                    lines.append(f"{k} = {_scalar(v)}")
-            toml_str = "\n".join(lines + [""] + table_blocks).rstrip("\n") + "\n"
-            
             path = "/opt/foodassistant/config.toml"
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w") as f:

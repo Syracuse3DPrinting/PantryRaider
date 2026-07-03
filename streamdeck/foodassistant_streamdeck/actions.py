@@ -1644,9 +1644,16 @@ def overrides_to_specs(overrides: list, key_count: int) -> dict:
     """Parse a list of slot overrides into a ``{slot_index: ActionSpec}`` map.
 
     Each override is a dict with a ``slot`` index and type-specific fields (see
-    ``override_to_spec``). Entries whose slot is outside ``[0, key_count)`` or
-    whose type cannot be built are skipped, so a malformed entry never displaces
-    a valid one. When two overrides target the same slot the last one wins.
+    ``override_to_spec``). Entries with a negative or unparseable slot, or whose
+    type cannot be built, are skipped, so a malformed entry never displaces a
+    valid one. When two overrides target the same slot the last one wins.
+
+    A slot at or beyond ``key_count`` is deliberately KEPT: the layout paginates
+    when more keys are configured than fit one deck page, and the web editor
+    numbers grid slots continuously across pages, so a custom key placed on page
+    two carries a slot larger than the deck's key count. Dropping those here is
+    what silently lost page-two custom keys (FoodAssistant-n0r1); pagination and
+    range checks belong to ``layout.apply_overrides``.
     """
     out: dict[int, ActionSpec] = {}
     if not isinstance(overrides, list) or key_count < 1:
@@ -1658,7 +1665,7 @@ def overrides_to_specs(overrides: list, key_count: int) -> dict:
             slot = int(entry.get("slot"))
         except (TypeError, ValueError):
             continue
-        if not (0 <= slot < key_count):
+        if slot < 0:
             continue
         spec = override_to_spec(slot, entry)
         if spec is not None:

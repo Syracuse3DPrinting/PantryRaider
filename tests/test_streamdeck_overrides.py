@@ -286,14 +286,26 @@ def test_overrides_to_specs_maps_by_slot():
     assert specs[4].kind == "ha_entity"
 
 
-def test_overrides_to_specs_ignores_out_of_range_slots():
+def test_overrides_to_specs_ignores_negative_slots():
     overrides = [
         {"slot": -1, "type": "timer", "minutes": 5},
-        {"slot": 99, "type": "timer", "minutes": 5},
         {"slot": 1, "type": "timer", "minutes": 5},
     ]
     specs = actions.overrides_to_specs(overrides, key_count=6)
     assert set(specs) == {1}
+
+
+def test_overrides_to_specs_keeps_slots_beyond_one_page():
+    # Grid slots are numbered continuously across deck pages by the web editor,
+    # so a custom key on page two carries a slot >= key_count. Those used to be
+    # dropped here, silently losing the key (FoodAssistant-n0r1).
+    overrides = [
+        {"slot": 20, "type": "shopping_add", "item": "Milk"},
+    ]
+    specs = actions.overrides_to_specs(overrides, key_count=6)
+    assert set(specs) == {20}
+    assert specs[20].kind == "shopping_add"
+    assert specs[20].item == "Milk"
 
 
 def test_overrides_to_specs_last_wins_on_duplicate_slot():
@@ -343,6 +355,61 @@ def test_apply_overrides_no_overrides_is_noop():
     layout.apply_overrides(pages, {}, 15)
     after = [s.name if s else None for s in pages[0]]
     assert before == after
+
+
+def test_pad_keys_for_overrides_extends_to_highest_slot():
+    names = layout.pad_keys_for_overrides(["expiring", "pending"], [10], 15)
+    assert len(names) == 11
+    assert names[:2] == ["expiring", "pending"]
+    assert set(names[2:]) == {"blank"}
+
+
+def test_pad_keys_for_overrides_noop_when_covered_or_empty():
+    keys = ["expiring", "pending", "commit"]
+    assert layout.pad_keys_for_overrides(keys, [1], 15) == keys
+    assert layout.pad_keys_for_overrides(keys, [], 15) == keys
+    # A negative (unplaced library) slot never forces padding.
+    assert layout.pad_keys_for_overrides(keys, [-1], 15) == keys
+
+
+def test_override_on_page_two_lands_where_the_editor_placed_it():
+    # A 15-key deck with 11 stock keys saved (the editor trims trailing blanks)
+    # and a quick-add custom key placed at grid slot 20, i.e. on page two of the
+    # editor grid. Rebuilding pages from the padded list reproduces the editor's
+    # pagination (usable = 14 per page), so slot 20 is page 2, position 6.
+    stock = ["expiring"] * 11
+    overrides = actions.overrides_to_specs(
+        [{"slot": 20, "type": "shopping_add", "item": "Milk"}], 15
+    )
+    names = layout.pad_keys_for_overrides(stock, overrides.keys(), 15)
+    pages = layout.build_pages(names, 15)
+    layout.apply_overrides(pages, overrides, 15)
+    assert len(pages) == 2
+    assert pages[1][6] is not None
+    assert pages[1][6].kind == "shopping_add"
+    assert pages[1][6].item == "Milk"
+
+
+def test_override_that_forces_pagination_keeps_stock_slot_math():
+    # 15 stock keys fit a 15-key deck on one page, but a custom key at slot 15
+    # means the editor showed TWO pages (usable = 14), pushing the 15th stock
+    # key onto page two. The deck must paginate the same way, or the override
+    # and every later stock key land one slot off.
+    stock = [f"k{i}" for i in range(15)]
+    # build_pages only keeps known names; use real ones.
+    stock = ["expiring", "pending", "ready", "commit", "add", "inventory",
+             "cook", "recipes", "mealplan", "shopping", "meal_today", "cooked",
+             "timer_1", "timer_2", "timer_3"]
+    overrides = actions.overrides_to_specs(
+        [{"slot": 15, "type": "shopping_add", "item": "Milk"}], 15
+    )
+    names = layout.pad_keys_for_overrides(stock, overrides.keys(), 15)
+    pages = layout.build_pages(names, 15)
+    layout.apply_overrides(pages, overrides, 15)
+    assert len(pages) == 2
+    # Stock key 15 (index 14) moved to page 2 position 0, as in the editor.
+    assert pages[1][0].name == "timer_3"
+    assert pages[1][1].kind == "shopping_add"
 
 
 def test_apply_overrides_spans_pages_skipping_cycle_key():

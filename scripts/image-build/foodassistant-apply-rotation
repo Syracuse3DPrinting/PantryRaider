@@ -13,7 +13,10 @@
 # (one of: normal, 90, 180, 270). Missing or empty means normal (no rotation).
 set -uo pipefail
 
-ROT_FILE=/etc/foodassistant/kiosk-rotation
+# Test hooks: the rotation file and the runtime-dir root are overridable so the
+# unit tests can exercise the output loop without a real compositor.
+ROT_FILE="${FOODASSISTANT_ROTATION_FILE:-/etc/foodassistant/kiosk-rotation}"
+RUN_ROOT="${FOODASSISTANT_RUN_ROOT:-/run/user}"
 transform="$(cat "$ROT_FILE" 2>/dev/null || true)"
 [ -z "$transform" ] && transform="normal"
 
@@ -22,29 +25,49 @@ if ! command -v wlr-randr >/dev/null 2>&1; then
   exit 1
 fi
 
-# Find the kiosk Wayland socket and the connected output, retrying while the
-# compositor starts. The socket lives under /run/user/<uid>/wayland-N; skip the
-# matching .lock files. The window is generous (30s) because on a cold boot
+# Find the kiosk Wayland socket and the compositor's outputs, retrying while
+# the compositor starts. The socket lives under /run/user/<uid>/wayland-N; skip
+# the matching .lock files. The window is generous (30s) because on a cold boot
 # cage can bring the output up well after ExecStartPost fires; a 10s window
 # silently lost the rotation on slower Pis (FoodAssistant-prqg).
 sock=""
-out=""
+outs=""
 for _ in $(seq 1 60); do
-  sock="$(ls /run/user/*/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1 || true)"
+  sock="$(ls "$RUN_ROOT"/*/wayland-* 2>/dev/null | grep -v '\.lock$' | head -1 || true)"
   if [ -n "$sock" ]; then
     export XDG_RUNTIME_DIR="$(dirname "$sock")"
     export WAYLAND_DISPLAY="$(basename "$sock")"
-    # The connector line is the only one starting in column 0.
-    out="$(wlr-randr 2>/dev/null | awk '/^[A-Za-z]/{print $1; exit}' || true)"
-    [ -n "$out" ] && break
+    # Output-name lines are the only ones starting in column 0.
+    outs="$(wlr-randr 2>/dev/null | awk '/^[A-Za-z]/{print $1}' || true)"
+    [ -n "$outs" ] && break
   fi
   sleep 0.5
 done
 
-if [ -z "$sock" ] || [ -z "$out" ]; then
+if [ -z "$sock" ] || [ -z "$outs" ]; then
   echo "Could not reach the kiosk compositor (no socket/output)" >&2
   exit 1
 fi
 
-wlr-randr --output "$out" --transform "$transform"
-echo "Applied transform=$transform to $out"
+# Rotate EVERY output the compositor lists, not just the first. A DSI panel
+# (DSI-1) can enumerate alongside an HDMI connector, and rotating only the
+# first listed output left the actual kiosk panel untouched
+# (FoodAssistant-ly82). The kiosk is a single-display appliance, so applying
+# the same transform everywhere is safe; per-output failures are tolerated as
+# long as at least one output takes the transform.
+applied=0
+failed=""
+for out in $outs; do
+  if wlr-randr --output "$out" --transform "$transform"; then
+    echo "Applied transform=$transform to $out"
+    applied=$((applied + 1))
+  else
+    echo "Could not apply transform=$transform to $out" >&2
+    failed="$failed $out"
+  fi
+done
+
+if [ "$applied" -eq 0 ]; then
+  echo "Rotation failed on every output:$failed" >&2
+  exit 1
+fi

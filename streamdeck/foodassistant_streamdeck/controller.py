@@ -69,14 +69,19 @@ class Controller:
         self._config_mtime = self._read_config_mtime()
 
         self.key_count: int = deck.key_count()
-        self.pages: list[list[Optional[ActionSpec]]] = layout.build_pages(
-            config.keys, self.key_count
-        )
         # Advanced per-key overrides from the web setup page. Parsed into
         # ActionSpec entries and stamped onto the default layout, replacing the
-        # stock action at each configured slot.
+        # stock action at each configured slot. Parsed before the pages are
+        # built so the keys list can be padded out to the highest override slot,
+        # keeping the pagination (and slot math) identical to the editor grid.
         self.key_overrides: dict[int, ActionSpec] = actions.overrides_to_specs(
             getattr(config, "key_overrides", []) or [], self.key_count
+        )
+        self.pages: list[list[Optional[ActionSpec]]] = layout.build_pages(
+            layout.pad_keys_for_overrides(
+                config.keys, self.key_overrides.keys(), self.key_count
+            ),
+            self.key_count,
         )
         layout.apply_overrides(self.pages, self.key_overrides, self.key_count)
         self.page = 0
@@ -322,9 +327,14 @@ class Controller:
         """
         self.config = cfg
         self.key_count = self.deck.key_count()
-        self.pages = layout.build_pages(cfg.keys, self.key_count)
         self.key_overrides = actions.overrides_to_specs(
             getattr(cfg, "key_overrides", []) or [], self.key_count
+        )
+        self.pages = layout.build_pages(
+            layout.pad_keys_for_overrides(
+                cfg.keys, self.key_overrides.keys(), self.key_count
+            ),
+            self.key_count,
         )
         layout.apply_overrides(self.pages, self.key_overrides, self.key_count)
         self.keypad_pages = layout.build_keypad_pages(self.key_count)

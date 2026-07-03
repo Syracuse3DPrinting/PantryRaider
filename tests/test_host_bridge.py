@@ -1435,3 +1435,51 @@ def test_usb_data_dirs_appliance_layout_then_repo_fallback(tmp_path):
     empty = tmp_path / "empty"
     empty.mkdir()
     assert bridge._usb_data_dirs(str(empty)) == []
+# -- Stream Deck config TOML serializer -------------------------------------
+# The bridge rewrites /opt/foodassistant/config.toml from the posted dict; the
+# controller reads it back with tomllib. The round trip must preserve custom
+# key overrides exactly, including a macro key's list of action names
+# (previously stringified, which broke every macro after a save).
+
+def _roundtrip(cfg):
+    import tomllib
+    return tomllib.loads(bridge._streamdeck_config_toml(cfg))
+
+
+def test_streamdeck_config_toml_roundtrips_scalars_and_lists():
+    cfg = {
+        "base_url": "http://127.0.0.1:9284",
+        "brightness": 60,
+        "rotation": 0,
+        "keys": ["expiring", "blank", "commit"],
+        "poll_seconds": 30,
+    }
+    assert _roundtrip(cfg) == cfg
+
+
+def test_streamdeck_config_toml_roundtrips_override_tables():
+    cfg = {
+        "key_overrides": [
+            {"slot": 20, "type": "shopping_add", "item": "Milk", "label": ""},
+            {"slot": 3, "type": "timer", "minutes": 12},
+        ],
+    }
+    out = _roundtrip(cfg)
+    assert out["key_overrides"][0]["slot"] == 20
+    assert out["key_overrides"][0]["item"] == "Milk"
+    assert out["key_overrides"][1]["minutes"] == 12
+
+
+def test_streamdeck_config_toml_keeps_macro_action_list():
+    cfg = {
+        "key_overrides": [
+            {"slot": 1, "type": "macro", "actions": ["commit", "timer_1"]},
+        ],
+    }
+    out = _roundtrip(cfg)
+    assert out["key_overrides"][0]["actions"] == ["commit", "timer_1"]
+
+
+def test_streamdeck_config_toml_escapes_quotes_and_backslashes():
+    cfg = {"weather_location": 'say "hi" \\ there'}
+    assert _roundtrip(cfg) == cfg

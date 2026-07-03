@@ -199,6 +199,34 @@ def _to_slot(name: str) -> Optional[ActionSpec]:
     return ACTIONS.get(name)
 
 
+def pad_keys_for_overrides(
+    action_names: list[str],
+    override_slots,
+    key_count: int,
+) -> list[str]:
+    """Extend a keys list with blanks so every override slot lands on a page.
+
+    The web editor saves a custom key's grid cell as "blank" in the keys list
+    (the key itself travels in an override at that slot) and trims trailing
+    blanks on save. When the trimmed list is shorter than the highest override
+    slot, rebuilding pages from it paginates differently than the editor's grid
+    did (or produces too few pages), so the override lands on the wrong key or
+    nowhere. Padding the list back out to the highest override slot restores
+    the editor's grid length, and with it the same pagination and slot math on
+    both sides. Pure and testable.
+    """
+    names = list(action_names)
+    if key_count < 1:
+        return names
+    slots = [s for s in override_slots if isinstance(s, int) and s >= 0]
+    if not slots:
+        return names
+    needed = max(slots) + 1
+    if needed > len(names):
+        names += ["blank"] * (needed - len(names))
+    return names
+
+
 def apply_overrides(
     pages: list[list[Optional[ActionSpec]]],
     overrides: dict[int, ActionSpec],
