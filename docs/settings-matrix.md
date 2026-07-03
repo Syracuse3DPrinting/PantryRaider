@@ -168,6 +168,7 @@ and are device-local. They do not apply to a server install.
 | `screensaver_speed` | | Editable | Editable | Device-local |
 | `screensaver_mode` | | Editable | Editable | Device-local |
 | `screensaver_all_clients` | | Editable | Editable | Device-local |
+| `osk_enabled` | | Editable | Editable | Device-local |
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 | `streamdeck_screensaver_layout` | | Not applicable | Editable | Device-local |
 
@@ -192,6 +193,13 @@ settings are also offered on a server install, not just the Pi modes.
 read from the LSM6DSOX accelerometer on kits that include one; `auto` (the
 default) enables it exactly when the sensor is present. A screen touch or a
 Stream Deck button press always wakes the display regardless of this setting.
+
+`osk_enabled` controls the on-screen keyboard: in kiosk mode a touch
+keyboard slides up from the bottom of the screen whenever a text field is
+tapped, so names, barcodes, and searches can be typed without a physical
+keyboard. On by default; turn it off on a kiosk with a keyboard attached.
+Like the screensaver, it is offered on server installs too, because any
+browser can be put in kiosk (touch) mode.
 
 `streamdeck_screensaver_layout` tells the screensaver where the Stream Deck
 sits relative to the screen (above, below, left, or right). With a position

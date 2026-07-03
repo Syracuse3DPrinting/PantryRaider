@@ -2885,6 +2885,11 @@ docker compose up -d</code></pre>
                      {{ 'checked' if s.screensaver_all_clients else '' }}>
               <label class="form-check-label" for="screensaver_all_clients">Screensaver on every browser{{ info('Normally the screensaver only runs on the kiosk display. Turn this on to have every browser viewing this install, a desktop or a phone included, dim to the screensaver after the same idle minutes. Any touch, click, or key press brings the page right back.') }}</label>
             </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="osk_enabled"
+                     {{ 'checked' if s.osk_enabled else '' }}>
+              <label class="form-check-label" for="osk_enabled">On-screen keyboard{{ info('In kiosk mode a touch keyboard slides up from the bottom of the screen whenever a text field is tapped, so names, barcodes, and searches can be typed without a physical keyboard. Turn it off if this kiosk has a keyboard attached. This is a per-device choice.') }}</label>
+            </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
@@ -2962,6 +2967,11 @@ docker compose up -d</code></pre>
               <input class="form-check-input" type="checkbox" role="switch" id="screensaver_all_clients"
                      {{ 'checked' if s.screensaver_all_clients else '' }}>
               <label class="form-check-label" for="screensaver_all_clients">Screensaver on every browser{{ info('Normally the screensaver only runs on a kiosk display. Turn this on to have every browser viewing this install, a desktop or a phone included, dim to the screensaver after the same idle minutes.') }}</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="osk_enabled"
+                     {{ 'checked' if s.osk_enabled else '' }}>
+              <label class="form-check-label" for="osk_enabled">On-screen keyboard{{ info('A browser put in kiosk (touch) mode gets a touch keyboard that slides up from the bottom of the screen whenever a text field is tapped. Turn it off if the kiosk screen has a keyboard attached.') }}</label>
             </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveScreensaverSettings()">
@@ -4920,6 +4930,7 @@ function buildPayload() {
     screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
     screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
     screensaver_all_clients: document.getElementById('screensaver_all_clients')?.checked || false,
+    osk_enabled:     document.getElementById('osk_enabled')?.checked ?? true,
     wake_on_motion:  document.getElementById('wake_on_motion')?.value || 'auto',
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
@@ -6404,6 +6415,7 @@ async function saveDisplaySettings() {
   const screensaver_speed = document.getElementById('screensaver_speed')?.value || 'normal';
   const screensaver_mode = document.getElementById('screensaver_mode')?.value || 'bounce';
   const screensaver_all_clients = document.getElementById('screensaver_all_clients')?.checked || false;
+  const osk_enabled = document.getElementById('osk_enabled')?.checked ?? true;
   const wake_on_motion = document.getElementById('wake_on_motion')?.value || 'auto';
   try {
     await fetch('setup/scale', {
@@ -6412,7 +6424,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, screensaver_all_clients, wake_on_motion}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, screensaver_all_clients, osk_enabled, wake_on_motion}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {
@@ -6443,6 +6455,7 @@ async function saveScreensaverSettings() {
     screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
     screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
     screensaver_all_clients: document.getElementById('screensaver_all_clients')?.checked || false,
+    osk_enabled: document.getElementById('osk_enabled')?.checked ?? true,
   };
   try {
     const r = await fetch('setup/save', {
@@ -8932,5 +8945,8 @@ async function cancelTouchCalibration() {
    (window.__screensaverTest) and, on a kiosk, the normal idle behaviour. #}
 <div id="screensaver-config" data-minutes="{{ s.screensaver_minutes }}" data-speed="{{ s.screensaver_speed }}" data-mode="{{ s.screensaver_mode }}" data-all-clients="{{ 'true' if s.screensaver_all_clients else 'false' }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
 <script src="static/js/screensaver.js?v={{ version }}"></script>
+{# On-screen keyboard for kiosk touchscreens (FoodAssistant-wo9j): a kiosk in
+   the setup wizard or the settings page needs to type API keys and names. #}
+{% include "_osk.html" %}
 </body>
 </html>

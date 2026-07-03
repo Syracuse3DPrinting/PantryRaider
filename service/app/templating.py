@@ -100,6 +100,11 @@ def theme_context(request: Request) -> dict:
             settings.streamdeck_screensaver_layout
             if settings.has_streamdeck else "off"),
         "streamdeck_grid_aspect": streamdeck_grid_aspect(settings.streamdeck_key_count),
+        # On-screen keyboard for kiosk touchscreens (FoodAssistant-wo9j),
+        # rendered into #osk-config and read by osk.js. Kiosk-gated in the
+        # script itself; this flag lets a kiosk with an attached keyboard
+        # turn the on-screen one off.
+        "osk_enabled": settings.osk_enabled,
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,

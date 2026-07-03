@@ -132,6 +132,8 @@
      (FoodAssistant-y65x). #}
   <div id="screensaver-config" data-minutes="{{ screensaver_minutes }}" data-speed="{{ screensaver_speed }}" data-mode="{{ screensaver_mode }}" data-all-clients="{{ 'true' if screensaver_all_clients else 'false' }}" data-deck-layout="{{ streamdeck_screensaver_layout }}" data-deck-aspect="{{ streamdeck_grid_aspect }}" hidden></div>
   <script src="static/js/screensaver.js?v={{ app_version }}"></script>
+  {# On-screen keyboard for kiosk touchscreens (FoodAssistant-wo9j) #}
+  {% include "_osk.html" %}
   <style>
     body { padding-top: 60px; }
     .navbar-brand { font-weight: 700; letter-spacing: -0.5px; }

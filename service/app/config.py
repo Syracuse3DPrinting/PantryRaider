@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.115"
+APP_VERSION = "0.7.116"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -369,6 +369,7 @@ _SAVEABLE = [
     "display_idle_timeout", "streamdeck_idle_timeout", "screensaver_minutes", "screensaver_speed", "screensaver_mode",
     "screensaver_all_clients",
     "streamdeck_screensaver_layout",
+    "osk_enabled",
     "wake_on_motion",
     "streamdeck_key_overrides",
     "streamdeck_weather_location", "streamdeck_weather_units", "weather_api_base",
@@ -1028,6 +1029,13 @@ class Settings(BaseSettings):
     # streamdeck_key_style: it describes this device's physical arrangement, so
     # it is deliberately not synced from the main server.
     streamdeck_screensaver_layout: str = "off"
+
+    # On-screen keyboard for kiosk touchscreens (FoodAssistant-wo9j). A wall
+    # panel has no physical keyboard, so in kiosk mode a bottom-docked keyboard
+    # slides up whenever a text field gains focus. On by default; turn it off
+    # per device when the kiosk has an attached keyboard. Device-local, like
+    # the rest of the kiosk display settings.
+    osk_enabled: bool = True
 
     # On-screen floating navigation menu (FoodAssistant-bzuu). position is the
     # server default ("off" hides it; otherwise a corner: top-left, top-right,

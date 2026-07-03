@@ -263,6 +263,7 @@ class SetupPayload(BaseModel):
     screensaver_mode: str | None = None
     screensaver_all_clients: bool = False
     streamdeck_screensaver_layout: str | None = None
+    osk_enabled: bool = True
     wake_on_motion: str = "auto"
     streamdeck_key_overrides: list = []
     streamdeck_weather_location: str = ""
