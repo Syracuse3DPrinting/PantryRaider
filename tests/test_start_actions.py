@@ -252,20 +252,37 @@ def test_preset_timer_key_starts_the_shared_timer(monkeypatch):
     assert active[0]["total_seconds"] == 6 * 60
 
 
-def test_cycle_timer_key_walks_the_stages(monkeypatch):
+def test_timer_key_short_press_adds_a_minute(monkeypatch):
     monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
     monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
-    assert "Timer 1 started: 5:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
-    assert "Timer 1 now 10:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
-    assert "Timer 1 now 15:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    assert "Timer 1 started: 1:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    assert "+1:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    assert "+1:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
     active = timers.list_timers()
-    assert len(active) == 1 and active[0]["total_seconds"] == 15 * 60
-    # Walk to the top of the cycle, then one more press stops it.
-    asyncio.run(sa.fire_key("timer_1"))   # 30
-    asyncio.run(sa.fire_key("timer_1"))   # 60
-    res = asyncio.run(sa.fire_key("timer_1"))
-    assert "Timer 1 stopped" in res["detail"]
+    assert len(active) == 1 and active[0]["total_seconds"] == 3 * 60
+
+
+def test_timer_key_long_press_resets(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
+    asyncio.run(sa.fire_key("timer_eggs"))
+    assert len(timers.list_timers()) == 1
+    res = asyncio.run(sa.fire_key("timer_eggs", long=True))
+    assert res["ok"] and "reset" in res["detail"]
     assert timers.list_timers() == []
+    # Long press on an idle key reports, never creates.
+    res = asyncio.run(sa.fire_key("timer_1", long=True))
+    assert res["ok"] and "not running" in res["detail"]
+    assert timers.list_timers() == []
+
+
+def test_preset_key_running_press_extends(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
+    asyncio.run(sa.fire_key("timer_pasta"))          # 10:00
+    res = asyncio.run(sa.fire_key("timer_pasta"))    # +1:00
+    assert "+1:00" in res["detail"]
+    assert timers.list_timers()[0]["total_seconds"] == 11 * 60
 
 
 def test_expired_timer_key_dismisses(monkeypatch):

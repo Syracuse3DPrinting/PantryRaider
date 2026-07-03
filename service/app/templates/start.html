@@ -135,8 +135,10 @@
       // against the page URL, which would make "ui/" become "/ui/ui/" and the
       // key appear to do nothing (Pantry Raider).
       function go(path) { location.href = new URL(path, document.baseURI).href; }
-      function fireServer(name) {
-        fetch(new URL('ui/start/fire/' + encodeURIComponent(name), document.baseURI), { method: 'POST' })
+      function fireServer(name, long) {
+        const url = new URL('ui/start/fire/' + encodeURIComponent(name), document.baseURI);
+        if (long) url.searchParams.set('long', 'true');
+        fetch(url, { method: 'POST' })
           .then(r => r.json())
           .then(d => { toast(d.detail || (d.ok ? 'Done.' : 'That did not work.')); pollTimers(); })
           .catch(() => toast('Could not reach the server.'));
@@ -210,8 +212,33 @@
         if (FIRE[t]) { fireServer(el.dataset.id); return; }
         go('ui/');
       }
+      // Long press on a timer key resets it, like holding the deck key
+      // (FoodAssistant-b8o1). Pointer events cover touch and mouse; a long
+      // press swallows the click that follows so it cannot also short-press.
+      const LONG_MS = 550;
+      function timerName(el) {
+        if (el.dataset.kind === 'builtin' && FIRE_KEYS[el.dataset.key]) return el.dataset.key;
+        if (el.dataset.kind === 'custom' && el.dataset.type === 'timer') return el.dataset.id;
+        return null;
+      }
       document.querySelectorAll('.start-key[role="button"]').forEach(el => {
-        el.addEventListener('click', () => fire(el));
+        const tname = timerName(el);
+        if (tname) {
+          let holdT = null;
+          el.addEventListener('pointerdown', () => {
+            holdT = setTimeout(() => {
+              holdT = null;
+              el._longFired = true;
+              fireServer(tname, true);
+            }, LONG_MS);
+          });
+          ['pointerup', 'pointercancel', 'pointerleave'].forEach(evn =>
+            el.addEventListener(evn, () => { if (holdT) { clearTimeout(holdT); holdT = null; } }));
+        }
+        el.addEventListener('click', () => {
+          if (el._longFired) { el._longFired = false; return; }
+          fire(el);
+        });
         el.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); fire(el); } });
       });
     })();
