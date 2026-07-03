@@ -44,6 +44,48 @@ MACRO_TIMER_PRESETS: dict[str, tuple[str, int]] = {
 
 _HA_SLOT_RE = re.compile(r"^ha_([1-5])$")
 
+# Built-in cycle timer keys and the stages a press walks through, mirroring
+# the deck's TIMER_CYCLE_MINUTES. On-screen the cycle runs against the SHARED
+# registry: press while running advances to the next stage, past the last
+# stage stops, and a press on an expired timer dismisses it.
+TIMER_CYCLE_MINUTES: tuple[int, ...] = (5, 10, 15, 30, 60)
+_CYCLE_TIMER_LABELS = {"timer_1": "Timer 1", "timer_2": "Timer 2", "timer_3": "Timer 3"}
+
+
+def _mmss(seconds: float) -> str:
+    m, s = divmod(int(seconds), 60)
+    return f"{m}:{s:02d}"
+
+
+def _fire_timer(label: str, minutes: int) -> dict:
+    """Start or advance a timer key against the shared registry.
+
+    Deck semantics on the shared registry: ``minutes`` > 0 is a preset, and a
+    press while it runs restarts it; 0 is a cycle key, each press advancing
+    5/10/15/30/60 minutes with a press past 60 stopping it. A press on an
+    expired timer dismisses it either way.
+    """
+    from . import timers
+    existing = next((t for t in timers.list_timers() if t["label"] == label), None)
+    if existing and existing["expired"]:
+        timers.cancel_timer(existing["id"])
+        return {"ok": True, "detail": f"{label} dismissed."}
+    if minutes > 0:
+        if existing:
+            timers.cancel_timer(existing["id"])
+        timers.create_timer(label, minutes * 60)
+        return {"ok": True, "detail": f"{label} started: {_mmss(minutes * 60)}."}
+    if existing:
+        current = int(existing["total_seconds"] // 60)
+        stages = [m for m in TIMER_CYCLE_MINUTES if m > current]
+        timers.cancel_timer(existing["id"])
+        if not stages:
+            return {"ok": True, "detail": f"{label} stopped."}
+        timers.create_timer(label, stages[0] * 60)
+        return {"ok": True, "detail": f"{label} now {_mmss(stages[0] * 60)}."}
+    timers.create_timer(label, TIMER_CYCLE_MINUTES[0] * 60)
+    return {"ok": True, "detail": f"{label} started: {_mmss(TIMER_CYCLE_MINUTES[0] * 60)}."}
+
 
 def find_override(custom_id: str, overrides: list | None) -> dict | None:
     """The override entry with the given id, or None."""
@@ -181,6 +223,11 @@ async def fire_key(name: str) -> dict:
     if slot:
         ok, detail = await call_ha_service(*slot)
         return {"ok": ok, "detail": detail}
+    if name in _CYCLE_TIMER_LABELS:
+        return _fire_timer(_CYCLE_TIMER_LABELS[name], 0)
+    if name in MACRO_TIMER_PRESETS:
+        label, minutes = MACRO_TIMER_PRESETS[name]
+        return _fire_timer(label, minutes)
     override = find_override(name, settings.streamdeck_key_overrides)
     if not override:
         return {"ok": False, "detail": "Unknown key."}
@@ -199,4 +246,11 @@ async def fire_key(name: str) -> dict:
         return {"ok": ok, "detail": detail}
     if otype == "macro":
         return await _fire_macro(override)
+    if otype == "timer":
+        label = str(override.get("label", "")).strip() or "Timer"
+        try:
+            minutes = max(0, int(override.get("minutes", 0)))
+        except (TypeError, ValueError):
+            minutes = 0
+        return _fire_timer(label, minutes)
     return {"ok": False, "detail": "This key opens a page instead."}

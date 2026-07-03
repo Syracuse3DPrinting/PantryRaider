@@ -163,11 +163,13 @@ def test_fire_incomplete_overrides_report_config_problem(monkeypatch, ha_recorde
 
 
 def test_fire_page_typed_override_is_not_executed(monkeypatch, ha_recorder):
+    # Camera-type keys still open a page; timer keys used to as well but now
+    # fire against the shared registry (FoodAssistant-6ifu, tested below).
     monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
     monkeypatch.setattr(settings, "streamdeck_key_overrides",
-                        [{"id": "t1", "type": "timer", "minutes": 5}],
+                        [{"id": "c1", "type": "camera", "camera": "Front"}],
                         raising=False)
-    res = asyncio.run(sa.fire_key("t1"))
+    res = asyncio.run(sa.fire_key("c1"))
     assert not res["ok"]
     assert "opens a page" in res["detail"]
 
@@ -236,3 +238,53 @@ def test_macro_stops_on_first_ha_failure(monkeypatch):
     assert not res["ok"]
     assert "Stopped at ha_1" in res["detail"]
     assert timers.list_timers() == []
+
+
+# ---------- timer keys fire against the shared registry (6ifu) ----------
+
+def test_preset_timer_key_starts_the_shared_timer(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
+    res = asyncio.run(sa.fire_key("timer_eggs"))
+    assert res["ok"] and "Eggs started: 6:00" in res["detail"]
+    active = timers.list_timers()
+    assert len(active) == 1 and active[0]["label"] == "Eggs"
+    assert active[0]["total_seconds"] == 6 * 60
+
+
+def test_cycle_timer_key_walks_the_stages(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
+    assert "Timer 1 started: 5:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    assert "Timer 1 now 10:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    assert "Timer 1 now 15:00" in asyncio.run(sa.fire_key("timer_1"))["detail"]
+    active = timers.list_timers()
+    assert len(active) == 1 and active[0]["total_seconds"] == 15 * 60
+    # Walk to the top of the cycle, then one more press stops it.
+    asyncio.run(sa.fire_key("timer_1"))   # 30
+    asyncio.run(sa.fire_key("timer_1"))   # 60
+    res = asyncio.run(sa.fire_key("timer_1"))
+    assert "Timer 1 stopped" in res["detail"]
+    assert timers.list_timers() == []
+
+
+def test_expired_timer_key_dismisses(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
+    t = timers.create_timer("Eggs", 60)
+    row = timers._timers[t["id"]]
+    row.deadline_monotonic -= 120
+    row.deadline_epoch -= 120
+    res = asyncio.run(sa.fire_key("timer_eggs"))
+    assert res["ok"] and "dismissed" in res["detail"]
+    assert timers.list_timers() == []
+
+
+def test_custom_timer_override_fires(monkeypatch):
+    monkeypatch.setattr(settings, "streamdeck_ha_slots", [], raising=False)
+    monkeypatch.setattr(settings, "streamdeck_key_overrides",
+                        [{"id": "t9", "type": "timer", "label": "Tea", "minutes": 3}],
+                        raising=False)
+    res = asyncio.run(sa.fire_key("t9"))
+    assert res["ok"] and "Tea started: 3:00" in res["detail"]
+    assert timers.list_timers()[0]["label"] == "Tea"

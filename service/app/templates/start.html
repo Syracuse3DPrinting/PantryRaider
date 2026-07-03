@@ -85,7 +85,7 @@
         <div class="start-key blank"></div>
         {% elif k.kind == 'builtin' %}
         <div class="start-key" role="button" tabindex="0" style="background: {{ k.color }}"
-             data-kind="builtin" data-href="{{ k.href }}">
+             data-kind="builtin" data-href="{{ k.href }}" data-key="{{ k.key }}">
           <i class="bi {{ k.icon }} ico"></i><span class="lbl">{{ k.label }}</span>
         </div>
         {% elif k.kind == 'custom' %}
@@ -108,9 +108,14 @@
       // Where a shared custom button sends you on-screen. The action-typed deck
       // buttons (HA toggle, media, macro) and the built-in HA slot keys fire
       // server-side via ui/start/fire, so they work without a connected deck.
-      const ROUTE = { timer: 'ui/timers', shopping_add: 'ui/shopping',
+      const ROUTE = { shopping_add: 'ui/shopping',
         weather: 'ui/weather', camera: 'ui/camera' };
-      const FIRE = { ha_action: 1, media: 1, macro: 1 };
+      const FIRE = { ha_action: 1, media: 1, macro: 1, timer: 1 };
+      // Built-in timer keys start/advance the shared timer instead of just
+      // opening the Timers page, matching the deck key (FoodAssistant-6ifu).
+      // The timers_view key still navigates.
+      const FIRE_KEYS = { timer_1: 1, timer_2: 1, timer_3: 1,
+        timer_eggs: 1, timer_pasta: 1, timer_rice: 1 };
       function toast(msg) {
         const t = document.getElementById('start-toast');
         t.textContent = msg; t.style.display = 'block';
@@ -128,7 +133,10 @@
           .catch(() => toast('Could not reach the server.'));
       }
       function fire(el) {
-        if (el.dataset.kind === 'builtin') { go(el.dataset.href); return; }
+        if (el.dataset.kind === 'builtin') {
+          if (FIRE_KEYS[el.dataset.key]) { fireServer(el.dataset.key); return; }
+          go(el.dataset.href); return;
+        }
         if (el.dataset.kind === 'deckonly') {
           // The built-in HA slot keys (ha_1..ha_5) execute server-side; the
           // rest (paging, brightness, deck workflow) really do need hardware.
