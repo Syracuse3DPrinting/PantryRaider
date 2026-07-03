@@ -10,6 +10,7 @@ Run: python -m pytest tests/test_host_bridge.py -q
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
@@ -1483,3 +1484,74 @@ def test_streamdeck_config_toml_keeps_macro_action_list():
 def test_streamdeck_config_toml_escapes_quotes_and_backslashes():
     cfg = {"weather_location": 'say "hi" \\ there'}
     assert _roundtrip(cfg) == cfg
+
+
+# --- Screensaver photo helpers (FoodAssistant-5w4m) --------------------------
+# The bridge serves slideshow images from a pictures/ or photos/ directory at
+# the drive root, read-only. Listing must be extension- and size-filtered,
+# and the per-file lookup must fail closed on anything that tries to escape
+# that directory.
+
+def test_usb_photos_dir_matches_case_insensitively(tmp_path):
+    (tmp_path / "Music").mkdir()
+    (tmp_path / "PICTURES").mkdir()
+    assert bridge._usb_photos_dir(str(tmp_path)) == str(tmp_path / "PICTURES")
+
+
+def test_usb_photos_dir_accepts_photos_name_too(tmp_path):
+    (tmp_path / "Photos").mkdir()
+    assert bridge._usb_photos_dir(str(tmp_path)) == str(tmp_path / "Photos")
+
+
+def test_usb_photos_dir_ignores_files_and_missing(tmp_path):
+    # A FILE named photos does not count, and no match at all is None.
+    (tmp_path / "photos").write_text("not a dir")
+    assert bridge._usb_photos_dir(str(tmp_path)) is None
+    assert bridge._usb_photos_dir(str(tmp_path / "nope")) is None
+
+
+def test_usb_photo_names_filters_extension_hidden_and_size(tmp_path):
+    (tmp_path / "b.JPG").write_bytes(b"x")
+    (tmp_path / "a.png").write_bytes(b"x")
+    (tmp_path / "c.webp").write_bytes(b"x")
+    (tmp_path / "notes.txt").write_bytes(b"x")
+    (tmp_path / "movie.mp4").write_bytes(b"x")
+    (tmp_path / ".hidden.jpg").write_bytes(b"x")
+    (tmp_path / "big.jpg").write_bytes(b"x" * 100)
+    (tmp_path / "sub").mkdir()  # directories never listed, even sub.jpg-alikes
+    assert bridge._usb_photo_names(str(tmp_path), max_bytes=50) == \
+        ["a.png", "b.JPG", "c.webp"]
+
+
+def test_usb_photo_names_empty_on_missing_dir(tmp_path):
+    assert bridge._usb_photo_names(str(tmp_path / "gone")) == []
+
+
+def test_usb_photo_safe_path_accepts_plain_image_names(tmp_path):
+    (tmp_path / "pic.jpeg").write_bytes(b"x")
+    assert bridge._usb_photo_safe_path(str(tmp_path), "pic.jpeg") == \
+        os.path.realpath(str(tmp_path / "pic.jpeg"))
+
+
+def test_usb_photo_safe_path_rejects_traversal_and_separators(tmp_path):
+    (tmp_path / "pic.jpg").write_bytes(b"x")
+    outside = tmp_path.parent / "outside.jpg"
+    outside.write_bytes(b"x")
+    for bad in ("", ".", "..", "../outside.jpg", "sub/pic.jpg",
+                "..\\outside.jpg", "/etc/passwd", ".hidden.jpg"):
+        assert bridge._usb_photo_safe_path(str(tmp_path), bad) is None
+
+
+def test_usb_photo_safe_path_rejects_non_image_and_missing(tmp_path):
+    (tmp_path / "notes.txt").write_text("x")
+    assert bridge._usb_photo_safe_path(str(tmp_path), "notes.txt") is None
+    assert bridge._usb_photo_safe_path(str(tmp_path), "gone.jpg") is None
+
+
+def test_usb_photo_safe_path_rejects_symlink_escaping_the_dir(tmp_path):
+    photos = tmp_path / "photos"
+    photos.mkdir()
+    secret = tmp_path / "secret.jpg"
+    secret.write_bytes(b"x")
+    (photos / "link.jpg").symlink_to(secret)
+    assert bridge._usb_photo_safe_path(str(photos), "link.jpg") is None

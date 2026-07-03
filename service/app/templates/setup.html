@@ -2860,6 +2860,14 @@ docker compose up -d</code></pre>
               </select>
               <div class="form-text">How quickly the logo glides across the screen.</div>
             </div>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_mode">Screensaver style</label>
+              <select class="form-select form-select-sm" style="max-width:280px" id="screensaver_mode">
+                <option value="bounce" {{ 'selected' if s.screensaver_mode == 'bounce' or not s.screensaver_mode else '' }}>Bouncing logo</option>
+                <option value="photos" {{ 'selected' if s.screensaver_mode == 'photos' else '' }}>Photo slideshow</option>
+              </select>
+              <div class="form-text">Photos plays images from a USB drive's photos folder and falls back to the logo when no drive is present. Put your pictures in a folder named photos or pictures at the top of the drive. This is a per-device choice.</div>
+            </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
@@ -4795,6 +4803,7 @@ function buildPayload() {
     display_idle_timeout: parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10),
     screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
     screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
+    screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
     wake_on_motion:  document.getElementById('wake_on_motion')?.value || 'auto',
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
@@ -6139,6 +6148,7 @@ async function saveDisplaySettings() {
   const display_idle_timeout = parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10);
   const screensaver_minutes = parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10);
   const screensaver_speed = document.getElementById('screensaver_speed')?.value || 'normal';
+  const screensaver_mode = document.getElementById('screensaver_mode')?.value || 'bounce';
   const wake_on_motion = document.getElementById('wake_on_motion')?.value || 'auto';
   try {
     await fetch('setup/scale', {
@@ -6147,7 +6157,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, wake_on_motion}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, wake_on_motion}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {

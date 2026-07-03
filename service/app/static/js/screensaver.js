@@ -1,19 +1,25 @@
-// Kiosk screensaver (FoodAssistant-y65x).
+// Kiosk screensaver (FoodAssistant-y65x, photos FoodAssistant-5w4m).
 //
 // Runs only in kiosk mode. After the configured idle minutes the page fades to
-// a near-black overlay with the Pantry Raider logo bouncing slowly around the
-// screen (clock and date riding under it), and any touch or key press
-// dismisses it instantly. This is the SOFT layer for panels where full display
-// blanking is unwanted: the separate "Display sleep" setting powers the panel
-// itself off via the host bridge, while this one keeps the display lit and
-// just covers the page. The constant motion is the burn-in guard.
+// a near-black overlay, and any touch or key press dismisses it instantly.
+// This is the SOFT layer for panels where full display blanking is unwanted:
+// the separate "Display sleep" setting powers the panel itself off via the
+// host bridge, while this one keeps the display lit and just covers the page.
+//
+// Two styles, chosen by the per-device screensaver_mode setting:
+//   bounce  the Pantry Raider logo gliding around the screen with the clock
+//           riding under it (the default; constant motion is the burn-in guard)
+//   photos  a slideshow of images from an attached USB drive's photos folder,
+//           cover-fit with a slow Ken Burns drift and a crossfade every
+//           25 seconds; a small clock hops corners between photos so nothing
+//           sits still. No drive, no photos, or a failed fetch falls back to
+//           the bounce style, so the setting is always safe to leave on.
 //
 // The timeout comes from #screensaver-config (data-minutes, rendered from the
 // per-device saved setting); 0 or a missing config leaves this a no-op.
 //
-// Planned phases (separate beads): slideshow of images from an attached USB
-// drive, and a mode that spans the Stream Deck keys and the panel as one large
-// canvas.
+// Planned phase (separate bead): a mode that spans the Stream Deck keys and
+// the panel as one large canvas.
 (function () {
   try {
     if (localStorage.getItem('kioskMode') !== 'true') return;
@@ -29,10 +35,14 @@
   // Glide speed in pixels per second, from the per-device setting.
   var SPEEDS = { slow: 18, normal: 32, fast: 60 };
   var SPEED = SPEEDS[(cfg && cfg.getAttribute('data-speed')) || 'normal'] || SPEEDS.normal;
+  var MODE = (cfg && cfg.getAttribute('data-mode')) === 'photos' ? 'photos' : 'bounce';
+  var PHOTO_MS = 25000;   // how long each slideshow photo stays up
+  var FADE_MS = 2000;     // crossfade length between photos
   var lastActivity = Date.now();
   var overlay = null;
   var clockTimer = null;
   var rafId = null;
+  var photoTimer = null;
 
   function pad(n) { return (n < 10 ? '0' : '') + n; }
 
@@ -88,21 +98,10 @@
     rafId = requestAnimationFrame(step);
   }
 
-  function show() {
-    if (overlay) return;
-    // Hide the pointer everywhere while the saver is up, not just over the
-    // overlay: Chromium only refreshes the cursor shape on movement, and a
-    // cursor parked before the overlay appeared would otherwise stay drawn.
-    var style = document.createElement('style');
-    style.id = 'kiosk-screensaver-cursor';
-    style.textContent = 'body.ss-active, body.ss-active * { cursor: none !important; }';
-    document.head.appendChild(style);
-    document.body.classList.add('ss-active');
-    overlay = document.createElement('div');
-    overlay.id = 'kiosk-screensaver';
-    overlay.style.cssText =
-      'position:fixed;inset:0;z-index:2147483000;background:#000;' +
-      'opacity:0;transition:opacity 1.2s ease;cursor:none;overflow:hidden;';
+  // Build the bouncing logo+clock block inside the overlay (the default
+  // style, and the fallback when the photo list is empty or unreachable).
+  function startBounceMode() {
+    if (!overlay) return;
     var block = document.createElement('div');
     block.className = 'ss-block';
     block.style.cssText =
@@ -122,14 +121,126 @@
     block.appendChild(time);
     block.appendChild(date);
     overlay.appendChild(block);
-    document.body.appendChild(overlay);
     updateClock();
+    startBounce(block);
+  }
+
+  // Photo slideshow. Each image is cover-fit and drifts with a slow Ken Burns
+  // pan/zoom (a long CSS transform transition, so the compositor does the
+  // work); the next image crossfades in on its own layer. Order is shuffled
+  // per saver run, reshuffled when the deck runs out. EXIF rotation is the
+  // browser's job (image-orientation: from-image). The corner clock moves to
+  // a different corner with every photo as the burn-in guard.
+  function startPhotosMode(names) {
+    if (!overlay) return;
+    var order = names.slice();
+    for (var i = order.length - 1; i > 0; i--) {
+      var j = Math.floor(Math.random() * (i + 1));
+      var t = order[i]; order[i] = order[j]; order[j] = t;
+    }
+    var idx = 0;
+    var current = null;
+    var corners = ['right:3vmin;bottom:3vmin;', 'left:3vmin;bottom:3vmin;',
+                   'left:3vmin;top:3vmin;', 'right:3vmin;top:3vmin;'];
+    var cornerIdx = 0;
+
+    var clock = document.createElement('div');
+    clock.className = 'ss-time';
+    clock.style.cssText =
+      'position:absolute;' + corners[0] + 'z-index:3;font-size:3.5vmin;' +
+      'font-weight:600;color:#e8eaed;text-shadow:0 0 1.2vmin rgba(0,0,0,0.9);';
+    overlay.appendChild(clock);
+    updateClock();
+
+    function kenBurns(img) {
+      // Random start/end offsets small enough that the 1.12x scale always
+      // keeps the frame covered; linear so the drift never visibly stops.
+      function off() { return ((Math.random() * 6) - 3).toFixed(2) + '%'; }
+      img.style.transform = 'scale(1.12) translate(' + off() + ',' + off() + ')';
+      img.getBoundingClientRect(); // commit the start frame
+      img.style.transition = 'opacity ' + FADE_MS + 'ms ease, transform ' +
+        (PHOTO_MS + FADE_MS * 2) + 'ms linear';
+      img.style.transform = 'scale(1.12) translate(' + off() + ',' + off() + ')';
+    }
+
+    function advance() {
+      if (!overlay) return;
+      var name = order[idx];
+      idx += 1;
+      if (idx >= order.length) {
+        idx = 0;
+        order.sort(function () { return Math.random() - 0.5; });
+      }
+      var img = document.createElement('img');
+      img.alt = '';
+      img.style.cssText =
+        'position:absolute;inset:0;width:100%;height:100%;object-fit:cover;' +
+        'image-orientation:from-image;opacity:0;will-change:transform,opacity;';
+      img.onload = function () {
+        if (!overlay || img.parentNode !== overlay) return;
+        kenBurns(img);
+        img.style.opacity = '1';
+        var old = current;
+        current = img;
+        cornerIdx = (cornerIdx + 1) % corners.length;
+        clock.style.cssText =
+          'position:absolute;' + corners[cornerIdx] + 'z-index:3;font-size:3.5vmin;' +
+          'font-weight:600;color:#e8eaed;text-shadow:0 0 1.2vmin rgba(0,0,0,0.9);';
+        if (old) {
+          old.style.opacity = '0';
+          setTimeout(function () {
+            if (old.parentNode) old.parentNode.removeChild(old);
+          }, FADE_MS + 200);
+        }
+        photoTimer = setTimeout(advance, PHOTO_MS);
+      };
+      img.onerror = function () {
+        // A vanished file (drive pulled mid-show) just skips ahead.
+        if (img.parentNode) img.parentNode.removeChild(img);
+        photoTimer = setTimeout(advance, 1000);
+      };
+      img.src = 'ui/screensaver/photo?name=' + encodeURIComponent(name);
+      overlay.insertBefore(img, clock);
+    }
+    advance();
+  }
+
+  function show() {
+    if (overlay) return;
+    // Hide the pointer everywhere while the saver is up, not just over the
+    // overlay: Chromium only refreshes the cursor shape on movement, and a
+    // cursor parked before the overlay appeared would otherwise stay drawn.
+    var style = document.createElement('style');
+    style.id = 'kiosk-screensaver-cursor';
+    style.textContent = 'body.ss-active, body.ss-active * { cursor: none !important; }';
+    document.head.appendChild(style);
+    document.body.classList.add('ss-active');
+    overlay = document.createElement('div');
+    overlay.id = 'kiosk-screensaver';
+    overlay.style.cssText =
+      'position:fixed;inset:0;z-index:2147483000;background:#000;' +
+      'opacity:0;transition:opacity 1.2s ease;cursor:none;overflow:hidden;';
+    document.body.appendChild(overlay);
     // Fade in on the next frame so the transition runs.
     requestAnimationFrame(function () {
       if (overlay) overlay.style.opacity = '1';
     });
     clockTimer = setInterval(updateClock, 5000);
-    startBounce(block);
+    if (MODE === 'photos') {
+      // The list is fetched fresh at every saver start so plugging in or
+      // pulling the drive takes effect on the next idle, no restart needed.
+      fetch('ui/screensaver/photos', { cache: 'no-store' })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!overlay) return; // dismissed while fetching
+          var names = data && data.photos;
+          if (Array.isArray(names) && names.length) startPhotosMode(names);
+          else startBounceMode();
+        })
+        .catch(function () { if (overlay) startBounceMode(); });
+    } else {
+      startBounceMode();
+    }
   }
 
   function hide() {
@@ -139,6 +250,8 @@
     clearInterval(clockTimer);
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
+    if (photoTimer) clearTimeout(photoTimer);
+    photoTimer = null;
     if (el.parentNode) el.parentNode.removeChild(el);
     document.body.classList.remove('ss-active');
     var style = document.getElementById('kiosk-screensaver-cursor');

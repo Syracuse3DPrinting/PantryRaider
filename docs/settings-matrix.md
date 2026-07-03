@@ -157,6 +157,7 @@ and are device-local. They do not apply to a server install.
 | `wake_on_motion` | | Not applicable | Editable | Device-local |
 | `screensaver_minutes` | | Not applicable | Editable | Device-local |
 | `screensaver_speed` | | Not applicable | Editable | Device-local |
+| `screensaver_mode` | | Not applicable | Editable | Device-local |
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 
 The display and Stream Deck panes are shown only on the Pi modes (the
@@ -166,6 +167,9 @@ mode because it controls how browser links are built.
 `display_idle_timeout` switches the panel itself off after the idle period;
 `screensaver_minutes` is the softer on-screen layer (the page dims to a
 floating clock, a touch brings it back) for panels that should stay powered.
+`screensaver_mode` picks what that layer shows: the bouncing logo (the
+default) or a photo slideshow from an attached USB drive's photos folder,
+which falls back to the logo when no drive or no photos are present.
 `wake_on_motion` wakes a sleeping panel when the device is moved or bumped,
 read from the LSM6DSOX accelerometer on kits that include one; `auto` (the
 default) enables it exactly when the sensor is present. A screen touch or a

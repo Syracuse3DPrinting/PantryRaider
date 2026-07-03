@@ -88,6 +88,7 @@ def theme_context(request: Request) -> dict:
         # on-screen clock layer shows; 0 keeps it off. Read by screensaver.js.
         "screensaver_minutes": settings.screensaver_minutes,
         "screensaver_speed": settings.screensaver_speed,
+        "screensaver_mode": settings.screensaver_mode,
         # Cache-buster for static assets so a kiosk browser fetches fresh CSS/JS
         # after an update instead of serving a stale cached copy.
         "app_version": APP_VERSION,

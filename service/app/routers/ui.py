@@ -576,6 +576,53 @@ async def weather_data(location: str | None = None, units: str | None = None):
     return {"ok": True, "forecast": forecast, "location": loc}
 
 
+@router.get("/screensaver/photos")
+async def screensaver_photos():
+    """Photo names for the screensaver slideshow (FoodAssistant-5w4m).
+
+    On a Pi appliance the attached flash drive is only visible to the host,
+    so the list comes from the bridge (GET /usb/photos: images in the drive's
+    pictures/ or photos/ folder). Elsewhere there is no drive to read, so the
+    list is empty and the screensaver falls back to the bouncing logo. Never
+    raises; any failure is an empty list for the same reason."""
+    photos: list = []
+    if settings.is_pi_appliance():
+        from ..services.usb_backup import _bridge_get
+        data = await _bridge_get("/usb/photos")
+        got = data.get("photos") if isinstance(data, dict) else None
+        if isinstance(got, list):
+            photos = [n for n in got if isinstance(n, str)]
+    # A short cache keeps repeated saver starts cheap without hiding a newly
+    # plugged-in drive for long.
+    return JSONResponse({"ok": True, "photos": photos},
+                        headers={"Cache-Control": "private, max-age=60"})
+
+
+@router.get("/screensaver/photo")
+async def screensaver_photo(name: str = ""):
+    """Proxy one slideshow image from the bridge (GET /usb/photo).
+
+    The bridge does the path-safety and size checks; this just relays the
+    bytes. Cached for an hour so the kiosk browser does not refetch the same
+    photo on every slideshow cycle."""
+    if not settings.is_pi_appliance() or not name:
+        return JSONResponse({"detail": "Photo not found."}, status_code=404)
+    import httpx
+    from fastapi.responses import Response
+    from ..services.usb_backup import _BRIDGE
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as c:
+            r = await c.get(f"{_BRIDGE}/usb/photo", params={"path": name})
+    except Exception as e:
+        return JSONResponse({"detail": f"Photo unavailable: {e.__class__.__name__}"},
+                            status_code=502)
+    if r.status_code != 200:
+        return JSONResponse({"detail": "Photo not found."}, status_code=404)
+    return Response(content=r.content,
+                    media_type=r.headers.get("content-type", "image/jpeg"),
+                    headers={"Cache-Control": "private, max-age=3600"})
+
+
 @router.get("/nutrition", response_class=HTMLResponse)
 async def nutrition_page(request: Request):
     """Food-intake / nutrition tracker (FoodAssistant-e6qt)."""

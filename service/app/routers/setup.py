@@ -257,6 +257,7 @@ class SetupPayload(BaseModel):
     display_idle_timeout: int = 0
     screensaver_minutes: int = 0
     screensaver_speed: str | None = None
+    screensaver_mode: str | None = None
     wake_on_motion: str = "auto"
     streamdeck_key_overrides: list = []
     streamdeck_weather_location: str = ""
