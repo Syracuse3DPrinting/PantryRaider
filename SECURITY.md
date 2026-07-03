@@ -10,7 +10,7 @@ the most recent version before reporting an issue.
 
 Please do not open a public GitHub issue for security vulnerabilities.
 
-Report privately by email to dm.marafino@gmail.com. You can expect an
+Report privately by email to info@syracuse3dprinting.com. You can expect an
 acknowledgement within a reasonable time, and we will keep you informed as the
 report is triaged and a fix is prepared. Coordinated disclosure is appreciated:
 please give us a chance to ship a fix before any public write-up.
