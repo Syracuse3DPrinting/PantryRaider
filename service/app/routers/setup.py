@@ -709,6 +709,9 @@ async def setup_page(request: Request):
         "suggested_grocy_url": suggested_grocy_url,
         "grocy_browser_link": grocy_browser_link,
         "suggested_mealie_url": _suggest_mealie_url(request),
+        # Human-facing link to open a configured Mealie in a browser, resolved
+        # the same way as the Grocy link (LAN address on a satellite).
+        "mealie_browser_link": settings.mealie_link_url() if settings.mealie_base_url else "",
         "suggested_mealie_internal_url": _suggest_mealie_internal_url(),
         "deployment_modes": modes,
         "current_mode": current_mode,

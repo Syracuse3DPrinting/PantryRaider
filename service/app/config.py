@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.79"
+APP_VERSION = "0.7.80"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -641,6 +641,50 @@ def browser_host() -> str:
     return _lan_ip()
 
 
+def _is_lan_url(url: str) -> bool:
+    """True when the URL's host is directly reachable from a browser on the LAN.
+
+    That means a private (RFC 1918) IP address or an mDNS (.local) hostname.
+    Loopback addresses and compose-internal service names (grocy, mealie) are
+    not reachable from another device, and a public hostname is the reverse
+    proxy route, not the LAN one, so all of those return False.
+    """
+    from urllib.parse import urlparse
+    host = (urlparse(url).hostname or "").lower()
+    if not host or host in _LOCALHOST_HOSTS or host in _INTERNAL_SERVICE_HOSTS:
+        return False
+    if host.endswith(".local"):
+        return True
+    import ipaddress
+    try:
+        ip = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return ip.is_private and not ip.is_loopback and not ip.is_link_local
+
+
+def _satellite_link_url(base_url: str, public_url: str, server_host: str, port: int) -> str:
+    """Browser link for a backend that lives on a satellite's main server.
+
+    A satellite sits on the same LAN as its server, so links prefer a
+    LAN-reachable address over the server's public reverse-proxied URL:
+      1. keep the pulled base URL when it is already LAN-reachable (a private
+         IP or a .local hostname);
+      2. otherwise point at the main server's LAN host on the backend's
+         published port (the pulled base is usually the server's
+         compose-internal or loopback address, unreachable from here);
+      3. fall back to the public URL only when no LAN address is known.
+    """
+    base = (base_url or "").rstrip("/")
+    if base and _is_lan_url(base):
+        return base
+    if server_host:
+        return f"http://{server_host}:{port}"
+    if public_url:
+        return public_url.rstrip("/")
+    return _mdns_rewrite(base, port) if base else ""
+
+
 def _mdns_rewrite(url: str, port: int) -> str:
     """If url points to localhost, rewrite it to a LAN-reachable browser URL.
 
@@ -733,33 +777,44 @@ class Settings(BaseSettings):
     # never depends on the device being named "foodassistant".
     device_hostname: str = ""
 
-    def _server_host_url(self, port: int) -> str:
-        """A LAN browser URL for a backend that lives on the main server.
+    def _server_lan_host(self) -> str:
+        """The main server's LAN host for building satellite browser links.
 
         On a satellite, Grocy and Mealie run on the main server, not on this
-        device, so browser links must point at the server's host (taken from
-        remote_server_url) on the backend's port, never this device's own mDNS
-        hostname. Returns '' if the server host cannot be determined.
+        device, so browser links point at the server's host on the backend's
+        port. Prefers the configured remote_server_url hostname, then the LAN
+        IP cached from the last sync, then the server's hostname as .local.
+        Returns '' if the server host cannot be determined.
         """
         from urllib.parse import urlparse
-        host = urlparse((self.remote_server_url or "").rstrip("/")).hostname
-        return f"http://{host}:{port}" if host else ""
+        host = urlparse((self.remote_server_url or "").rstrip("/")).hostname or ""
+        if host and host.lower() not in _LOCALHOST_HOSTS:
+            return host
+        ip = (self.remote_server_ip or "").strip()
+        if ip:
+            return ip
+        name = (self.remote_server_host or "").strip()
+        if name:
+            return name if "." in name else f"{name}.local"
+        return ""
 
     def grocy_link_url(self) -> str:
-        """URL for browser-facing Grocy links (public address if set, else base).
+        """URL for browser-facing Grocy links.
 
-        When no public URL is set and the base URL is localhost, rewrites to the
-        device hostname (<hostname>.local, or the LAN IP as a fallback) so links
-        work from other devices on the LAN regardless of the current IP. On a
-        satellite, Grocy runs on the main server, so links resolve to the
-        server's host instead of this device.
+        On a satellite the pulled config describes the main server's Grocy, so
+        the link prefers a LAN address (the pulled base if LAN-reachable, else
+        the server's LAN host on port 9383) and only falls back to the public
+        URL, which usually routes through the server's auth proxy, when no LAN
+        address is known (see _satellite_link_url). Otherwise the public URL
+        wins when set; a localhost or compose-internal base is rewritten to the
+        device hostname (<hostname>.local, or the LAN IP as a fallback) so
+        links work from other devices on the LAN.
         """
+        if self.is_satellite():
+            return _satellite_link_url(
+                self.grocy_base_url, self.grocy_public_url, self._server_lan_host(), 9383)
         if self.grocy_public_url:
             return self.grocy_public_url.rstrip("/")
-        if self.is_satellite():
-            url = self._server_host_url(9383)
-            if url:
-                return url
         return _mdns_rewrite(self.grocy_base_url.rstrip("/"), 9383)
 
     # Mealie recipe manager (optional): enables the Recipes, Meal Plan and
@@ -773,20 +828,21 @@ class Settings(BaseSettings):
         return bool(self.mealie_base_url and self.mealie_api_key)
 
     def mealie_link_url(self) -> str:
-        """URL for browser-facing links (public address if set, else base).
+        """URL for browser-facing Mealie links.
 
-        When no public URL is set and the base URL is localhost, rewrites to the
-        mDNS hostname so links work from other devices on the LAN. On a
-        satellite, Mealie runs on the main server, so links resolve to the
-        server's host instead of this device (which is why an "Open Mealie"
-        button used to point at this device's own foodassistant.local).
+        On a satellite the pulled config describes the main server's Mealie, so
+        the link prefers a LAN address (the pulled base if LAN-reachable, else
+        the server's LAN host on port 9285) and only falls back to the public
+        URL when no LAN address is known (see _satellite_link_url). Otherwise
+        the public URL wins when set; a localhost or compose-internal base is
+        rewritten to the mDNS hostname so links work from other devices on the
+        LAN.
         """
+        if self.is_satellite():
+            return _satellite_link_url(
+                self.mealie_base_url, self.mealie_public_url, self._server_lan_host(), 9285)
         if self.mealie_public_url:
             return self.mealie_public_url.rstrip("/")
-        if self.is_satellite():
-            url = self._server_host_url(9285)
-            if url:
-                return url
         return _mdns_rewrite(self.mealie_base_url.rstrip("/"), 9285)
 
     # External recipe suggestions: themealdb | spoonacular | off.
