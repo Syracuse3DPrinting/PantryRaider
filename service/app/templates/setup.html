@@ -2884,7 +2884,11 @@ docker compose up -d</code></pre>
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
                 <i class="bi bi-check-lg me-1"></i>Save display settings
               </button>
+              <button class="btn btn-outline-secondary btn-sm" onclick="testScreensaver()">
+                <i class="bi bi-moon-stars me-1"></i>Test screensaver
+              </button>
             </div>
+            <div class="form-text mt-1">Test starts the screensaver on this screen right away with the style and speed picked above; any touch or key press dismisses it. To preview a kiosk panel, open its own settings page and press Test there.</div>
             <div class="test-result mt-2" id="display-save-result"></div>
             <div class="form-text mt-2" id="display-hint">CSS changes apply on the kiosk immediately.</div>
           </div>
@@ -6190,6 +6194,22 @@ async function saveDisplaySettings() {
   }
 }
 
+// Start the screensaver on this screen right now with the style and speed
+// currently picked in the form, so choices can be previewed without waiting
+// for the idle timeout (FoodAssistant-fiwc). Any touch or key dismisses it.
+function testScreensaver() {
+  const el = document.getElementById('display-save-result');
+  if (typeof window.__screensaverTest !== 'function') {
+    if (el) el.innerHTML = '<span class="text-warning">The screensaver script has not loaded on this page; reload and try again.</span>';
+    return;
+  }
+  if (el) el.innerHTML = '';
+  window.__screensaverTest({
+    speed: document.getElementById('screensaver_speed')?.value,
+    mode: document.getElementById('screensaver_mode')?.value,
+  });
+}
+
 async function saveFloatingNav() {
   const el = document.getElementById('floating-nav-result');
   if (el) el.innerHTML = '<span class="text-secondary">Saving...</span>';
@@ -8644,5 +8664,9 @@ async function cancelTouchCalibration() {
   });
 })();
 </script>
+{# The screensaver script backs the Display pane's Test button
+   (window.__screensaverTest) and, on a kiosk, the normal idle behaviour. #}
+<div id="screensaver-config" data-minutes="{{ s.screensaver_minutes }}" data-speed="{{ s.screensaver_speed }}" data-mode="{{ s.screensaver_mode }}" hidden></div>
+<script src="static/js/screensaver.js?v={{ version }}"></script>
 </body>
 </html>

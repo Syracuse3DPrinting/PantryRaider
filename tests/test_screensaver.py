@@ -54,6 +54,27 @@ def client(monkeypatch, tmp_path):
         os.chdir(cwd)
 
 
+def test_setup_page_has_screensaver_test_button(client):
+    # FoodAssistant-fiwc: the Display pane's Test button needs the screensaver
+    # script (and its config div) on the standalone setup page, which does not
+    # extend base.html.
+    with patch.object(type(settings), "is_configured", lambda self: True):
+        r = client.get("/setup")
+        assert r.status_code == 200
+        assert "testScreensaver()" in r.text          # the button + handler
+        assert 'id="screensaver-config"' in r.text    # config the script reads
+        assert "static/js/screensaver.js" in r.text   # the script itself
+
+
+def test_screensaver_js_has_test_hook_and_camera_guard():
+    js = (SERVICE / "app" / "static" / "js" / "screensaver.js").read_text()
+    # FoodAssistant-fiwc: the settings Test button calls this global.
+    assert "window.__screensaverTest" in js
+    # FoodAssistant-ysf6: idle activation defers to an open camera view.
+    assert r"ui\/camera" in js       # the camera page path check
+    assert ".hae-cam" in js          # the ha-events camera pop-up overlay
+
+
 def test_screensaver_config_rendered_on_pages(client, monkeypatch):
     with patch.object(type(settings), "is_configured", lambda self: True):
         monkeypatch.setattr(settings, "screensaver_minutes", 7, raising=False)

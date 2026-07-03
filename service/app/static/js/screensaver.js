@@ -16,26 +16,32 @@
 //           the bounce style, so the setting is always safe to leave on.
 //
 // The timeout comes from #screensaver-config (data-minutes, rendered from the
-// per-device saved setting); 0 or a missing config leaves this a no-op.
+// per-device saved setting); 0 or a missing config disables idle activation.
+// The settings page Test button (FoodAssistant-fiwc) forces the saver on
+// through window.__screensaverTest regardless of kiosk mode or the timeout,
+// so choices can be previewed without waiting for the idle countdown.
+//
+// Idle activation is suppressed while a camera is on screen
+// (FoodAssistant-ysf6): the camera page or an ha-events camera pop-up means
+// someone is watching a feed, which is intentionally idle.
 //
 // Planned phase (separate bead): a mode that spans the Stream Deck keys and
 // the panel as one large canvas.
 (function () {
+  var kiosk = false;
   try {
-    if (localStorage.getItem('kioskMode') !== 'true') return;
-  } catch (e) {
-    return; // no storage / private mode: never run
-  }
+    kiosk = localStorage.getItem('kioskMode') === 'true';
+  } catch (e) { /* no storage / private mode: idle activation never runs */ }
 
   var cfg = document.getElementById('screensaver-config');
-  var minutes = parseInt(cfg ? cfg.getAttribute('data-minutes') : '0', 10);
-  if (!minutes || minutes <= 0) return;
+  if (!cfg) return;
+  var minutes = parseInt(cfg.getAttribute('data-minutes') || '0', 10);
 
-  var IDLE_MS = minutes * 60 * 1000;
+  var IDLE_MS = (minutes > 0 ? minutes : 0) * 60 * 1000;
   // Glide speed in pixels per second, from the per-device setting.
   var SPEEDS = { slow: 18, normal: 32, fast: 60 };
-  var SPEED = SPEEDS[(cfg && cfg.getAttribute('data-speed')) || 'normal'] || SPEEDS.normal;
-  var MODE = (cfg && cfg.getAttribute('data-mode')) === 'photos' ? 'photos' : 'bounce';
+  var SPEED = SPEEDS[cfg.getAttribute('data-speed') || 'normal'] || SPEEDS.normal;
+  var MODE = cfg.getAttribute('data-mode') === 'photos' ? 'photos' : 'bounce';
   var PHOTO_MS = 25000;   // how long each slideshow photo stays up
   var FADE_MS = 2000;     // crossfade length between photos
   var lastActivity = Date.now();
@@ -265,10 +271,16 @@
   var SWALLOW = ['pointerdown', 'pointerup', 'touchstart', 'touchend',
                  'mousedown', 'mouseup', 'click', 'keydown'];
 
+  // A test start (the settings page button) briefly ignores mouse motion so
+  // the pointer drifting off the button does not kill the preview instantly;
+  // a deliberate touch, click, or key press still dismisses right away.
+  var motionGraceUntil = 0;
+
   function onActivity(ev) {
     lastActivity = Date.now();
     var swallow = ev && SWALLOW.indexOf(ev.type) !== -1;
     if (overlay) {
+      if (!swallow && Date.now() < motionGraceUntil) return;
       // Any input wakes the screen; a tap/key that did it is swallowed so it
       // only dismisses the screensaver. Mouse motion just dismisses.
       if (swallow) {
@@ -292,7 +304,35 @@
     window.addEventListener(events[i], onActivity, { capture: true, passive: false });
   }
 
-  setInterval(function () {
-    if (!overlay && Date.now() - lastActivity >= IDLE_MS) show();
-  }, 10000);
+  // Watching a camera is intentionally idle (FoodAssistant-ysf6): never let
+  // the saver cover the camera page or an ha-events camera pop-up. Refreshing
+  // lastActivity while one is up means the full idle countdown restarts when
+  // it goes away.
+  function cameraOnScreen() {
+    if (/(^|\/)ui\/camera(\/|$)/.test(window.location.pathname)) return true;
+    if (document.querySelector('.hae-cam')) return true;
+    return false;
+  }
+
+  // Idle activation only runs on a kiosk with a timeout configured; the test
+  // hook below works everywhere the script loads.
+  if (kiosk && IDLE_MS > 0) {
+    setInterval(function () {
+      if (overlay) return;
+      if (cameraOnScreen()) { lastActivity = Date.now(); return; }
+      if (Date.now() - lastActivity >= IDLE_MS) show();
+    }, 10000);
+  }
+
+  // Settings page Test button (FoodAssistant-fiwc): force the saver on now,
+  // optionally previewing a speed/style straight from the form so choices can
+  // be checked before (or after) saving. The override sticks for this page
+  // load only; a reload re-reads the saved settings.
+  window.__screensaverTest = function (opts) {
+    opts = opts || {};
+    if (opts.speed && SPEEDS[opts.speed]) SPEED = SPEEDS[opts.speed];
+    if (opts.mode) MODE = opts.mode === 'photos' ? 'photos' : 'bounce';
+    motionGraceUntil = Date.now() + 1500;
+    show();
+  };
 })();
