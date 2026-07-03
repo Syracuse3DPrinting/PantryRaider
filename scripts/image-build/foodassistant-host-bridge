@@ -20,7 +20,7 @@ POST /display/rotation     set KMS rotation      {degrees, reboot?}
 POST /touch/calibrate      apply touch matrix    {matrix: "a b c d e f"}
 POST /touch/provision      apply SPI+ads7846 overlay for the chosen display type
 POST /system/timezone      set the host timezone {tz: "Area/City"}
-POST /system/scheduled-reboot  install/remove a nightly reboot timer {time: "HH:MM"|""}
+POST /system/scheduled-reboot  install/remove a reboot timer {time: "HH:MM"|"", frequency?: "nightly"|"weekly"|"off", day?: 0-6}
 POST /streamdeck/restart   restart Stream Deck service
 GET  /streamdeck/actions     list assignable deck actions (for the web editor)
 POST /kiosk/restart        restart the kiosk browser (apply scale/rotation)
@@ -331,6 +331,31 @@ def _display_power_commands(on, which=shutil.which, helper_path=""):
     if which("xset"):
         cmds.append(["xset", "dpms", "force", "on" if on else "off"])
     return cmds
+
+
+# systemd day-of-week names indexed by the app's scheduled_reboot_day
+# (0=Sunday .. 6=Saturday).
+_REBOOT_WEEKDAYS = ("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
+
+
+def _reboot_calendar(t, frequency="", day=0):
+    """The OnCalendar expression for the scheduled reboot timer.
+
+    Nightly fires every day at HH:MM; weekly fires once a week on the given
+    day (0=Sunday .. 6=Saturday). An unknown or empty frequency falls back to
+    nightly, matching the original behaviour where a set time alone meant a
+    nightly reboot, so an older app pushing just a time keeps working. Kept
+    pure so it is unit-testable (FoodAssistant-8x4u).
+    """
+    try:
+        day = int(day)
+    except (TypeError, ValueError):
+        day = 0
+    if not 0 <= day <= 6:
+        day = 0
+    if frequency == "weekly":
+        return "%s *-*-* %s:00" % (_REBOOT_WEEKDAYS[day], t)
+    return "*-*-* %s:00" % t
 
 
 def _reboot_command(which=shutil.which):
@@ -2493,16 +2518,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(500, {"ok": False, "error": str(e)})
 
     def _scheduled_reboot_set(self):
-        # Install (or remove) a systemd timer that reboots the appliance nightly
-        # at a fixed local time, handy for a kiosk that should refresh itself. An
-        # empty time removes the timer. HH:MM is validated so OnCalendar is safe.
+        # Install (or remove) a systemd timer that reboots the appliance at a
+        # fixed local time, nightly or weekly, handy for a kiosk that should
+        # refresh itself. An empty time (or frequency "off") removes the timer.
+        # HH:MM is validated so OnCalendar is safe.
         body = self._body()
         t = (body.get("time") or "").strip()
+        frequency = (body.get("frequency") or "").strip().lower()
+        day = body.get("day", 0)
         base = "foodassistant-scheduled-reboot"
         svc = "/etc/systemd/system/%s.service" % base
         tmr = "/etc/systemd/system/%s.timer" % base
         try:
-            if not t:
+            if not t or frequency == "off":
                 subprocess.run(["systemctl", "disable", "--now", "%s.timer" % base],
                                capture_output=True, text=True, timeout=15)
                 for f in (svc, tmr):
@@ -2516,20 +2544,22 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", t):
                 self._send(400, {"ok": False, "error": "time must be HH:MM (24h)"})
                 return
+            calendar = _reboot_calendar(t, frequency, day)
             with open(svc, "w") as f:
-                f.write("[Unit]\nDescription=FoodAssistant nightly reboot\n\n"
+                f.write("[Unit]\nDescription=FoodAssistant scheduled reboot\n\n"
                         "[Service]\nType=oneshot\nExecStart=/sbin/reboot\n")
             with open(tmr, "w") as f:
-                f.write("[Unit]\nDescription=FoodAssistant nightly reboot timer\n\n"
-                        "[Timer]\nOnCalendar=*-*-* %s:00\nPersistent=false\n\n"
-                        "[Install]\nWantedBy=timers.target\n" % t)
+                f.write("[Unit]\nDescription=FoodAssistant scheduled reboot timer\n\n"
+                        "[Timer]\nOnCalendar=%s\nPersistent=false\n\n"
+                        "[Install]\nWantedBy=timers.target\n" % calendar)
             subprocess.run(["systemctl", "daemon-reload"], timeout=15)
             r = subprocess.run(["systemctl", "enable", "--now", "%s.timer" % base],
                                capture_output=True, text=True, timeout=15)
             if r.returncode != 0:
                 self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
                 return
-            self._send(200, {"ok": True, "scheduled": True, "time": t})
+            self._send(200, {"ok": True, "scheduled": True, "time": t,
+                             "calendar": calendar})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
 

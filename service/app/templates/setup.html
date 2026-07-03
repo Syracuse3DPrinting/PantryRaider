@@ -2707,7 +2707,7 @@ docker compose up -d</code></pre>
         <!-- On-screen Start Page: the Start Page & Stream Deck pill's home -->
         <div class="tab-pane fade" id="pane-start-page">
           {{ ds_toggle('start') }}
-          <p class="pane-intro">An optional full-screen launcher that works like an on-screen Stream Deck. It opens at <a href="ui/start" target="_blank">/ui/start</a> and replaces the fixed and floating menus while shown.</p>
+          <p class="pane-intro">An optional full-screen launcher that works like an on-screen Stream Deck. It opens at <a href="ui/start" target="_blank">/ui/start</a> and replaces the fixed and floating menus while shown. The app opens on whatever page leads the navigation menu, so with Start at the top of the menu (where it sits by default once enabled) the Start Page is this device's home screen.</p>
           <div class="section-card editor-dense">
             <div class="section-title"><i class="bi bi-grid-3x3-gap text-success"></i> Start Page</div>
             <div class="editor-block d-flex flex-wrap align-items-center gap-4">
@@ -3015,12 +3015,31 @@ docker compose up -d</code></pre>
           </div>
 
           {% if is_pi_appliance %}
+          {# The frequency defaults preserve the pre-frequency behaviour: a
+             stored time with no frequency means nightly (FoodAssistant-8x4u). #}
+          {% set _reboot_freq = scheduled_reboot_frequency or ('nightly' if scheduled_reboot_time else 'off') %}
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-moon text-info"></i> Nightly reboot</div>
-            <p class="text-secondary small">Reboot the appliance automatically every night to keep a long-running kiosk fresh.</p>
+            <div class="section-title"><i class="bi bi-moon text-info"></i> Scheduled reboot</div>
+            <p class="text-secondary small">Reboot the appliance automatically, every night or once a week, to keep a long-running kiosk fresh.</p>
             <div class="d-flex flex-wrap gap-2 align-items-end">
               <div>
-                <label class="form-label" for="scheduled_reboot_time">Nightly reboot{{ info('Reboot the appliance automatically at this time every day, to keep a long-running kiosk fresh. Leave blank to disable.') }}</label>
+                <label class="form-label" for="scheduled_reboot_frequency">Frequency{{ info('How often the appliance reboots itself: never, every night, or once a week on the day you pick.') }}</label>
+                <select class="form-select form-select-sm" id="scheduled_reboot_frequency" style="max-width:150px" onchange="rebootFreqChanged()">
+                  <option value="off" {{ 'selected' if _reboot_freq == 'off' else '' }}>Off</option>
+                  <option value="nightly" {{ 'selected' if _reboot_freq == 'nightly' else '' }}>Nightly</option>
+                  <option value="weekly" {{ 'selected' if _reboot_freq == 'weekly' else '' }}>Weekly</option>
+                </select>
+              </div>
+              <div id="scheduled-reboot-day-wrap" class="{{ '' if _reboot_freq == 'weekly' else 'd-none' }}">
+                <label class="form-label" for="scheduled_reboot_day">Day</label>
+                <select class="form-select form-select-sm" id="scheduled_reboot_day" style="max-width:150px">
+                  {% for _day in ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'] %}
+                  <option value="{{ loop.index0 }}" {{ 'selected' if scheduled_reboot_day == loop.index0 else '' }}>{{ _day }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+              <div id="scheduled-reboot-time-wrap" class="{{ 'd-none' if _reboot_freq == 'off' else '' }}">
+                <label class="form-label" for="scheduled_reboot_time">Time{{ info('Local time of the automatic reboot, 24-hour clock.') }}</label>
                 <input type="time" class="form-control form-control-sm" id="scheduled_reboot_time" style="max-width:150px" value="{{ scheduled_reboot_time }}">
               </div>
               <button type="button" class="btn btn-outline-info btn-sm" onclick="saveScheduledReboot(this)">
@@ -5717,16 +5736,38 @@ async function rebootNow(btn) {
   } catch (e) { if (el) el.innerHTML = '<span class="text-warning">Reboot requested (the connection dropped, as expected).</span>'; }
 }
 
+// Show the day picker only for a weekly reboot, and the time only when the
+// schedule is on at all (FoodAssistant-8x4u).
+function rebootFreqChanged() {
+  const f = document.getElementById('scheduled_reboot_frequency')?.value || 'off';
+  document.getElementById('scheduled-reboot-day-wrap')?.classList.toggle('d-none', f !== 'weekly');
+  document.getElementById('scheduled-reboot-time-wrap')?.classList.toggle('d-none', f === 'off');
+}
+
 async function saveScheduledReboot(btn) {
   const el = document.getElementById('scheduled-reboot-result');
+  const f = document.getElementById('scheduled_reboot_frequency')?.value || 'off';
+  const day = parseInt(document.getElementById('scheduled_reboot_day')?.value ?? '0', 10) || 0;
   const t = document.getElementById('scheduled_reboot_time')?.value ?? '';
+  if (f !== 'off' && !t) {
+    if (el) el.innerHTML = '<span class="text-danger">Pick a reboot time first.</span>';
+    return;
+  }
   if (el) el.innerHTML = '<span class="text-secondary">Saving…</span>';
   if (btn) btn.disabled = true;
   try {
-    const r = await fetch('setup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ scheduled_reboot_time: t }) });
+    // Turning the schedule off keeps the stored time, so switching it back
+    // on later starts from the previous choice.
+    const body = { scheduled_reboot_frequency: f, scheduled_reboot_day: day };
+    if (f !== 'off') body.scheduled_reboot_time = t;
+    const r = await fetch('setup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
     const d = await r.json();
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const msg = f === 'off' ? 'Scheduled reboot disabled.'
+      : f === 'weekly' ? 'Weekly reboot set for ' + days[day] + ' at ' + t + '.'
+      : 'Nightly reboot set for ' + t + '.';
     if (el) el.innerHTML = d.ok
-      ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + (t ? 'Nightly reboot set for ' + t + '.' : 'Nightly reboot disabled.') + '</span>'
+      ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>' + msg + '</span>'
       : '<span class="text-danger">' + (d.error || 'Failed') + '</span>';
   } catch (e) { if (el) el.innerHTML = '<span class="text-danger">' + e + '</span>'; }
   finally { if (btn) btn.disabled = false; }

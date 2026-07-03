@@ -269,3 +269,44 @@ def test_satellite_devices_pane_holds_main_server(client, monkeypatch):
     sec = sat.split('id="pane-security"', 1)[1].split('id="pane-', 1)[0]
     assert "kiosk_pin" in sec
     assert "kiosk_readonly_when_locked" in sec
+
+
+def test_scheduled_reboot_frequency_controls(client, monkeypatch):
+    """The scheduled reboot offers Off/Nightly/Weekly with a day picker on the
+    Pi appliance shapes, and a pre-frequency install whose only stored value is
+    a reboot time renders as Nightly, so its behaviour is unchanged
+    (FoodAssistant-8x4u)."""
+    monkeypatch.setattr(settings, "scheduled_reboot_time", "", raising=False)
+    monkeypatch.setattr(settings, "scheduled_reboot_frequency", "", raising=False)
+    for mode, is_pi in SHAPES:
+        html = _render(client, monkeypatch, mode=mode, is_pi=is_pi)
+        present = 'id="scheduled_reboot_frequency"' in html
+        assert present == (mode in ("pi_hosted", "pi_remote")), mode
+        if present:
+            assert 'id="scheduled_reboot_day"' in html
+            # Nothing stored: the schedule renders as Off.
+            assert re.search(r'value="off"\s+selected', html)
+    # Legacy install: a stored time with no frequency stays nightly.
+    monkeypatch.setattr(settings, "scheduled_reboot_time", "03:30", raising=False)
+    html = _render(client, monkeypatch, mode="pi_hosted", is_pi=True)
+    assert re.search(r'value="nightly"\s+selected', html)
+
+
+def test_scheduled_reboot_save_validation(client, monkeypatch):
+    """/setup/save keeps only sane reboot frequency/day values; junk keeps the
+    stored setting (FoodAssistant-8x4u)."""
+    # Server mode so the save never tries to reach a host bridge.
+    monkeypatch.setattr(settings, "deployment_mode", "server")
+    saved = {}
+    monkeypatch.setattr(type(settings), "save", lambda self, d: saved.update(d))
+    r = client.post("/setup/save", json={
+        "scheduled_reboot_frequency": "weekly", "scheduled_reboot_day": 3})
+    assert r.status_code == 200
+    assert saved["scheduled_reboot_frequency"] == "weekly"
+    assert saved["scheduled_reboot_day"] == 3
+    saved.clear()
+    r = client.post("/setup/save", json={
+        "scheduled_reboot_frequency": "sometimes", "scheduled_reboot_day": 9})
+    assert r.status_code == 200
+    assert "scheduled_reboot_frequency" not in saved
+    assert "scheduled_reboot_day" not in saved

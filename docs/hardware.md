@@ -46,6 +46,36 @@ no Docker stack.
 The architecture is 64-bit only. The image is aarch64, and the Docker images
 (Pantry Raider, Grocy, Mealie, Ollama) are published for arm64 and amd64.
 
+## Power and cabling
+
+Most mystery hardware problems on a Pi appliance come down to the power supply
+or a bad USB cable, so check these two before anything else.
+
+### Use a proper power supply
+
+A Pi 4 needs a real 5V/3A supply and a Pi 5 needs 5V/5A; the official
+Raspberry Pi USB-C supplies are the safe choice. Phone chargers and computer
+USB ports rarely hold the voltage under load. An underpowered Pi shows up as:
+
+- the Stream Deck disconnecting and reconnecting at random,
+- SD-card corruption over time,
+- CPU throttling, and a lightning-bolt icon on the display.
+
+This matters most with peripherals attached: a barcode scanner and a Stream
+Deck plugged in together draw real current, so a marginal supply that seemed
+fine on a bare board can start failing once the accessories arrive. To check,
+run `vcgencmd get_throttled` on the device: `0x0` means healthy, anything else
+means undervoltage or throttling has occurred since boot.
+
+### The Stream Deck needs a data cable
+
+The 15 and 32 key decks (and the embedded Modules, which take a cable you
+supply) connect over USB data. Many USB-C and micro-USB cables are wired for
+charging only; with one of those the deck powers up and glows, but the Pi
+never sees it and the controller logs `No Stream Deck found`. This is one of
+the most common causes of a deck that "does not work". Swap in a cable known
+to carry data; one that handles file transfer to a phone is a good test.
+
 ## Displays
 
 A display is optional. Pantry Raider is a web app reachable from any browser on
@@ -109,6 +139,11 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="0fd9", GROUP="plugdev", MODE="0660"
 The Python controller pins `streamdeck>=0.9.8`, because 0.9.5 does not recognise
 the USB product id used on current XL / Module 32 hardware. Setup and the
 controller service live in [`streamdeck/`](../streamdeck/README.md).
+
+If a connected deck is never detected (`No Stream Deck found` in the service
+log), or it drops off and comes back at random, see
+[Power and cabling](#power-and-cabling) above: a charge-only USB cable and an
+undersized power supply are the two usual causes.
 
 ## Accelerometer (optional auto-rotation)
 

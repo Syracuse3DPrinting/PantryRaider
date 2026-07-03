@@ -85,6 +85,11 @@ The unit assumes a `foodassistant` user, a virtualenv at
 `/opt/foodassistant/venv`, and the package importable from
 `/opt/foodassistant`. Adjust the paths if your layout differs.
 
+If the log says `No Stream Deck found` even though the deck is lit, the USB
+cable is usually the culprit: many USB-C and micro-USB cables carry power
+only, no data. Random disconnects instead point at an undersized power
+supply. See [Power and cabling](../docs/hardware.md#power-and-cabling).
+
 ## Configuration
 
 See `config.example.toml` for every option. The common ones:

@@ -284,6 +284,8 @@ class SetupPayload(BaseModel):
     nav_visibility: str = ""
     timezone: str = ""
     scheduled_reboot_time: str = ""
+    scheduled_reboot_frequency: str = ""
+    scheduled_reboot_day: int = 0
     display_touch: bool = False
     auth_required: bool = True
     auth_password: str = ""
@@ -741,6 +743,8 @@ async def setup_page(request: Request):
         "common_timezones": COMMON_TIMEZONES,
         "system_timezone": _system_timezone(),
         "scheduled_reboot_time": settings.scheduled_reboot_time,
+        "scheduled_reboot_frequency": settings.scheduled_reboot_frequency,
+        "scheduled_reboot_day": settings.scheduled_reboot_day,
         # Secrets the main server manages (pulled each sync). On a satellite these
         # render read-only; the device-local secrets (upstream key, password, PIN)
         # stay editable so the device can be paired or re-keyed (Pantry Raider).
@@ -1133,6 +1137,21 @@ async def save_setup(payload: SetupPayload):
     if "scheduled_reboot_time" in data and data["scheduled_reboot_time"]:
         if not re.match(r"^([01]\d|2[0-3]):[0-5]\d$", str(data["scheduled_reboot_time"])):
             data.pop("scheduled_reboot_time", None)
+    # Reboot frequency: "" (legacy, a set time means nightly), off, nightly,
+    # or weekly; the day is 0=Sunday .. 6=Saturday. Anything else keeps the
+    # stored value (FoodAssistant-8x4u).
+    if "scheduled_reboot_frequency" in data and (
+            data["scheduled_reboot_frequency"] not in ("", "off", "nightly", "weekly")):
+        data.pop("scheduled_reboot_frequency", None)
+    if "scheduled_reboot_day" in data:
+        try:
+            day = int(data["scheduled_reboot_day"])
+        except (TypeError, ValueError):
+            day = -1
+        if 0 <= day <= 6:
+            data["scheduled_reboot_day"] = day
+        else:
+            data.pop("scheduled_reboot_day", None)
     # Drop an unknown Stream Deck key style / icon colour (keeps the stored one).
     if "streamdeck_key_style" in data and data["streamdeck_key_style"] not in STREAMDECK_KEY_STYLES:
         data.pop("streamdeck_key_style", None)
@@ -1204,11 +1223,21 @@ async def save_setup(payload: SetupPayload):
                                  json={"tz": data["timezone"]})
             except Exception:
                 pass
-        if "scheduled_reboot_time" in data:
+        if any(k in data for k in ("scheduled_reboot_time",
+                                   "scheduled_reboot_frequency",
+                                   "scheduled_reboot_day")):
+            # Push the effective schedule from the merged settings, so a save
+            # of just the frequency (or just the day) still lands the whole
+            # picture on the host. An empty frequency keeps the legacy rule:
+            # a set time means nightly (FoodAssistant-8x4u).
+            freq = settings.scheduled_reboot_frequency or (
+                "nightly" if settings.scheduled_reboot_time else "off")
             try:
                 async with httpx.AsyncClient(timeout=15.0) as c:
                     await c.post(f"{_HOST_BRIDGE}/system/scheduled-reboot",
-                                 json={"time": data["scheduled_reboot_time"]})
+                                 json={"time": "" if freq == "off" else settings.scheduled_reboot_time,
+                                       "frequency": freq,
+                                       "day": settings.scheduled_reboot_day})
             except Exception:
                 pass
     return resp

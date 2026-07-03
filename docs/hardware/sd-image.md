@@ -206,6 +206,12 @@ device (`systemctl status avahi-daemon`). Find the IP from your router.
 a slow connection. The provisioner logs to
 `/var/log/foodassistant-firstboot.log` (`tail -f` it in another SSH session).
 
+**The Stream Deck isn't detected (`No Stream Deck found` in the log).** Check
+the USB cable first: many USB-C and micro-USB cables are charge-only, so the
+deck lights up but carries no data. A deck that disconnects at random usually
+means an undersized power supply instead. Both are covered in
+[Power and cabling](../hardware.md#power-and-cabling).
+
 **Re-run the installer / change choices.** Just run the `curl ... | bash` line
 again. To force the provisioner to redo a completed step set `FORCE=1`:
 

@@ -736,6 +736,28 @@ def test_reboot_command_falls_back_to_reboot():
     assert cmd == ["reboot"]
 
 
+def test_reboot_calendar_nightly():
+    assert bridge._reboot_calendar("03:30", "nightly") == "*-*-* 03:30:00"
+
+
+def test_reboot_calendar_legacy_time_only_means_nightly():
+    # An older app posts just {"time": ...}; the timer stays nightly.
+    assert bridge._reboot_calendar("04:00") == "*-*-* 04:00:00"
+    assert bridge._reboot_calendar("04:00", "") == "*-*-* 04:00:00"
+
+
+def test_reboot_calendar_weekly_days():
+    assert bridge._reboot_calendar("03:30", "weekly", 0) == "Sun *-*-* 03:30:00"
+    assert bridge._reboot_calendar("03:30", "weekly", 1) == "Mon *-*-* 03:30:00"
+    assert bridge._reboot_calendar("03:30", "weekly", 6) == "Sat *-*-* 03:30:00"
+
+
+def test_reboot_calendar_weekly_bad_day_defaults_to_sunday():
+    assert bridge._reboot_calendar("03:30", "weekly", 9) == "Sun *-*-* 03:30:00"
+    assert bridge._reboot_calendar("03:30", "weekly", "x") == "Sun *-*-* 03:30:00"
+    assert bridge._reboot_calendar("03:30", "weekly", None) == "Sun *-*-* 03:30:00"
+
+
 def test_persist_idle_minutes_roundtrip(tmp_path):
     p = tmp_path / "display-idle"
     assert bridge._write_persisted_idle_minutes(15, path=str(p)) is True

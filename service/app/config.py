@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.114"
+APP_VERSION = "0.7.115"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -379,6 +379,7 @@ _SAVEABLE = [
     "quiet_mode",
     "floating_nav_position", "floating_nav_orientation", "floating_nav_autohide_streamdeck",
     "nav_visibility", "timezone", "scheduled_reboot_time",
+    "scheduled_reboot_frequency", "scheduled_reboot_day",
     "update_last_checked", "update_last_latest", "update_last_available",
     "deployment_mode", "remote_server_url", "remote_server_ip", "remote_server_host", "upstream_api_key", "kiosk_pin", "kiosk_readonly_when_locked",
     "satellite_sync_minutes", "satellite_last_sync", "device_id",
@@ -1057,10 +1058,15 @@ class Settings(BaseSettings):
     update_last_latest: str = ""
     update_last_available: bool = False
 
-    # Optional nightly reboot for a kiosk appliance (FoodAssistant-wvwm):
+    # Optional scheduled reboot for a kiosk appliance (FoodAssistant-wvwm):
     # "HH:MM" 24h local time, or "" to disable. Applied on the host via the
-    # bridge as a systemd timer.
+    # bridge as a systemd timer. Frequency (FoodAssistant-8x4u) is "off",
+    # "nightly", or "weekly"; "" keeps the pre-frequency behaviour, where a
+    # set time alone means nightly, so existing installs keep rebooting as
+    # they did. The day applies to weekly only: 0=Sunday .. 6=Saturday.
     scheduled_reboot_time: str = ""
+    scheduled_reboot_frequency: str = ""
+    scheduled_reboot_day: int = 0
 
     # Stream Deck weather widget. Held at the app level (not just in the
     # controller's config.toml) so a satellite can pull them from the main

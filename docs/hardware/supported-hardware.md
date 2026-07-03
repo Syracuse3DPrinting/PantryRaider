@@ -77,7 +77,10 @@ interface on a headless box.
 
 Setup, configuration, and the controller service live in
 [`streamdeck/`](../../streamdeck/README.md). The connection is plain USB and
-the driver is pure Python, so no Elgato software is involved.
+the driver is pure Python, so no Elgato software is involved. Use a
+data-capable USB cable (charge-only cables leave the deck lit but undetected)
+and a full-strength power supply; see
+[Power and cabling](../hardware.md#power-and-cabling).
 
 ### Cameras / photos
 

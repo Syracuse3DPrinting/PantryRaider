@@ -851,8 +851,24 @@ function actions(s, tier) {
   return btns.join(' ');
 }
 
+// In-stock coverage for a suggestion card (FoodAssistant-crxh): how many of
+// the recipe's ingredients are already on hand, plus a traffic-light colour so
+// the card reads at a glance. Green means nothing is missing beyond pantry
+// staples, amber means at least half the ingredients are in stock, red means
+// most are missing.
+function stockCoverage(s) {
+  const have = (s.matched_ingredients || []).length;
+  const total = s.total_ingredients || 0;
+  const missing = (s.unmatched_ingredients || []).length;
+  const pct = total ? Math.round((have / total) * 100) : 0;
+  const color = missing === 0 ? 'success'
+    : (total && have / total >= 0.5 ? 'warning' : 'danger');
+  return {have, total, pct, color};
+}
+
 function suggestionCard(s, tier) {
   const cid = ++cardSeq;
+  const cov = stockCoverage(s);
   const external = s.source !== 'mealie';
   const title = external
     ? `<span class="fw-semibold">${s.name}</span>
@@ -864,8 +880,15 @@ function suggestionCard(s, tier) {
     <div class="card-body py-2 d-flex flex-column">
       <div class="d-flex justify-content-between align-items-start gap-2">
         <div class="min-width-0">${title}</div>
-        <span class="badge bg-secondary flex-shrink-0" title="Ingredients you already have">
-          ${s.matched_ingredients.length}/${s.total_ingredients}</span>
+        <span class="badge text-bg-${cov.color} flex-shrink-0" title="Ingredients you already have in stock">
+          ${cov.have}/${cov.total}</span>
+      </div>
+      <div class="small mt-1">
+        <span class="fw-semibold">${cov.have} of ${cov.total} in stock</span>
+        <div class="progress mt-1" style="height:3px" role="progressbar"
+             aria-label="In-stock coverage" aria-valuenow="${cov.pct}" aria-valuemin="0" aria-valuemax="100">
+          <div class="progress-bar bg-${cov.color}" style="width:${cov.pct}%"></div>
+        </div>
       </div>
       ${s.expiring_items_used.length ? `
         <div class="small urgency-3d mt-1"><i class="bi bi-clock-history me-1"></i>Uses expiring: ${s.expiring_items_used.join(', ')}</div>` : ''}

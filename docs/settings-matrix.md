@@ -240,6 +240,8 @@ defaults; a drag on the device overrides them per-device via localStorage.
 | `nav_visibility` | | Editable | Editable | Device-local |
 | `timezone` | | Editable | Inherited | Inherited (read-only) |
 | `scheduled_reboot_time` | | Editable | Editable | Device-local |
+| `scheduled_reboot_frequency` | | Editable | Editable | Device-local |
+| `scheduled_reboot_day` | | Editable | Editable | Device-local |
 | `update_last_checked` | | Auto | Auto | Device-local (bookkeeping) |
 | `update_last_latest` | | Auto | Auto | Device-local (bookkeeping) |
 | `update_last_available` | | Auto | Auto | Device-local (bookkeeping) |
