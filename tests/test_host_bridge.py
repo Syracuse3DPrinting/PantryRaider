@@ -389,16 +389,37 @@ def test_calibration_recompose_for_rotation(tmp_path, monkeypatch):
     monkeypatch.setattr(bridge, "_CALIB_STORE", str(store))
 
     store.write_text(json.dumps({"matrix": "1 0 0 0 1 0", "rotation": 0}))
-    assert bridge._matrix_for_rotation(0) == "1 0 0 0 1 0"          # delta 0 -> unchanged
+    # An identity fit at delta 0 composes to the identity: no rule needed.
+    assert bridge._matrix_for_rotation(0) is None
     assert bridge._matrix_for_rotation(90) == "0 -1 1 1 0 0"        # Rot90 . identity
 
     # A fit taken at 90, asked for 90, is unchanged (delta 0).
     store.write_text(json.dumps({"matrix": "1.2 0 0 0 1.3 0", "rotation": 90}))
     assert bridge._matrix_for_rotation(90) == "1.2 0 0 0 1.3 0"
 
-    # No store -> None (panel default applies).
-    store.unlink()
-    assert bridge._matrix_for_rotation(180) is None
+
+def test_rotation_matrix_without_a_stored_fit(tmp_path, monkeypatch):
+    # A panel that was never calibrated (the 7-inch DSI screen) has no store.
+    # Rotating the display must still counter-rotate touch: the compositor
+    # transforms only the output, so without a matrix touch stays in
+    # panel-native orientation (FoodAssistant-mox4). The base is treated as an
+    # identity fit at rotation 0, so the pure rotation matrix is produced.
+    monkeypatch.setattr(bridge, "_CALIB_STORE", str(tmp_path / "missing.json"))
+    assert bridge._matrix_for_rotation(90) == "0 -1 1 1 0 0"
+    assert [float(v) for v in bridge._matrix_for_rotation(180).split()] == [-1, 0, 1, 0, -1, 1]
+    assert bridge._matrix_for_rotation(270) == "0 1 0 -1 0 1"
+    # Back at 0 the composed matrix is the identity: no rule (any prior pure
+    # rotation rule gets removed by the caller).
+    assert bridge._matrix_for_rotation(0) is None
+
+
+def test_rotation_matrix_with_corrupt_store_falls_back_to_identity(tmp_path, monkeypatch):
+    store = tmp_path / "cal.json"
+    monkeypatch.setattr(bridge, "_CALIB_STORE", str(store))
+    store.write_text("not json")
+    assert bridge._matrix_for_rotation(90) == "0 -1 1 1 0 0"
+    store.write_text('{"matrix": "1 2 3", "rotation": 0}')
+    assert bridge._matrix_for_rotation(90) == "0 -1 1 1 0 0"
 
 
 def test_compose_affine_identity():

@@ -652,21 +652,46 @@ def _store_base_calibration(matrix, rotation):
 
 
 def _matrix_for_rotation(target_deg):
-    """The stored base calibration recomposed for target_deg, or None if there
-    is no base (then the panel default applies). Composes the rotation delta
-    onto the fit matrix: M_target = Rot(target - base) . M_base."""
+    """The touch matrix for target_deg, or None when no rule is needed.
+
+    Composes the rotation delta onto the stored fit: M = Rot(target - base) .
+    M_base. A panel that was never calibrated (e.g. the 7-inch DSI screen,
+    accurate out of the box) has no store; it is treated as an identity fit at
+    rotation 0, so rotating the display still writes the pure rotation matrix.
+    Without that, touch stayed in panel-native orientation on rotated
+    never-calibrated panels (FoodAssistant-mox4): the compositor rotates only
+    the output, never touch. Returns None when the composed matrix is the
+    identity, meaning any existing rule should be removed rather than written.
+    """
+    base = None
     try:
         with open(_CALIB_STORE) as f:
             base = json.load(f)
     except (OSError, ValueError):
-        return None
-    parts = (base.get("matrix") or "").split()
-    if len(parts) != 6:
-        return None
-    m = [float(p) for p in parts]
-    delta = (int(target_deg) - int(base.get("rotation", 0))) % 360
+        pass
+    m, base_rot = [1.0, 0, 0, 0, 1.0, 0], 0
+    if isinstance(base, dict):
+        parts = (base.get("matrix") or "").split()
+        if len(parts) == 6:
+            m = [float(p) for p in parts]
+            base_rot = int(base.get("rotation", 0))
+    delta = (int(target_deg) - base_rot) % 360
     composed = _compose_affine(_ROT_AFFINE.get(delta, _ROT_AFFINE[0]), m)
+    if all(abs(v - i) < 1e-9 for v, i in zip(composed, [1, 0, 0, 0, 1, 0])):
+        return None
     return " ".join("%.6g" % v for v in composed)
+
+
+def _remove_calibration_rule():
+    """Delete the touch udev rule (if any) and reload udev. Used when the
+    composed matrix is the identity, so the panel default applies again."""
+    rule = "/etc/udev/rules.d/99-foodassistant-touch.rules"
+    if not os.path.exists(rule):
+        return False
+    os.remove(rule)
+    subprocess.run(["udevadm", "control", "--reload-rules"], timeout=10)
+    subprocess.run(["udevadm", "trigger", "--subsystem-match=input"], timeout=10)
+    return True
 
 
 def _write_calibration_rule(matrix):
@@ -1214,27 +1239,49 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if reboot:
             cmd.append("--reboot")
         try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
-            if r.returncode != 0:
-                self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
-                return
-            # Follow the rotation with the calibration (9ohp): recompose the
-            # stored fit for the new rotation and reload it, so touch stays
-            # aligned without recalibrating. No-op when nothing is calibrated.
+            # Follow the rotation with the touch matrix (9ohp/mox4): recompose
+            # the stored fit for the new rotation, or the pure rotation matrix
+            # when the panel was never calibrated, so touch stays aligned with
+            # the rotated image (the compositor rotates only the output, never
+            # touch). The udev rule is written BEFORE set-rotation runs: it is
+            # persistent and picked up on boot, and on the --reboot path the
+            # device starts going down inside the command, so writing it after
+            # would race the shutdown.
             recomposed = False
-            if not reboot:
+            try:
                 matrix = _matrix_for_rotation(degrees)
                 if matrix:
-                    try:
-                        _write_calibration_rule(matrix)
-                        if _service_active("foodassistant-kiosk.service"):
-                            subprocess.run(
-                                ["systemctl", "restart", "foodassistant-kiosk.service"],
-                                timeout=30,
-                            )
-                        recomposed = True
-                    except Exception:
-                        pass
+                    _write_calibration_rule(matrix)
+                    recomposed = True
+                else:
+                    _remove_calibration_rule()
+            except Exception:
+                pass
+            r = subprocess.run(cmd, capture_output=True, text=True, timeout=15)
+            if r.returncode != 0:
+                # The display rotation did not change; put the touch rule back
+                # in step with the still-current rotation.
+                try:
+                    prev = _matrix_for_rotation(_read_kiosk_rotation())
+                    if prev:
+                        _write_calibration_rule(prev)
+                    else:
+                        _remove_calibration_rule()
+                except Exception:
+                    pass
+                self._send(500, {"ok": False, "error": (r.stderr or r.stdout).strip()})
+                return
+            # The compositor only reads the matrix when the touch device is
+            # (re)opened, so restart the live kiosk; skipped when a reboot is
+            # coming anyway.
+            if not reboot and _service_active("foodassistant-kiosk.service"):
+                try:
+                    subprocess.run(
+                        ["systemctl", "restart", "foodassistant-kiosk.service"],
+                        timeout=30,
+                    )
+                except Exception:
+                    pass
             self._send(200, {"ok": True, "calibration_recomposed": recomposed})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
@@ -1286,9 +1333,11 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(500, {"ok": False, "error": str(e)})
 
     def _touch_calibrate_reset(self):
-        # Remove the calibration matrix so touch reverts to the panel/overlay
+        # Remove the calibration fit so touch reverts to the panel/overlay
         # default. Used when a calibration came out wrong; the bridge runs as
-        # root and can delete the udev rule and reload udev.
+        # root and can delete the udev rule and reload udev. On a rotated
+        # display the panel default is still unrotated, so the pure rotation
+        # matrix is re-applied for the current rotation (identity fit).
         try:
             rule = "/etc/udev/rules.d/99-foodassistant-touch.rules"
             existed = os.path.exists(rule)
@@ -1299,6 +1348,9 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 os.remove(_CALIB_STORE)
             except OSError:
                 pass
+            matrix = _matrix_for_rotation(_read_kiosk_rotation())
+            if matrix:
+                _write_calibration_rule(matrix)
             subprocess.run(["udevadm", "control", "--reload-rules"], timeout=10)
             subprocess.run(["udevadm", "trigger", "--subsystem-match=input"], timeout=10)
             restarted = False
