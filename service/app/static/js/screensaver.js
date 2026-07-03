@@ -26,7 +26,9 @@
   if (!minutes || minutes <= 0) return;
 
   var IDLE_MS = minutes * 60 * 1000;
-  var SPEED = 30; // pixels per second: a slow, calm glide
+  // Glide speed in pixels per second, from the per-device setting.
+  var SPEEDS = { slow: 18, normal: 32, fast: 60 };
+  var SPEED = SPEEDS[(cfg && cfg.getAttribute('data-speed')) || 'normal'] || SPEEDS.normal;
   var lastActivity = Date.now();
   var overlay = null;
   var clockTimer = null;
@@ -45,11 +47,14 @@
     });
   }
 
-  // DVD-style bounce: the block glides at constant speed and reflects off the
-  // viewport edges. Frame-time based so the speed is the same on a slow Pi
-  // and a fast desktop; transform keeps the motion on the compositor.
+  // Old-school DVD bounce: the block travels in a dead-straight line at
+  // constant speed until it HITS an edge, then reflects (angle in = angle
+  // out) and carries on; nothing else ever changes its course. Frame-time
+  // based so the speed is identical on a slow Pi and a fast desktop, and the
+  // block size is measured each frame so a viewport resize or font load just
+  // tightens the walls without a jump. Transform keeps motion compositor-side.
   function startBounce(block) {
-    var x = null, y = null, dx = 1, dy = 1, last = null;
+    var x = null, y = null, dx = 0, dy = 0, last = null;
     function step(ts) {
       if (!overlay) return;
       var w = window.innerWidth, h = window.innerHeight;
@@ -59,18 +64,22 @@
       if (x === null) {
         x = Math.random() * maxX;
         y = Math.random() * maxY;
-        var a = (Math.random() * 0.5 + 0.4); // avoid near-flat angles
-        dx = (Math.random() < 0.5 ? -1 : 1) * a;
-        dy = (Math.random() < 0.5 ? -1 : 1) * Math.sqrt(1 - a * a || 0.5);
+        // A fixed 30-60 degree launch keeps the path visibly diagonal (the
+        // classic look) and never so flat that one axis barely moves.
+        var ang = (30 + Math.random() * 30) * Math.PI / 180;
+        dx = (Math.random() < 0.5 ? -1 : 1) * Math.cos(ang);
+        dy = (Math.random() < 0.5 ? -1 : 1) * Math.sin(ang);
       }
       if (last !== null) {
         var dt = Math.min(100, ts - last) / 1000;
         x += dx * SPEED * dt;
         y += dy * SPEED * dt;
+        // Reflect exactly at the wall: place the block ON the edge for the
+        // corner-kiss moment, flip only the axis that hit.
         if (x <= 0) { x = 0; dx = Math.abs(dx); }
-        if (x >= maxX) { x = maxX; dx = -Math.abs(dx); }
+        else if (x >= maxX) { x = maxX; dx = -Math.abs(dx); }
         if (y <= 0) { y = 0; dy = Math.abs(dy); }
-        if (y >= maxY) { y = maxY; dy = -Math.abs(dy); }
+        else if (y >= maxY) { y = maxY; dy = -Math.abs(dy); }
       }
       last = ts;
       block.style.transform = 'translate(' + x + 'px,' + y + 'px)';
@@ -81,6 +90,14 @@
 
   function show() {
     if (overlay) return;
+    // Hide the pointer everywhere while the saver is up, not just over the
+    // overlay: Chromium only refreshes the cursor shape on movement, and a
+    // cursor parked before the overlay appeared would otherwise stay drawn.
+    var style = document.createElement('style');
+    style.id = 'kiosk-screensaver-cursor';
+    style.textContent = 'body.ss-active, body.ss-active * { cursor: none !important; }';
+    document.head.appendChild(style);
+    document.body.classList.add('ss-active');
     overlay = document.createElement('div');
     overlay.id = 'kiosk-screensaver';
     overlay.style.cssText =
@@ -123,6 +140,9 @@
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
     if (el.parentNode) el.parentNode.removeChild(el);
+    document.body.classList.remove('ss-active');
+    var style = document.getElementById('kiosk-screensaver-cursor');
+    if (style && style.parentNode) style.parentNode.removeChild(style);
   }
 
   // After a dismissing tap, keep swallowing the rest of its gesture (the

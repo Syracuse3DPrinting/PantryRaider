@@ -2849,7 +2849,16 @@ docker compose up -d</code></pre>
               <input class="form-control form-control-sm" style="max-width:120px" type="number"
                      id="screensaver_minutes" min="0" max="120" step="1"
                      value="{{ s.screensaver_minutes }}">
-              <div class="form-text">Dims the page to a floating clock after inactivity; any touch brings the page right back. Unlike Display sleep above, which switches the panel off, the screensaver keeps the display on, so it suits panels that wake slowly or misbehave when powered off. This is a per-device choice.</div>
+              <div class="form-text">Dims the page to the gliding logo and clock after inactivity; any touch brings the page right back. Unlike Display sleep above, which switches the panel off, the screensaver keeps the display on, so it suits panels that wake slowly or misbehave when powered off. This is a per-device choice.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="screensaver_speed">Screensaver speed</label>
+              <select class="form-select form-select-sm" style="max-width:280px" id="screensaver_speed">
+                <option value="slow" {{ 'selected' if s.screensaver_speed == 'slow' else '' }}>Slow</option>
+                <option value="normal" {{ 'selected' if s.screensaver_speed == 'normal' or not s.screensaver_speed else '' }}>Normal</option>
+                <option value="fast" {{ 'selected' if s.screensaver_speed == 'fast' else '' }}>Fast</option>
+              </select>
+              <div class="form-text">How quickly the logo glides across the screen.</div>
             </div>
             <div class="d-flex gap-2 flex-wrap">
               <button class="btn btn-outline-info btn-sm" onclick="saveDisplaySettings()">
@@ -4785,6 +4794,7 @@ function buildPayload() {
     display_touch:   document.getElementById('display_touch')?.checked || false,
     display_idle_timeout: parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10),
     screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
+    screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
     wake_on_motion:  document.getElementById('wake_on_motion')?.value || 'auto',
     auth_required:   document.getElementById('auth_required')?.checked ?? true,
     auth_password:   secretVal('auth_password'),
@@ -6128,6 +6138,7 @@ async function saveDisplaySettings() {
   const display_type = document.getElementById('display_type')?.value || 'generic';
   const display_idle_timeout = parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10);
   const screensaver_minutes = parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10);
+  const screensaver_speed = document.getElementById('screensaver_speed')?.value || 'normal';
   const wake_on_motion = document.getElementById('wake_on_motion')?.value || 'auto';
   try {
     await fetch('setup/scale', {
@@ -6136,7 +6147,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, wake_on_motion}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, wake_on_motion}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {

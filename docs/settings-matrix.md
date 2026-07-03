@@ -156,6 +156,7 @@ and are device-local. They do not apply to a server install.
 | `display_idle_timeout` | | Not applicable | Editable | Device-local |
 | `wake_on_motion` | | Not applicable | Editable | Device-local |
 | `screensaver_minutes` | | Not applicable | Editable | Device-local |
+| `screensaver_speed` | | Not applicable | Editable | Device-local |
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 
 The display and Stream Deck panes are shown only on the Pi modes (the
