@@ -52,8 +52,11 @@ async def lifespan(app: FastAPI):
     # on (FoodAssistant-k2kk). A non-Pi server uses Watchtower instead.
     if settings.is_pi_appliance():
         app.state.auto_update_task = asyncio.create_task(_periodic_auto_update())
+    # Scheduled USB flash-drive backups (FoodAssistant-ch6d). Runs on every
+    # mode; the loop is a no-op until usb_backup_interval_hours is set.
+    app.state.usb_backup_task = asyncio.create_task(_periodic_usb_backup())
     yield
-    for attr in ("sync_task", "auto_update_task"):
+    for attr in ("sync_task", "auto_update_task", "usb_backup_task"):
         task = getattr(app.state, attr, None)
         if task is not None:
             task.cancel()
@@ -108,6 +111,32 @@ async def _periodic_auto_update():
         except Exception:
             pass
         await asyncio.sleep(6 * 3600)
+
+
+async def _periodic_usb_backup():
+    """Back up to an attached USB drive on the configured interval.
+
+    Checks every 15 minutes whether a run is due (interval on, enough time
+    since the last successful run). The last-run time is persisted, so a
+    restart never resets the clock, and a missing drive just means the pass is
+    skipped and retried on the next check once a drive is plugged in.
+    """
+    import time as _time
+    from .services import usb_backup
+    # Let the app settle after boot before touching external storage.
+    await asyncio.sleep(120)
+    while True:
+        try:
+            if usb_backup.is_due(settings.usb_backup_interval_hours,
+                                 settings.usb_backup_last, _time.time()):
+                result = await usb_backup.run_backup()
+                if result.get("ok"):
+                    import logging
+                    logging.getLogger("foodassistant.usbbackup").info(
+                        "Scheduled USB backup written: %s", result.get("file"))
+        except Exception:
+            pass
+        await asyncio.sleep(900)
 
 
 app = FastAPI(

@@ -285,6 +285,7 @@ class SetupPayload(BaseModel):
     extra_api_keys: list[dict | str] | None = None
     rclone_remote: str = ""
     rclone_schedule_hours: int = 0
+    usb_backup_interval_hours: int = 0
 
 
 class TestGrocyPayload(BaseModel):

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.81"
+APP_VERSION = "0.7.82"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -381,6 +381,7 @@ _SAVEABLE = [
     "hosted_stack_parked", "hosted_config_snapshot",
     "secret_key", "auth_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
+    "usb_backup_interval_hours", "usb_backup_last",
     "tunnel_mode", "tunnel_token", "tunnel_url",
     "debug_logging", "auto_update", "lan_scan_cidr",
 ]
@@ -1190,6 +1191,13 @@ class Settings(BaseSettings):
     extra_api_key_names: list[str] = []
     rclone_remote: str = ""          # e.g. "s3:mybucket/foodassistant"
     rclone_schedule_hours: int = 0   # 0 = disabled; 24 = daily
+
+    # Automatic backups to an attached USB flash drive (FoodAssistant-ch6d).
+    # The interval drives the background loop in main.py; 0 turns it off.
+    # usb_backup_last records the last successful run (unix time) so the
+    # schedule survives restarts instead of resetting its clock.
+    usb_backup_interval_hours: int = 0
+    usb_backup_last: float = 0.0
 
     # Verbose logging to a rotating file under data_dir/logs for support bundles
     # (FoodAssistant-asra). Off by default; raises the app log level to DEBUG.

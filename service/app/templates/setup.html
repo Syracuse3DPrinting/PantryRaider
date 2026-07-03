@@ -2378,6 +2378,24 @@
               <i class="bi bi-plug me-1"></i>Test Remote
             </button>
             <div class="test-result" id="rclone-result"></div>
+            <div class="mb-2 border-top border-secondary pt-3 mt-3">
+              <label class="form-label small mb-1"><i class="bi bi-usb-drive me-1"></i>USB drive backup</label>
+              <div class="form-text">Plug a flash drive into this device and Pantry Raider saves backups to a
+                <code>pantryraider-backups</code> folder on it, on a schedule or on demand. The drive just needs
+                to be formatted and mounted; the newest 14 backups are kept, and nothing else on the drive is
+                touched.{% if is_satellite %} On this device a backup holds its settings and local data, so a
+                replacement unit can be restored from it.{% endif %}</div>
+              <div class="test-result my-2" id="usb-status"></div>
+              <div class="mb-2">
+                <label class="form-label">Automatic USB backup interval <span class="text-secondary small">(hours, 0 = off)</span></label>
+                <input type="number" class="form-control" id="usb_backup_interval_hours" min="0" max="720"
+                       value="{{ s.usb_backup_interval_hours }}" style="width:120px">
+              </div>
+              <button class="btn btn-outline-secondary btn-sm" onclick="usbBackupNow(this)">
+                <i class="bi bi-usb-drive me-1"></i>Back up now
+              </button>
+              <div class="test-result mt-1" id="usb-backup-result"></div>
+            </div>
             <div class="mt-2">
               <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneData(this)">
                 <i class="bi bi-check-lg me-1"></i>Save Backup Settings
@@ -4654,7 +4672,47 @@ function savePaneData(btn) {
   return savePane({
     rclone_remote:         optVal('rclone_remote'),
     rclone_schedule_hours: document.getElementById('rclone_schedule_hours') ? num('rclone_schedule_hours', 0) : undefined,
+    usb_backup_interval_hours: document.getElementById('usb_backup_interval_hours') ? num('usb_backup_interval_hours', 0) : undefined,
   }, btn, 'data-save-result');
+}
+
+// USB flash-drive backup: drive status plus a manual run.
+async function loadUsbStatus() {
+  const el = document.getElementById('usb-status');
+  if (!el) return;
+  try {
+    const r = await fetch('admin/backup/usb/status');
+    const d = await r.json();
+    if (!d.detected) {
+      el.innerHTML = '<span class="text-secondary"><i class="bi bi-usb-symbol me-1"></i>No USB drive detected. '
+        + 'Plug in a formatted drive and it is picked up automatically.</span>';
+      return;
+    }
+    const free = (d.free_bytes / 1073741824).toFixed(1);
+    let msg = 'USB drive at ' + d.mountpoint + ' (' + free + ' GB free)';
+    if (d.last_backup) msg += '. Last backup: ' + new Date(d.last_backup_time * 1000).toLocaleString() + '.';
+    else msg += '. No backups on it yet.';
+    el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle-fill me-1"></i>' + msg + '</span>';
+  } catch (e) {
+    el.innerHTML = '<span class="text-secondary">Drive status is unavailable right now.</span>';
+  }
+}
+document.addEventListener('DOMContentLoaded', loadUsbStatus);
+
+async function usbBackupNow(btn) {
+  const orig = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Backing up…';
+  try {
+    const d = await postJson('admin/backup/usb', {});
+    if (!d.ok) throw new Error(d.detail || d.error || 'Backup failed');
+    setResult('usb-backup-result', true, 'Backup saved to ' + d.file);
+    loadUsbStatus();
+  } catch (e) {
+    setResult('usb-backup-result', false, e.message);
+  }
+  btn.disabled = false;
+  btn.innerHTML = orig;
 }
 
 function savePaneHardware(btn) {
@@ -4723,6 +4781,7 @@ function buildPayload() {
     api_key:         secretVal('api_key'),
     rclone_remote:   val('rclone_remote'),
     rclone_schedule_hours: num('rclone_schedule_hours', 0),
+    usb_backup_interval_hours: document.getElementById('usb_backup_interval_hours') ? num('usb_backup_interval_hours', 0) : undefined,
     // _installMode is defined only in the first-time wizard; on the settings
     // form it is undefined and these are simply omitted (kept as-is server-side).
     deployment_mode: (typeof _installMode !== 'undefined' && _installMode) ? _installMode : undefined,

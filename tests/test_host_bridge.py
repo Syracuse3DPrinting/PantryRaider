@@ -1272,3 +1272,82 @@ def test_autoenable_starts_once_per_connection():
 
 def test_autoenable_noop_when_running():
     assert _decide(installed=True, active=True) is None
+
+
+# --- USB flash-drive backup helpers (FoodAssistant-ch6d) ----------------------
+
+_USB_MOUNTS = (
+    "proc /proc proc rw,nosuid 0 0\n"
+    "/dev/mmcblk0p2 / ext4 rw,noatime 0 0\n"
+    "/dev/mmcblk0p1 /boot/firmware vfat rw,relatime 0 0\n"
+    "/dev/sda1 /media/pi/PANTRY\\040USB vfat rw,nosuid 0 0\n"
+    "/dev/sdb1 /mnt/readonly ext4 ro,relatime 0 0\n"
+)
+
+
+def test_usb_parse_mounts_decodes_escapes_and_skips_short_lines():
+    entries = bridge._usb_parse_mounts(_USB_MOUNTS + "garbage\n")
+    sda = next(e for e in entries if e[0] == "/dev/sda1")
+    assert sda[1] == "/media/pi/PANTRY USB"
+    assert all(len(e) == 4 for e in entries)
+
+
+def test_usb_disk_for_matches_partition_suffixes_only():
+    assert bridge._usb_disk_for("sda1", ["sda"]) == "sda"
+    assert bridge._usb_disk_for("nvme0n1p2", ["nvme0n1"]) == "nvme0n1"
+    assert bridge._usb_disk_for("sdab1", ["sda"]) is None
+
+
+def test_usb_mount_candidates_filters_ro_root_and_boot():
+    mounts = bridge._usb_parse_mounts(_USB_MOUNTS)
+    assert bridge._usb_mount_candidates(["sda", "sdb"], mounts) == [
+        ("/dev/sda1", "/media/pi/PANTRY USB")
+    ]
+    # A Pi booted from a removable USB SSD never gets its system disk offered.
+    sys_mounts = bridge._usb_parse_mounts(
+        "/dev/sda2 / ext4 rw 0 0\n/dev/sda1 /boot/firmware vfat rw 0 0\n"
+    )
+    assert bridge._usb_mount_candidates(["sda"], sys_mounts) == []
+
+
+def test_usb_pick_mount_prefers_automount_paths():
+    cands = [("/dev/sdb1", "/srv/x"), ("/dev/sda1", "/media/pi/STICK")]
+    assert bridge._usb_pick_mount(cands) == ("/dev/sda1", "/media/pi/STICK")
+    assert bridge._usb_pick_mount([]) is None
+
+
+def test_usb_removable_disks_reads_sysfs(tmp_path):
+    (tmp_path / "sda").mkdir()
+    (tmp_path / "sda" / "removable").write_text("1\n")
+    (tmp_path / "mmcblk0").mkdir()
+    (tmp_path / "mmcblk0" / "removable").write_text("0\n")
+    assert bridge._usb_removable_disks(str(tmp_path)) == ["sda"]
+    assert bridge._usb_removable_disks(str(tmp_path / "nope")) == []
+
+
+def test_usb_rotation_keeps_newest_14_and_ignores_foreign_files():
+    names = ["foodassistant-usb-202601%02d-000000.tar.gz" % d for d in range(1, 18)]
+    names += ["holiday.jpg", "backup.tar.gz"]
+    victims = bridge._usb_rotation_victims(names, keep=14)
+    assert victims == sorted(names[:17])[:3]
+    assert "holiday.jpg" not in victims and "backup.tar.gz" not in victims
+    assert bridge._usb_rotation_victims(names[:14], keep=14) == []
+
+
+def test_usb_data_dirs_appliance_layout_then_repo_fallback(tmp_path):
+    # Appliance layout: whatever exists among data/grocy/mealie. A Pi Remote
+    # only has data/, so its backup is naturally the device config.
+    (tmp_path / "data").mkdir()
+    assert bridge._usb_data_dirs(str(tmp_path)) == ["data"]
+    (tmp_path / "grocy").mkdir()
+    (tmp_path / "mealie").mkdir()
+    assert bridge._usb_data_dirs(str(tmp_path)) == ["data", "grocy", "mealie"]
+    # Repo-style checkout: the app data lives under service/data instead.
+    repo = tmp_path / "repo"
+    (repo / "service" / "data").mkdir(parents=True)
+    (repo / "grocy" / "config").mkdir(parents=True)
+    assert bridge._usb_data_dirs(str(repo)) == ["service/data", "grocy"]
+    # Nothing found: nothing to back up.
+    empty = tmp_path / "empty"
+    empty.mkdir()
+    assert bridge._usb_data_dirs(str(empty)) == []

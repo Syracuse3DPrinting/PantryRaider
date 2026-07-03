@@ -44,6 +44,8 @@ POST /activity             report user activity; wakes the display  {source?}
 POST /display/blank        blank the kiosk display now
 POST /display/wake         wake the kiosk display now
 POST /display/idle         set+persist the display idle timeout  {minutes}
+GET  /usb/status           attached USB flash drive: mounted? free space? last backup?
+POST /usb/backup           snapshot the data dirs into pantryraider-backups/ on the drive
 """
 import http.server
 import json
@@ -844,6 +846,148 @@ def _hardware_status():
     }
 
 
+# USB flash drive backups (FoodAssistant-ch6d)
+# ---------------------------------------------
+# The app container cannot see the host's /media, so backing up to an attached
+# flash drive is a bridge job. Detection relies on the drive already being
+# mounted (udisks/automount or fstab); the bridge never mounts, never formats,
+# and only ever writes inside a pantryraider-backups/ directory on the drive.
+# The parsing and rotation helpers are pure so they are unit-testable.
+
+_USB_BACKUP_DIRNAME = "pantryraider-backups"
+_USB_BACKUP_KEEP = 14
+_USB_BACKUP_NAME = re.compile(r"^foodassistant-usb-\d{8}-\d{6}\.(tar\.gz|zip)$")
+
+
+def _usb_removable_disks(sys_block="/sys/block"):
+    """Disk names whose removable flag in sysfs is 1 (USB sticks, card readers)."""
+    names = []
+    try:
+        entries = sorted(os.listdir(sys_block))
+    except OSError:
+        return []
+    for name in entries:
+        if _read_sysfs(os.path.join(sys_block, name, "removable")) == "1":
+            names.append(name)
+    return names
+
+
+def _usb_parse_mounts(text):
+    """Pure: parse /proc/mounts text into (device, mountpoint, fstype, options)
+    tuples, decoding the octal escapes mountpoints with spaces arrive with."""
+    out = []
+    for line in text.splitlines():
+        parts = line.split()
+        if len(parts) < 4:
+            continue
+        dev, mnt, fstype, opts = parts[:4]
+        mnt = re.sub(r"\\([0-7]{3})", lambda m: chr(int(m.group(1), 8)), mnt)
+        out.append((dev, mnt, fstype, opts))
+    return out
+
+
+def _usb_disk_for(partition, disks):
+    """Pure: the removable disk a partition belongs to (sda1 -> sda), or None.
+    The remainder must be a partition suffix so sdab1 never matches sda."""
+    for d in sorted(disks, key=len, reverse=True):
+        if partition == d:
+            return d
+        if partition.startswith(d) and re.fullmatch(r"p?\d+", partition[len(d):]):
+            return d
+    return None
+
+
+def _usb_mount_candidates(removable, mounts):
+    """Pure: mounted, writable filesystems that live on a removable disk.
+
+    Skips non-device mounts, read-only mounts, and (safety) the root and boot
+    filesystems, so a Pi booted from a removable USB SSD never has its system
+    disk offered as a backup target. Returns (device, mountpoint) pairs.
+    """
+    out = []
+    for dev, mnt, _fstype, opts in mounts:
+        if not dev.startswith("/dev/"):
+            continue
+        if _usb_disk_for(os.path.basename(dev), removable) is None:
+            continue
+        if mnt == "/" or mnt == "/boot" or mnt.startswith("/boot/"):
+            continue
+        if "ro" in opts.split(","):
+            continue
+        out.append((dev, mnt))
+    return out
+
+
+def _usb_pick_mount(candidates):
+    """Pure: choose the backup target, preferring normal automount locations."""
+    for prefix in ("/media/", "/run/media/", "/mnt/"):
+        for dev, mnt in candidates:
+            if mnt.startswith(prefix) or mnt == prefix.rstrip("/"):
+                return (dev, mnt)
+    return candidates[0] if candidates else None
+
+
+def _usb_rotation_victims(names, keep=_USB_BACKUP_KEEP):
+    """Pure: which backup files to delete so only the newest `keep` remain.
+    Only our own timestamped names are considered; anything else on the drive
+    is never touched."""
+    ours = sorted(n for n in names if _USB_BACKUP_NAME.match(n))
+    if keep <= 0:
+        return ours
+    return ours[:-keep] if len(ours) > keep else []
+
+
+def _usb_data_dirs(root=None):
+    """The data dirs to snapshot, relative to the install dir.
+
+    An appliance's compose files bind-mount ./data (the app), ./grocy and
+    ./mealie (Pi Hosted only). Whatever exists is included, so a Pi Remote
+    naturally gets a config-only backup. A repo-style checkout layout is the
+    fallback so the helper also works on a plain server install.
+    """
+    root = root or INSTALL_DIR
+    dirs = []
+    for options in (("data", "service/data"), ("grocy",), ("mealie",)):
+        for d in options:
+            if os.path.isdir(os.path.join(root, d)):
+                dirs.append(d)
+                break
+    return dirs
+
+
+def _usb_drive_status():
+    """Status body for GET /usb/status. Always answers, never raises."""
+    try:
+        removable = _usb_removable_disks()
+        with open("/proc/mounts") as f:
+            mounts = _usb_parse_mounts(f.read())
+        pick = _usb_pick_mount(_usb_mount_candidates(removable, mounts))
+        if not pick:
+            return {"ok": True, "detected": False}
+        dev, mnt = pick
+        st = os.statvfs(mnt)
+        bdir = os.path.join(mnt, _USB_BACKUP_DIRNAME)
+        backups = []
+        if os.path.isdir(bdir):
+            backups = sorted(n for n in os.listdir(bdir) if _USB_BACKUP_NAME.match(n))
+        last = backups[-1] if backups else ""
+        last_time = 0.0
+        if last:
+            try:
+                last_time = os.stat(os.path.join(bdir, last)).st_mtime
+            except OSError:
+                last_time = 0.0
+        return {
+            "ok": True, "detected": True, "device": dev, "mountpoint": mnt,
+            "free_bytes": st.f_bavail * st.f_frsize,
+            "total_bytes": st.f_blocks * st.f_frsize,
+            "backups_dir": bdir, "backups": len(backups),
+            "last_backup": last, "last_backup_time": last_time,
+        }
+    except Exception as e:
+        return {"ok": False, "detected": False, "error": str(e)}
+
+
 # Meaning of each bit in the "throttled" word reported by `vcgencmd
 # get_throttled`. The low four bits are live (happening right now); the high
 # four are sticky (happened at some point since boot). See
@@ -1603,6 +1747,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._ap_status()
         elif self.path == "/activity":
             self._activity_get()
+        elif self.path == "/usb/status":
+            self._usb_status()
         elif self.path == "/stack/status":
             self._stack_status()
         else:
@@ -1643,6 +1789,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._update()
         elif self.path == "/reboot":
             self._reboot()
+        elif self.path == "/usb/backup":
+            self._usb_backup()
         elif self.path == "/restore":
             self._restore()
         elif self.path == "/stack/standdown":
@@ -2437,6 +2585,75 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(500, {"ok": False, "error": "starting the local stack timed out"})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
+
+    def _usb_status(self):
+        """Attached USB flash drive status for the app's Backup pane."""
+        self._send(200, _usb_drive_status())
+
+    def _usb_backup(self):
+        """Snapshot the data dirs into pantryraider-backups/ on the drive.
+
+        Same content as scripts/backup.sh: a tar of the bind-mounted data dirs
+        that exist under the install dir (app data always; Grocy and Mealie on
+        a Pi Hosted box), so the file restores with foodassistant-restore. The
+        archive is written to a temp name and renamed, so a yanked drive never
+        leaves a half-written file looking like a good backup, and the newest
+        14 backups are kept.
+        """
+        status = _usb_drive_status()
+        if not status.get("detected"):
+            self._send(400, {"ok": False, "error": status.get(
+                "error",
+                "No USB drive found. Plug in a drive that is already formatted "
+                "and mounted, then try again.")})
+            return
+        dirs = _usb_data_dirs()
+        if not dirs:
+            self._send(400, {"ok": False, "error":
+                "No data directories found under %s; nothing to back up." % INSTALL_DIR})
+            return
+        bdir = os.path.join(status["mountpoint"], _USB_BACKUP_DIRNAME)
+        name = "foodassistant-usb-%s.tar.gz" % time.strftime("%Y%m%d-%H%M%S")
+        final = os.path.join(bdir, name)
+        tmp = os.path.join(bdir, "." + name + ".part")
+        try:
+            os.makedirs(bdir, exist_ok=True)
+            r = subprocess.run(
+                ["tar", "-czf", tmp, "-C", INSTALL_DIR] + dirs,
+                capture_output=True, text=True, timeout=600,
+            )
+            if r.returncode != 0:
+                try:
+                    os.unlink(tmp)
+                except OSError:
+                    pass
+                self._send(500, {"ok": False, "error":
+                    (r.stderr or "tar failed").strip()[:400]})
+                return
+            os.replace(tmp, final)
+        except subprocess.TimeoutExpired:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+            self._send(500, {"ok": False, "error": "The backup timed out; the drive may be too slow or full."})
+            return
+        except OSError as e:
+            self._send(500, {"ok": False, "error": "Could not write to the drive: %s" % e})
+            return
+        deleted = []
+        for victim in _usb_rotation_victims(os.listdir(bdir)):
+            try:
+                os.unlink(os.path.join(bdir, victim))
+                deleted.append(victim)
+            except OSError:
+                pass
+        try:
+            size = os.stat(final).st_size
+        except OSError:
+            size = 0
+        self._send(200, {"ok": True, "file": final, "bytes": size,
+                         "dirs": dirs, "deleted": deleted})
 
     def _restore(self):
         # Restore the FULL stack snapshot (Grocy + Mealie + app data) by

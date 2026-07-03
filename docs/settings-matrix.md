@@ -261,12 +261,20 @@ password, TOTP secret, and API keys are never synced.
 `secret_key` is auto-generated on first run on every mode and persisted so
 sessions survive a restart.
 
-## Backups (rclone)
+## Backups (rclone and USB drive)
+
+`usb_backup_interval_hours` schedules backups to an attached USB flash drive
+(0 turns it off). Each device backs up its own data: a Pi Hosted box saves a
+full stack snapshot, a Pi Remote saves its device config, and a server saves
+the app-data zip. `usb_backup_last` records the last successful run and is
+maintained by the app, not edited directly.
 
 | Setting | Secret | Server | Pi Hosted | Pi Remote |
 | --- | --- | --- | --- | --- |
 | `rclone_remote` | | Editable | Editable | Device-local |
 | `rclone_schedule_hours` | | Editable | Editable | Device-local |
+| `usb_backup_interval_hours` | | Editable | Editable | Device-local |
+| `usb_backup_last` | | Auto-maintained | Auto-maintained | Auto-maintained |
 
 ## Remote access tunnel
 

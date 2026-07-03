@@ -372,6 +372,34 @@ async def push_to_remote(include_secrets: bool = False):
     return {"ok": True, "message": f"Backup pushed to {settings.rclone_remote}", "filename": filename}
 
 
+@router.get("/backup/usb/status")
+async def usb_backup_status():
+    """Attached USB drive status for the Backup pane: whether a drive is
+    mounted, its free space, and when the last backup was written. On a Pi
+    appliance this asks the host bridge; on a server the app looks itself."""
+    from ..services import usb_backup
+    st = await usb_backup.status()
+    st["interval_hours"] = settings.usb_backup_interval_hours
+    st["last_run"] = settings.usb_backup_last
+    return st
+
+
+@router.post("/backup/usb")
+async def usb_backup_now():
+    """Write a backup to the attached USB drive now.
+
+    On a Pi Hosted box this snapshots the whole stack (app data, Grocy, and
+    Mealie when present); on a Pi Remote it saves the device config; on a
+    server it writes the app-data zip. Backups land in a pantryraider-backups
+    folder on the drive and the newest 14 are kept.
+    """
+    from ..services import usb_backup
+    result = await usb_backup.run_backup()
+    if not result.get("ok"):
+        raise HTTPException(400, result.get("error", "USB backup failed."))
+    return result
+
+
 @router.post("/backup/test-remote")
 async def test_remote():
     """Test whether rclone can reach the configured remote."""
