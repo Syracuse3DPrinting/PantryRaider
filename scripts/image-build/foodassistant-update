@@ -318,6 +318,29 @@ case "$_hide_cursor_pref" in
     ;;
 esac
 
+# The vc4 HDMI CEC input devices advertise relative axes, which hands the
+# Wayland seat a pointer and makes cage draw a cursor on mouse-less kiosks; no
+# cursor theme or client CSS can remove a compositor seat cursor. Ignore the
+# CEC devices for libinput on deployed devices (fresh provisions get the same
+# rule from firstboot). A real mouse is unaffected. The kiosk restart later in
+# this run makes it take effect.
+CEC_RULES_FILE="${CEC_RULES_FILE:-/etc/udev/rules.d/71-foodassistant-cec-pointer.rules}"
+if [ ! -f "$CEC_RULES_FILE" ] && mkdir -p "$(dirname "$CEC_RULES_FILE")" 2>/dev/null; then
+  cat > "$CEC_RULES_FILE" 2>/dev/null <<'RULES'
+# Pantry Raider kiosk: the vc4 HDMI CEC input devices expose relative axes,
+# which makes the Wayland seat grow a pointer and the compositor draw a cursor
+# even with no mouse attached. The kiosk does not use CEC input; ignore it.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="vc4-hdmi*", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+RULES
+  if [ -f "$CEC_RULES_FILE" ]; then
+    udevadm control --reload-rules 2>/dev/null || true
+    udevadm trigger --subsystem-match=input 2>/dev/null || true
+    log "Installed the CEC pointer ignore rule; the compositor cursor goes away with the kiosk restart."
+  else
+    log "WARN: could not write $CEC_RULES_FILE"
+  fi
+fi
+
 _bsrc="$REPO/scripts/image-build/foodassistant-host-bridge"
 _bdst="$BIN_DIR/foodassistant-host-bridge"
 if [ -f "$_bsrc" ]; then

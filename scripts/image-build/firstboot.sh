@@ -1160,6 +1160,28 @@ _resolve_hide_cursor() {
 # `file` reports this as "X11 cursor". Format ref: x.org Xcursor(3).
 # Echoes the theme name on success; returns non-zero (and the caller falls back
 # to the normal cursor) if the files cannot be written.
+# The vc4 HDMI CEC remote-control input devices advertise relative axes
+# (REL_X/REL_Y), which hands the Wayland seat a pointer capability, so cage
+# draws a mouse cursor on a device with no mouse at all (found on Dan's
+# pi_remote, Jul 2026: cursor survived the transparent theme AND Chromium's
+# CSS hide because it was the compositor's seat cursor). CEC keypresses are
+# not used by the kiosk, so libinput ignores these devices outright. A real
+# mouse is unaffected. Idempotent.
+_install_cec_pointer_ignore_rule() {
+  local rules="${CEC_RULES_FILE:-/etc/udev/rules.d/71-foodassistant-cec-pointer.rules}"
+  [ -f "$rules" ] && return 0
+  mkdir -p "$(dirname "$rules")" 2>/dev/null || return 1
+  cat > "$rules" <<'RULES'
+# Pantry Raider kiosk: the vc4 HDMI CEC input devices expose relative axes,
+# which makes the Wayland seat grow a pointer and the compositor draw a cursor
+# even with no mouse attached. The kiosk does not use CEC input; ignore it.
+SUBSYSTEM=="input", KERNEL=="event*", ATTRS{name}=="vc4-hdmi*", ENV{LIBINPUT_IGNORE_DEVICE}="1"
+RULES
+  udevadm control --reload-rules 2>/dev/null || true
+  udevadm trigger --subsystem-match=input 2>/dev/null || true
+  log "Installed the CEC pointer ignore rule (compositor cursor stays hidden)"
+}
+
 _install_blank_cursor_theme() {
   local theme="foodassistant-hidden"
   local base="/usr/share/icons/$theme"
@@ -1208,6 +1230,10 @@ configure_kiosk() {
   else
     log "Cursor will be shown (HIDE_CURSOR=$HIDE_CURSOR)"
   fi
+  # Regardless of the theme decision: the CEC devices must never count as a
+  # pointer, or the compositor draws a cursor no theme or CSS can remove.
+  [ "$DRY_RUN" = "1" ] || _install_cec_pointer_ignore_rule || warn "could not install the CEC pointer ignore rule"
+
 
   # cage = minimal single-app Wayland compositor; chromium = browser. Install
   # them on separate apt lines and try both browser package names. Bundling

@@ -360,3 +360,19 @@ def test_reexec_guard_prevents_loops(rig, tmp_path):
     rig["env"]["FA_UPDATE_REEXEC"] = "1"
     result, out = run_update(rig)
     assert "remote_recovered" in result  # the real script's JSON, not a re-exec
+
+
+def test_cec_pointer_ignore_rule_installed(rig, tmp_path):
+    # The vc4 HDMI CEC devices masquerade as pointers and make the compositor
+    # draw a cursor on mouse-less kiosks; the updater ships the libinput
+    # ignore rule to deployed devices.
+    rules = tmp_path / "rules.d" / "71-foodassistant-cec-pointer.rules"
+    rig["env"]["CEC_RULES_FILE"] = str(rules)
+    run_update(rig)
+    body = rules.read_text()
+    assert 'ATTRS{name}=="vc4-hdmi*"' in body
+    assert 'ENV{LIBINPUT_IGNORE_DEVICE}="1"' in body
+    # Idempotent: a second run leaves the file untouched.
+    before = rules.stat().st_mtime
+    run_update(rig)
+    assert rules.stat().st_mtime == before
