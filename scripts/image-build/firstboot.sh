@@ -1129,13 +1129,16 @@ has_pointer_device() {
   return 1
 }
 
-# Decide whether to hide the cursor, resolving HIDE_CURSOR=auto against the
-# attached hardware. Echoes "true" or "false". auto hides only when no pointer
-# device is present at provision time.
+# Decide whether to hide the cursor. Echoes "true" or "false". auto now HIDES:
+# these are touch-first kiosk appliances, and detecting an attached pointer
+# proved unreliable because USB barcode scanners enumerate a composite HID
+# mouse interface, so scanner-equipped kiosks kept a visible cursor
+# (FoodAssistant device testing, Jul 2026). A real mouse user sets
+# HIDE_CURSOR=false in config.env to keep the pointer.
 _resolve_hide_cursor() {
   case "${HIDE_CURSOR:-auto}" in
     auto|AUTO|Auto)
-      if has_pointer_device; then echo "false"; else echo "true"; fi
+      echo "true"
       ;;
     *)
       if is_true "$HIDE_CURSOR"; then echo "true"; else echo "false"; fi

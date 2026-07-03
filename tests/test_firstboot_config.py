@@ -230,16 +230,18 @@ def test_hide_cursor_auto_no_pointer_hides(tmp_path):
     assert "Cursor will be hidden" in out
 
 
-def test_hide_cursor_auto_with_pointer_shows(tmp_path):
-    # HIDE_CURSOR=auto with a pointer device present -> keep the cursor visible.
+def test_hide_cursor_auto_hides_even_with_pointer(tmp_path):
+    # HIDE_CURSOR=auto hides regardless of attached pointers: USB barcode
+    # scanners enumerate a composite HID mouse, so pointer detection kept a
+    # visible cursor on scanner-equipped kiosks. Mouse users opt out with
+    # HIDE_CURSOR=false.
     rc, out = run_firstboot(
         tmp_path,
         "ENABLE_KIOSK=true\n",
         extra_env={"FORCE_DISPLAY": "1", "FORCE_POINTER": "1"},
     )
     assert rc == 0, out
-    assert "Cursor will be shown" in out
-    assert "Cursor will be hidden" not in out
+    assert "Cursor will be hidden" in out
 
 
 def test_hide_cursor_false_never_hides(tmp_path):

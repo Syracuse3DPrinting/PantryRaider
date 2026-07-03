@@ -242,6 +242,59 @@ if [ -f "$KIOSK_UNIT" ] && [ ! -f "$_kdropin" ] \
   fi
 fi
 
+# Hide the kiosk cursor on deployed devices. Fresh provisions get a transparent
+# XCursor theme plus Environment lines in the unit (firstboot), but devices
+# imaged earlier never received them, and the old auto-detection kept the
+# cursor whenever a pointer was attached at provision time, which misfired on
+# USB barcode scanners (they enumerate a composite HID mouse). Deliver the
+# theme and a drop-in here, honouring an explicit HIDE_CURSOR=false in
+# config.env. Paths are env-overridable for tests.
+CURSOR_THEME_DIR="${CURSOR_THEME_DIR:-/usr/share/icons/foodassistant-hidden}"
+_hide_cursor_pref=""
+for _cfg in /etc/foodassistant/config.env /boot/firmware/foodassistant.config.env /boot/foodassistant.config.env; do
+  [ -f "$_cfg" ] || continue
+  _v="$(grep -E '^ *(export +)?HIDE_CURSOR=' "$_cfg" 2>/dev/null | tail -n1 | sed 's/.*=//; s/["'"'"']//g')"
+  [ -n "$_v" ] && _hide_cursor_pref="$_v"
+done
+_cdropin="$KIOSK_DROPIN_DIR/20-foodassistant-cursor.conf"
+case "$_hide_cursor_pref" in
+  false|FALSE|False|0|no|NO|No) : ;;  # explicit opt-out: leave the cursor alone
+  *)
+    if [ -f "$KIOSK_UNIT" ] && [ ! -f "$_cdropin" ] \
+        && ! grep -q "XCURSOR_THEME" "$KIOSK_UNIT"; then
+      mkdir -p "$CURSOR_THEME_DIR/cursors" 2>/dev/null || true
+      if [ -d "$CURSOR_THEME_DIR/cursors" ]; then
+        # A minimal valid single-image Xcursor whose only pixel is fully
+        # transparent (same bytes firstboot writes; format: Xcursor(3)).
+        printf '\130\143\165\162\020\000\000\000\000\000\001\000\001\000\000\000\002\000\375\377\001\000\000\000\034\000\000\000\044\000\000\000\002\000\375\377\001\000\000\000\001\000\000\000\001\000\000\000\001\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000\000' \
+          > "$CURSOR_THEME_DIR/cursors/left_ptr" 2>/dev/null || true
+        for _cn in default left_ptr_watch watch text xterm hand1 hand2 pointer \
+                   top_left_arrow arrow crosshair fleur grabbing; do
+          ln -sf left_ptr "$CURSOR_THEME_DIR/cursors/$_cn" 2>/dev/null || true
+        done
+        printf '[Icon Theme]\nName=FoodAssistant Hidden Cursor\nComment=Fully transparent cursor for touch/Stream Deck kiosks\n' \
+          > "$CURSOR_THEME_DIR/index.theme" 2>/dev/null || true
+      fi
+      if [ -s "$CURSOR_THEME_DIR/cursors/left_ptr" ] && mkdir -p "$KIOSK_DROPIN_DIR" 2>/dev/null; then
+        {
+          echo "[Service]"
+          echo "Environment=XCURSOR_PATH=$(dirname "$CURSOR_THEME_DIR")"
+          echo "Environment=XCURSOR_THEME=$(basename "$CURSOR_THEME_DIR")"
+          echo "Environment=XCURSOR_SIZE=24"
+        } > "$_cdropin" 2>/dev/null \
+          && systemctl daemon-reload 2>/dev/null || true
+        if [ -f "$_cdropin" ]; then
+          log "Installed the hidden-cursor theme and kiosk drop-in (HIDE_CURSOR=false in config.env restores the pointer)."
+        else
+          log "WARN: could not install the kiosk cursor drop-in."
+        fi
+      else
+        log "WARN: could not write the hidden cursor theme."
+      fi
+    fi
+    ;;
+esac
+
 _bsrc="$REPO/scripts/image-build/foodassistant-host-bridge"
 _bdst="$BIN_DIR/foodassistant-host-bridge"
 if [ -f "$_bsrc" ]; then

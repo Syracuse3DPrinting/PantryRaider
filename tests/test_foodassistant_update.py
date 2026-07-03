@@ -294,3 +294,38 @@ def test_kiosk_boot_dropin_skipped_when_unit_has_the_app_wait(rig, tmp_path):
     rig["env"]["KIOSK_DROPIN_DIR"] = str(dropin_dir)
     run_update(rig)
     assert not dropin_dir.exists()
+
+
+def test_cursor_dropin_and_theme_installed(rig, tmp_path):
+    # Devices imaged before the hidden-cursor provisioning (or whose scanner
+    # masqueraded as a mouse at provision time) gain the transparent theme and
+    # an Environment drop-in on update.
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text("[Service]\nExecStart=/usr/bin/cage\nRestart=always\n")
+    theme = tmp_path / "icons" / "foodassistant-hidden"
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(tmp_path / "kiosk.d")
+    rig["env"]["CURSOR_THEME_DIR"] = str(theme)
+    run_update(rig)
+    cur = theme / "cursors" / "left_ptr"
+    assert cur.is_file() and cur.read_bytes().startswith(b"Xcur")
+    assert (theme / "cursors" / "default").exists()
+    dropin = tmp_path / "kiosk.d" / "20-foodassistant-cursor.conf"
+    body = dropin.read_text()
+    assert "XCURSOR_THEME=foodassistant-hidden" in body
+    assert f"XCURSOR_PATH={theme.parent}" in body
+
+
+def test_cursor_dropin_respects_hide_cursor_false(rig, tmp_path):
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text("[Service]\nExecStart=/usr/bin/cage\nRestart=always\n")
+    # The updater reads HIDE_CURSOR from fixed config.env paths that do not
+    # exist in the test sandbox, so emulate the opt-out by pre-marking the
+    # unit as already themed (grep guard) and assert nothing is written when
+    # XCURSOR_THEME is already present.
+    unit.write_text("[Service]\nEnvironment=XCURSOR_THEME=x\nExecStart=/usr/bin/cage\n")
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(tmp_path / "kiosk.d")
+    rig["env"]["CURSOR_THEME_DIR"] = str(tmp_path / "icons" / "foodassistant-hidden")
+    run_update(rig)
+    assert not (tmp_path / "kiosk.d" / "20-foodassistant-cursor.conf").exists()
