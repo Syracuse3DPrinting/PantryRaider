@@ -1,13 +1,13 @@
-# Personalization and On-screen Features
+# Appearance and On-screen Features
 
-Pantry Raider separates everyday, taste-level settings (Personalization) from
-the set-and-forget configuration (Settings). Open Settings and use the toggle at
-the top of the page to switch between the two. This page covers the
-Personalization features and the on-screen surfaces they drive.
+The Settings page groups everything by what you are trying to do: one menu
+with sections like Appearance, Screen & Sleep, and Devices, plus a search box
+that filters the menu as you type. This page covers the appearance and
+on-screen features and where each lives in that menu.
 
 ## Themes
 
-Settings, Personalization, Theme. Pick a colour theme for the whole app; it
+Settings, Appearance. Pick a colour theme for the whole app; it
 applies on every page and device because it is stored on the server.
 
 - **Built-in themes:** a default dark and light, plus several bundled
@@ -24,14 +24,15 @@ buttons, and the status badges stay legible.
 
 ## Background image
 
-Settings, Personalization, Theme, Background image. Paint an optional photo
+Settings, Appearance, Background image. Paint an optional photo
 behind the whole UI. Upload a JPG, PNG, WebP, or GIF (up to 8 MB) or paste an
 image URL, and use the opacity slider so the interface stays readable over it.
 It applies on every page.
 
 ## Navigation
 
-Settings, Personalization, Navigation.
+Settings, Appearance holds the tab editor; the on-screen navigation bar
+lives under Screen & Sleep.
 
 - **Tab editor:** drag a row to reorder it, or use the up/down buttons. Drop a
   tab onto a folder (or onto any tab already inside one) to nest it; the parent
@@ -49,7 +50,7 @@ Settings, Personalization, Navigation.
 
 ## Start Page (on-screen Stream Deck)
 
-Settings, Personalization, Start & Stream Deck. The Start Page is an optional
+Settings, Devices, Start Page. The Start Page is an optional
 full-screen launcher that works like an on-screen Stream Deck, served at
 `/ui/start`. It is off by default.
 
@@ -71,8 +72,8 @@ full-screen launcher that works like an on-screen Stream Deck, served at
   (paging, brightness) are skipped and named in the toast. Purely hardware-bound
   keys still note that they run on a connected Stream Deck.
 
-On a Pi appliance, the Start & Stream Deck menu shows a toggle at the top to
-switch between configuring the on-screen Start Page and the physical deck.
+The Devices section shows a toggle at the top to switch between this device,
+the on-screen Start Page, and (on a Pi appliance) the physical deck.
 
 ## Weather
 
@@ -86,7 +87,7 @@ at a self-hosted Open-Meteo if you run one) and falls back to wttr.in.
 
 ## On-screen Home Assistant events
 
-Settings, Home Assistant, On-screen notifications and camera pop-ups. A Home
+Settings, Connections, On-screen notifications and camera pop-ups. A Home
 Assistant automation can push notification toasts and full-screen camera
 pop-ups to a device's display. Whether a device shows them is a per-device
 choice (follow the server default, always show, or never show), which is useful

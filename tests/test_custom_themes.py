@@ -125,14 +125,14 @@ def _render(client, monkeypatch, *, is_pi: bool) -> str:
     return r.text
 
 
-def test_theme_and_navigation_are_separate_panes(client, monkeypatch):
+def test_theme_and_navigation_share_the_appearance_pane(client, monkeypatch):
     html = _render(client, monkeypatch, is_pi=False)
-    for pane in ("pane-theme", "pane-navigation"):
-        assert f'id="{pane}"' in html
-        assert f'data-bs-target="#{pane}"' in html
-    # The named-theme builder and nav reset controls render.
-    assert 'onclick="saveCustomTheme(this)"' in html
-    assert 'onclick="resetNavEditor(this)"' in html
+    assert 'id="pane-appearance"' in html
+    assert 'data-bs-target="#pane-appearance"' in html
+    pane = html.split('id="pane-appearance"', 1)[1].split('id="pane-', 1)[0]
+    # The named-theme builder and nav reset controls render in it.
+    assert 'onclick="saveCustomTheme(this)"' in pane
+    assert 'onclick="resetNavEditor(this)"' in pane
     assert "window.TABS_DEFAULT" in html
 
 
@@ -150,30 +150,27 @@ def test_saved_custom_theme_shows_in_dropdown(client, monkeypatch):
     assert "#ff7700" in html
 
 
-def test_display_and_streamdeck_moved_to_personalization(client, monkeypatch):
+def test_display_settings_live_in_screen_pane(client, monkeypatch):
     html = _render(client, monkeypatch, is_pi=True)
-    # Display is a Personalization pill.
-    seg = html.split('data-bs-target="#pane-display"', 1)
-    assert len(seg) == 2, "Display pill missing"
-    btn = seg[0].rsplit("<button", 1)[1] + seg[1].split("</button>", 1)[0]
-    assert 'data-mgroup="p"' in btn
-    # The Stream Deck no longer has its own pill: it is reached via the combined
-    # "Start & Stream Deck" Personalization pill and the in-pane toggle.
+    # The kiosk panel settings live in the Screen & Sleep pane.
+    assert 'data-bs-target="#pane-screen"' in html
+    screen = html.split('id="pane-screen"', 1)[1].split('id="pane-', 1)[0]
+    assert 'id="ui_scale"' in screen
+    assert 'id="screensaver_minutes"' in screen
+    # The Start Page and Stream Deck have no pill of their own: they are
+    # reached via the Devices pill and the in-pane toggle.
     assert 'data-bs-target="#pane-streamdeck"' not in html
-    seg2 = html.split('data-bs-target="#pane-start-page"', 1)
-    assert len(seg2) == 2
-    combined = seg2[0].rsplit("<button", 1)[1] + seg2[1].split("</button>", 1)[0]
-    assert 'data-mgroup="p"' in combined
-    assert "Start &amp; Stream Deck" in combined
-    # The toggle to switch between them is present.
+    assert 'data-bs-target="#pane-start-page"' not in html
     assert 'onclick="showDeckStart(\'deck\')"' in html
-    assert 'onclick="showDeckStart(\'start\')"' in html
+    assert "showDeckStart('start')" in html
 
 
-def test_attached_hardware_in_hardware_pane_not_streamdeck(client, monkeypatch):
+def test_attached_hardware_in_devices_pane_not_streamdeck(client, monkeypatch):
     html = _render(client, monkeypatch, is_pi=True)
-    hw = html.split('id="pane-hardware"', 1)[1].split('id="pane-', 1)[0]
-    assert "hwdetect-display" in hw
-    assert "Attached hardware" in hw
-    sd = html.split('id="pane-streamdeck"', 1)[1].split('id="pane-', 1)[0]
+    dev = html.split('id="pane-devices"', 1)[1].split('id="pane-', 1)[0]
+    assert "hwdetect-display" in dev
+    assert "Attached hardware" in dev
+    # The Stream Deck pane is the last pane, so bound its segment at the end
+    # of the tab content (before the page scripts, which mention the id too).
+    sd = html.split('id="pane-streamdeck"', 1)[1].split("<script", 1)[0]
     assert "hwdetect-display" not in sd

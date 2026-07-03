@@ -170,9 +170,10 @@ and are device-local. They do not apply to a server install.
 | `streamdeck_idle_timeout` | | Not applicable | Editable | Device-local |
 | `streamdeck_screensaver_layout` | | Not applicable | Editable | Device-local |
 
-The display and Stream Deck panes are shown only on the Pi modes (the
-`peripherals` feature flag is Pi-only). `device_hostname` is offered on every
-mode because it controls how browser links are built.
+The kiosk display cards (Settings, Screen & Sleep) and the Stream Deck
+editor (Settings, Devices) are shown only on the Pi modes (the `peripherals`
+feature flag is Pi-only). `device_hostname` is offered on every mode (Settings,
+Devices) because it controls how browser links are built.
 
 `display_idle_timeout` switches the panel itself off after the idle period;
 `screensaver_minutes` is the softer on-screen layer (the page dims to a
@@ -261,10 +262,10 @@ device keeps a stable identity. `remote_server_ip`, `remote_server_host`, and
 `satellite_last_sync` are written by the sync process, not edited by hand.
 
 `hosted_stack_parked` and `hosted_config_snapshot` back the mode switch on a Pi
-Hosted appliance (Settings, Backup & Updates, "Run as a satellite"). Switching
+Hosted appliance (Settings, Advanced, "Run as a satellite"). Switching
 pauses the local Grocy/Mealie containers (data kept on the device), snapshots
 the backend settings the satellite sync will overwrite, and flips the mode to
-`pi_remote`. On a switched device the Main Server pane offers "Switch back to
+`pi_remote`. On a switched device the Advanced section offers "Switch back to
 full stack", which restarts the paused stack and restores the snapshot. A
 device flashed as a plain Pi Remote never has either field set and cannot be
 switched to hosting.

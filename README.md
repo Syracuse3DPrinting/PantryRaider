@@ -48,12 +48,12 @@ All AI features are optional. You can run Pantry Raider without any AI provider 
 - **Unit converter and kitchen guide**: a Convert tab with a measurement cheat sheet, a calculator, and your own saved conversions, plus a Kitchen Guide reference page
 - **Meal planning and shopping lists**: optional [Mealie](https://mealie.io) integration with a week view, shopping list with check-off, and inventory-aware recipe suggestions
 - **Custom storage locations**: add buckets beyond the four built-ins (Wine Cellar, Garage Fridge, etc.) from the setup wizard
-- **Custom navigation**: reorder or hide tabs, add your own top-level entries (label, icon, and a local or external URL), and nest tabs into dropdown submenus, all from Settings > Interface; navigation layout is per-device so each kiosk can arrange its own menu
+- **Custom navigation**: reorder or hide tabs, add your own top-level entries (label, icon, and a local or external URL), and nest tabs into dropdown submenus, all from Settings > Appearance; navigation layout is per-device so each kiosk can arrange its own menu
 - **Camera feeds**: configure network cameras (from Home Assistant, by IP with brand templates, or by hand) and view them on an on-screen Camera page; a connected Stream Deck can show a camera snapshot on a key or splash it across the whole deck
 - **Home Assistant integration**: REST sensors, notification automations, a Lovelace dashboard with inventory panels, plus Stream Deck keys that toggle HA entities, run media_player transport controls, and discover cameras (the HA URL/token are stored once on the main server and shared with satellites)
 - **Stream Deck kiosk**: kitchen control surface with large-text buttons, auto-rotation, and a drag-and-drop key editor; build your own custom keys (HA actions, timers, weather, cameras, media, macros) in a library and drop them onto the grid; a scan-mode key flips the barcode scanner between adding to inventory, consuming stock, adding to the shopping list, and running a read-only pantry audit
 - **UI scale setting**: adjustable zoom for small screens or kitchen monitors
-- **Themes**: built-in themes including Solarized, Midnight, and Forest, plus a custom theme builder to pick your own palette in Settings > Interface; Stream Deck key colours follow the theme with readable label contrast
+- **Themes**: built-in themes including Solarized, Midnight, and Forest, plus a custom theme builder to pick your own palette in Settings > Appearance; Stream Deck key colours follow the theme with readable label contrast
 - **Small-screen kiosk**: on small screens the secondary nav tabs collapse into an overflow menu with larger touch targets and a single-column layout; on a Pi with a display attached, kiosk mode auto-enables
 - **Web setup wizard**: configure everything at `/setup` with live connection tests; no config file editing required
 - **Two-factor authentication**: optional TOTP (app-based 2FA) on top of password login; works offline with any authenticator app
@@ -162,9 +162,9 @@ Startup is fully self-contained - no internet access is required to start or res
 
 ## Backup
 
-Download a zip of Pantry Raider's data at **Settings > Security > Download Backup**. API keys and passwords are stripped from the backup by default so it is safe to store off-box; tick "Include API keys & passwords" for a restore-complete copy you keep somewhere trusted.
+Download a zip of Pantry Raider's data at **Settings > Backups & Updates > Download Backup**. API keys and passwords are stripped from the backup by default so it is safe to store off-box; tick "Include API keys & passwords" for a restore-complete copy you keep somewhere trusted.
 
-To restore that backup, use **Settings > Security > Restore** to rebuild the app's data (settings, database, staples) from a backup zip. Your current data is copied aside first, and a redacted backup keeps your existing API keys in place.
+To restore that backup, use **Settings > Backups & Updates > Restore** to rebuild the app's data (settings, database, staples) from a backup zip. Your current data is copied aside first, and a redacted backup keeps your existing API keys in place.
 
 For a full backup including Grocy and Mealie data, run on the host:
 
@@ -174,11 +174,11 @@ For a full backup including Grocy and Mealie data, run on the host:
 
 On a Pi appliance, a full Grocy and Mealie snapshot restore runs via the host bridge from a device path or an rclone remote (this is separate from the in-app app-data restore above).
 
-For automated cloud backup, configure an [rclone](https://rclone.org) remote in **Settings > Security**. Rclone supports S3, Backblaze B2, SFTP, Google Drive, Dropbox, and 40+ other backends.
+For automated cloud backup, configure an [rclone](https://rclone.org) remote in **Settings > Backups & Updates**. Rclone supports S3, Backblaze B2, SFTP, Google Drive, Dropbox, and 40+ other backends.
 
 ## Troubleshooting logs
 
-For support, turn on **Settings > Security > Debug logging** to raise the log level and write a rotating log file under the data directory, then use the Download control to grab that log. Secret values are redacted from the download. Leave it off in normal use.
+For support, turn on **Settings > Advanced > Debug logging** to raise the log level and write a rotating log file under the data directory, then use the Download control to grab that log. Secret values are redacted from the download. Leave it off in normal use.
 
 ## Home Assistant
 

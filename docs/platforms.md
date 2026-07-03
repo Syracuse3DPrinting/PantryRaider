@@ -30,13 +30,13 @@ defined in `service/app/config.py`:
 ### Switching a Pi Hosted appliance to satellite duty
 
 A `pi_hosted` appliance can later become a satellite of a bigger server without
-reflashing. In Settings under Backup & Updates, "Run as a satellite" takes the
+reflashing. In Settings under Advanced, "Run as a satellite" takes the
 main server's URL and API key, pauses the local Grocy and Mealie containers
 (their data stays on the SD card, nothing is deleted), and flips the device to
 `pi_remote`: the kiosk and Stream Deck keep working, now backed by the main
 server's inventory and settings.
 
-The switch is reversible. On a switched device the Main Server settings pane
+The switch is reversible. On a switched device the Advanced settings section
 gains "Switch back to full stack", which starts the paused containers again
 and restores the backend settings the device had before the switch, inventory
 data intact. A device that was flashed as a plain Pi Remote has no local stack
@@ -114,7 +114,7 @@ so secure access is added in front of it. Pick whichever fits your setup:
   `localhost:9284` gets an automatic Let's Encrypt certificate for a public
   hostname. Terminate TLS at the proxy and forward HTTP to Pantry Raider on the
   LAN.
-- **Tunnel.** The built-in remote-access tunnel (Settings, Remote Access)
+- **Tunnel.** The built-in remote-access tunnel (Settings, Connections)
   publishes the app over HTTPS without opening a port, which is the easiest way
   to reach it securely from outside the LAN.
 - **Self-signed, LAN only.** For a closed network you can place any of the above

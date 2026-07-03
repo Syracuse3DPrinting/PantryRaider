@@ -1,10 +1,9 @@
-"""Personalization section of the Settings page (FoodAssistant-pszk).
+"""Recipe tuning and storage-category placement on the Settings page.
 
-The Settings page (setup.html) now groups the commonly-changed, taste-level
-settings under a "Personalization" sidebar heading, separate from the
-set-and-forget Settings. The moved panes keep their pane ids (so #pane-* hash
-nav and any code that clicks a pane still works) and their save wiring. This
-suite guards that structure and the stand-mixer attachment toggle
+After the settings reorganization (docs/design/settings-reorg.md) the recipe
+suggestion tuning lives in the Recipes & Meals pane and the custom storage
+categories in the Inventory & Storage pane, each with its own save wiring.
+This suite guards that structure and the stand-mixer attachment toggle
 (FoodAssistant-rjdr) on the appliances checklist.
 """
 from __future__ import annotations
@@ -48,50 +47,37 @@ def _render(client, monkeypatch, *, satellite: bool) -> str:
     return r.text
 
 
-def test_personalization_heading_and_links(client, monkeypatch):
+def test_intent_group_pills_present(client, monkeypatch):
     html = _render(client, monkeypatch, satellite=False)
-    assert "Personalization" in html
-    # Interface was split into separate Theme and Navigation panes under
-    # Personalization (FoodAssistant-py1o).
-    for pane in ("pane-theme", "pane-navigation"):
+    # The taste-level settings live in the merged intent groups now.
+    for pane in ("pane-appearance", "pane-recipes", "pane-inventory"):
         assert f'data-bs-target="#{pane}"' in html
         assert f'id="{pane}"' in html
-    # New Personalization panes exist with stable ids for hash nav.
-    for pane in (
-        "pane-personalization-recipes",
-        "pane-personalization-storage",
-    ):
-        assert f'data-bs-target="#{pane}"' in html
-        assert f'id="{pane}"' in html
+    # The dissolved Personalization panes are gone (their hashes alias).
+    for pane in ("pane-personalization-recipes", "pane-personalization-storage"):
+        assert f'id="{pane}"' not in html
 
 
-def test_moved_recipe_prefs_inputs_render_in_personalization(client, monkeypatch):
-    """The suggestion-tuning + appliances inputs live in the Personalization
-    recipe-prefs pane and are saved by its own button (non-satellite)."""
+def test_recipe_prefs_inputs_render_in_recipes_pane(client, monkeypatch):
+    """The suggestion-tuning + appliances inputs live in the Recipes & Meals
+    pane and are saved by their own button (non-satellite)."""
     html = _render(client, monkeypatch, satellite=False)
-    pane = html.split('id="pane-personalization-recipes"', 1)[1].split(
-        'id="pane-theme"', 1
-    )[0]
-    # Suggestion tuning + appliances moved here.
+    pane = html.split('id="pane-recipes"', 1)[1].split('id="pane-', 1)[0]
+    # Suggestion tuning + appliances share the pane with the sources.
     for field in ("staple_items", "cook_ai_context", "kitchen-appliances",
-                  "perishable_days", "suggest_per_tier"):
+                  "perishable_days", "suggest_per_tier",
+                  "mealie_base_url", "themealdb_api_key"):
         assert field in pane
-    # Its own save button (not the Settings Recipes one).
+    # The tuning card has its own save button next to the sources one.
     assert 'onclick="savePaneRecipePrefs(this)"' in pane
-    # Mealie/TheMealDB stay in the Settings Recipes pane, not here.
-    assert "mealie_base_url" not in pane
-    assert "themealdb_api_key" not in pane
+    assert 'onclick="savePaneRecipes(this)"' in pane
 
 
-def test_storage_categories_moved_out_of_inventory(client, monkeypatch):
+def test_storage_categories_live_in_inventory_pane(client, monkeypatch):
     html = _render(client, monkeypatch, satellite=False)
     inv = html.split('id="pane-inventory"', 1)[1].split('id="pane-', 1)[0]
-    assert "storage-cat-editor" not in inv
-    store = html.split('id="pane-personalization-storage"', 1)[1].split(
-        'id="pane-', 1
-    )[0]
-    assert "storage-cat-editor" in store
-    assert "saveStorageCategories()" in store
+    assert "storage-cat-editor" in inv
+    assert "saveStorageCategories()" in inv
 
 
 def test_weather_has_no_dedicated_settings_pane(client, monkeypatch):
@@ -115,17 +101,14 @@ def test_weather_page_has_location_settings(client, monkeypatch):
     assert 'onclick="saveWeatherSettings(this)"' in html
 
 
-def test_satellite_recipe_prefs_pane_is_read_only(client, monkeypatch):
-    """On a satellite the recipe-prefs pane still renders, read-only, with the
+def test_satellite_recipe_prefs_are_read_only(client, monkeypatch):
+    """On a satellite the recipe tuning still renders, read-only, with the
     managed-on-server note and no editable save button (server-managed)."""
     html = _render(client, monkeypatch, satellite=True)
-    assert 'id="pane-personalization-recipes"' in html
-    # Satellite-only panes (storage/weather) are gated out.
-    assert 'id="pane-personalization-storage"' not in html
-    assert 'id="pane-personalization-weather"' not in html
-    pane = html.split('id="pane-personalization-recipes"', 1)[1].split(
-        'id="pane-theme"', 1
-    )[0]
+    assert 'id="pane-recipes"' in html
+    # The storage-categories editor is gated out on a satellite.
+    assert 'id="storage-cat-editor"' not in html
+    pane = html.split('id="pane-recipes"', 1)[1].split('id="pane-', 1)[0]
     assert 'onclick="savePaneRecipePrefs(this)"' not in pane
     assert "Recipe settings are managed on the main server" in pane
 
@@ -140,16 +123,14 @@ def test_stand_mixer_attachment_toggle_present(client, monkeypatch):
     assert "syncStandMixerAttachments" in html
 
 
-def test_settings_personalization_top_toggle_present(client, monkeypatch):
-    """The Settings page has a top toggle to switch between Settings and
-    Personalization, and the Personalization pills carry the group marker so the
-    toggle can show one menu at a time (Pantry Raider)."""
+def test_settings_search_box_present(client, monkeypatch):
+    """The single settings menu keeps the search box that filters the pills
+    and highlights matching cards; the old two-menu toggle is gone."""
     from app.config import settings
     monkeypatch.setattr(settings, "deployment_mode", "server")
     with patch.object(type(settings), "is_configured", lambda self: True):
         html = client.get("/setup").text
-    assert 'onclick="showSettingsMenu(\'p\')"' in html
-    assert 'onclick="showSettingsMenu(\'s\')"' in html
-    assert 'function showSettingsMenu(' in html
-    # The personalization pills are tagged so the toggle can hide them.
-    assert 'data-mgroup="p"' in html
+    assert 'id="settings-search"' in html
+    assert "function settingsSearch(" in html
+    assert "showSettingsMenu(" not in html
+    assert 'data-mgroup' not in html

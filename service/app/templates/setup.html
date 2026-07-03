@@ -146,9 +146,9 @@
     /* Live install/start log panels: fixed-height scroll region so streaming
        output does not push the page longer. The tailer auto-scrolls to bottom. */
     .install-log { max-height: 14rem; overflow: auto; white-space: pre-wrap; }
-    /* Keep the menu/content hidden until init() picks the Settings vs
-       Personalization group, so the page never paints one group and then
-       visibly switches to the other. visibility (not display) avoids any
+    /* Keep the menu/content hidden until init() has activated the pane a
+       #pane-* hash asks for, so the page never paints one pane and then
+       visibly switches to another. visibility (not display) avoids any
        layout shift while hidden. */
     .menu-initializing .side-menu, .menu-initializing .tab-content { visibility: hidden; }
 
@@ -382,7 +382,7 @@
       <div class="mb-2">
         <label class="form-label">Server API key <span class="badge bg-danger badge-req ms-1">Required</span></label>
         {{ secret_input('upstream_api_key', 'API key from the main server') }}
-        <div class="form-text">From the main server: Settings &rarr; Security &rarr; API Key.</div>
+        <div class="form-text">From the main server: Settings &rarr; Security &amp; Access &rarr; API Key.</div>
       </div>
       <button class="btn btn-outline-warning btn-sm" type="button" onclick="syncFromUpstream()">
         <i class="bi bi-arrow-repeat me-1"></i>Sync from server
@@ -522,7 +522,7 @@
             <option value="{{ key }}" {{ 'selected' if (s.display_type or 'generic') == key else '' }}>{{ dt.label }}</option>
             {% endfor %}
           </select>
-          <div class="form-text">Pick the type that matches your panel: a resistive Waveshare 3.5-4 inch HDMI LCD is the ADS7846 SPI option; a Waveshare HDMI HAT with a USB touch cable is the USB touch option. The touch overlay is installed at provision (or from Settings &rarr; Display &rarr; Apply touch driver).</div>
+          <div class="form-text">Pick the type that matches your panel: a resistive Waveshare 3.5-4 inch HDMI LCD is the ADS7846 SPI option; a Waveshare HDMI HAT with a USB touch cable is the USB touch option. The touch overlay is installed at provision (or from Settings &rarr; Screen &amp; Sleep &rarr; Apply touch driver).</div>
         </div>
         <div class="form-check form-switch">
           <input class="form-check-input" type="checkbox" role="switch" id="display_touch"
@@ -845,10 +845,10 @@
       <div class="collapse mt-3" id="tunnel-wiz-collapse">
         <p class="text-secondary small">Access Pantry Raider from outside your home without port-forwarding,
           using a free <a href="https://www.cloudflare.com/products/tunnel/" target="_blank">Cloudflare Tunnel</a>.</p>
-        <p class="text-secondary small">Full setup is available in <strong>Settings → Remote Access</strong>
+        <p class="text-secondary small">Full setup is available in <strong>Settings → Connections</strong>
           after the wizard. Paste your Cloudflare token there and the tunnel starts automatically.</p>
-        <a class="btn btn-sm btn-outline-secondary" href="setup#pane-tunnel" target="_self">
-          <i class="bi bi-box-arrow-up-right me-1"></i>Go to Remote Access settings
+        <a class="btn btn-sm btn-outline-secondary" href="setup#pane-connections" target="_self">
+          <i class="bi bi-box-arrow-up-right me-1"></i>Go to remote access settings
         </a>
       </div>
     </div>
@@ -943,23 +943,15 @@
     <div class="col-md-3">
       <div class="side-menu">
         {# Search box: filters the menu to panes whose title, section headers,
-           or field labels match, across both menu groups at once, and outlines
-           the matching cards when a filtered pane opens. #}
+           or field labels match, and outlines the matching cards when a
+           filtered pane opens. #}
         <div class="mb-2">
           <input type="search" class="form-control form-control-sm" id="settings-search"
                  placeholder="Search settings" autocomplete="off" spellcheck="false"
                  aria-label="Search settings" oninput="settingsSearch(this.value)">
         </div>
-        {# Group toggle lives inside the sticky menu frame so it stays reachable
-           while a long pane scrolls (it never scrolls off with the page). #}
-        <div class="btn-group w-100 mb-2" role="group" aria-label="Choose Settings or Personalization">
-          <button type="button" class="btn btn-sm btn-outline-primary" id="menu-toggle-p" onclick="showSettingsMenu('p')">
-            <i class="bi bi-sliders me-1"></i>Personalization
-          </button>
-          <button type="button" class="btn btn-sm btn-outline-primary" id="menu-toggle-s" onclick="showSettingsMenu('s')">
-            <i class="bi bi-gear me-1"></i>Settings
-          </button>
-        </div>
+        {# One menu, grouped by intent (docs/design/settings-reorg.md): ten
+           panes, each named for what the user is trying to do. #}
         {# inline status: True = configured, False/None = needs attention #}
         {% set inv_ok = features.satellite or (s.grocy_api_key and s.grocy_base_url and s.grocy_base_url != 'http://grocy:80') %}
         {% set ai_ok  = s.vision_provider and s.vision_provider != 'none' %}
@@ -967,102 +959,48 @@
         {% set sec_ok = (not s.auth_required) or s.auth_password %}
         {% set rem_ok = s.remote_server_url and s.upstream_api_key %}
         <div class="nav flex-column nav-pills gap-1" role="tablist">
-          {# Group header style, reused below so the menu reads as logical
-             sections. data-mgroup ('s'=Settings, 'p'=Personalization) lets the
-             top toggle show one menu at a time. #}
-          {% macro menu_header(label, group='s') %}
-          <div class="nav-link text-secondary px-2 mt-2 mb-0 menu-section" data-mgroup="{{ group }}" style="font-size:0.7rem;letter-spacing:.06em;text-transform:uppercase;">{{ label }}</div>
-          {% endmacro %}
-
-          {# --- Services: the backends this device talks to --------------- #}
-          {{ menu_header('Services') }}
-          {% if features.satellite %}
-          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-upstream" type="button">
-            <i class="bi bi-hdd-network me-2"></i>Main Server
-            <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if rem_ok else 'Server URL + key required' }}"></i>
+          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-appearance" type="button">
+            <i class="bi bi-palette me-2"></i>Appearance
           </button>
-          {% else %}
-          <button class="nav-link active d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
-            <i class="bi bi-fridge me-2"></i>Inventory
-            <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-screen" type="button"{% if is_pi %} onclick="loadDisplayStatus(); loadHardwareStatus()"{% endif %}>
+            <i class="bi bi-display me-2"></i>Screen &amp; Sleep
           </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-ai" type="button">
-            <i class="bi bi-magic me-2"></i>AI
-            <i class="bi bi-{{ 'check-circle-fill text-success' if ai_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if ai_ok else 'Optional' }}"></i>
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-scanning" type="button">
+            <i class="bi bi-upc-scan me-2"></i>Scanning &amp; Intake
+            <i class="bi bi-{{ 'check-circle-fill text-success' if ai_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'AI configured' if ai_ok else 'AI optional' }}"></i>
           </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-recipes" type="button">
-            <i class="bi bi-journal-richtext me-2"></i>Recipes
+            <i class="bi bi-journal-richtext me-2"></i>Recipes &amp; Meals
             <i class="bi bi-{{ 'check-circle-fill text-success' if rec_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'Configured' if rec_ok else 'Optional' }}"></i>
           </button>
+          {% if not features.satellite %}
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
+            <i class="bi bi-fridge me-2"></i>Inventory &amp; Storage
+            <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
+          </button>
           {% endif %}
-
-          {# --- App: who can reach it -------------------------------------- #}
-          {{ menu_header('App') }}
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-connections" type="button" onclick="_camPresetChanged(); _camPrefillScanCidr()">
+            <i class="bi bi-broadcast me-2"></i>Connections
+          </button>
+          {# Devices holds the Start Page and Stream Deck editors as sub-areas:
+             a toggle at the top of the pane flips between them, and they share
+             one custom-button library. The pill keeps id "pill-deckstart" so
+             deck/start deep links and the search index can reach it. #}
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-devices" type="button" id="pill-deckstart" onclick="showDeckStart('devices'); _startEditorInit(); {% if not features.satellite %}loadDevices(); {% endif %}{% if is_pi %}loadNetworkStatus(); loadHardwareDetect(); loadHardwareStatus(); _sdLoadProfiles();{% endif %}">
+            <i class="bi bi-hdd-stack me-2"></i>Devices
+            {% if features.satellite %}
+            <i class="bi bi-{{ 'check-circle-fill text-success' if rem_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Main server configured' if rem_ok else 'Server URL + key required' }}"></i>
+            {% endif %}
+          </button>
           <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-security" type="button">
-            <i class="bi bi-shield-lock me-2"></i>Security
+            <i class="bi bi-shield-lock me-2"></i>Security &amp; Access
             <i class="bi bi-{{ 'check-circle-fill text-success' if sec_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if sec_ok else 'Password required' }}"></i>
           </button>
-          {% if not is_satellite %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-tunnel" type="button">
-            <i class="bi bi-globe me-2"></i>Remote Access
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-backups" type="button">
+            <i class="bi bi-cloud-arrow-down me-2"></i>Backups &amp; Updates
           </button>
-          {% endif %}
-
-          {# --- Devices & hardware: scanners, satellites, the appliance --- #}
-          {{ menu_header('Devices & Hardware') }}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-hardware" type="button" onclick="loadHardwareDetect()">
-            <i class="bi bi-upc-scan me-2"></i>Hardware
-          </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-homeassistant" type="button">
-            <i class="bi bi-house-gear me-2"></i>Home Assistant
-          </button>
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-cameras" type="button" onclick="_camPresetChanged(); _camPrefillScanCidr()">
-            <i class="bi bi-camera-video me-2"></i>Cameras
-          </button>
-          {% if not features.satellite %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-devices" type="button" onclick="loadDevices()">
-            <i class="bi bi-hdd-stack me-2"></i>Satellite Devices
-          </button>
-          {% endif %}
-          {% if is_pi %}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-network" type="button" onclick="loadNetworkStatus()">
-            <i class="bi bi-wifi me-2"></i>Network
-          </button>
-          {% endif %}
-
-          {# --- Personalization: the commonly-changed, taste-level settings,
-                 separated from the set-and-forget Settings above. ---------- #}
-          {{ menu_header('Personalization', 'p') }}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-theme" type="button">
-            <i class="bi bi-palette me-2"></i>Theme
-          </button>
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-navigation" type="button">
-            <i class="bi bi-layout-sidebar me-2"></i>Navigation
-          </button>
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-recipes" type="button">
-            <i class="bi bi-sliders me-2"></i>Recipe Preferences
-          </button>
-          {% if not features.satellite %}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-personalization-storage" type="button">
-            <i class="bi bi-grid-3x3-gap me-2"></i>Storage Categories
-          </button>
-          {% endif %}
-          {% if is_pi %}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-display" type="button" onclick="loadDisplayStatus(); loadHardwareStatus()">
-            <i class="bi bi-display me-2"></i>Display
-          </button>
-          {% endif %}
-          {# Combined Start Page + Stream Deck menu. A top toggle inside the pane
-             switches between the on-screen Start Page and (on a Pi) the physical
-             Stream Deck, which share the same custom-button library. #}
-          <button class="nav-link d-flex align-items-center" data-mgroup="p" data-bs-toggle="pill" data-bs-target="#pane-start-page" type="button" id="pill-deckstart" onclick="_startEditorInit(); {% if is_pi %}loadHardwareStatus(); _sdLoadProfiles();{% endif %}">
-            <i class="bi bi-grid-3x3-gap me-2"></i>{% if is_pi %}Start &amp; Stream Deck{% else %}Start Page{% endif %}
-          </button>
-
-          {# --- System: maintenance that is not day-to-day config --------- #}
-          {{ menu_header('System') }}
-          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-data" type="button">
-            <i class="bi bi-cloud-arrow-down me-2"></i>Backup &amp; Updates
+          <button class="nav-link d-flex align-items-center" data-bs-toggle="pill" data-bs-target="#pane-advanced" type="button">
+            <i class="bi bi-tools me-2"></i>Advanced
           </button>
         </div>
       </div>
@@ -1072,14 +1010,15 @@
     <div class="col-md-9">
       <div class="tab-content">
 
-        <!-- Main Server (satellite mode only) -->
+        {# Main Server, Sync Status, and About cards render inside the Devices
+           pane on a satellite (docs/design/settings-reorg.md); the Kiosk PIN
+           card lives in Security & Access and Return to full stack in
+           Advanced. This macro keeps the satellite server cards together. #}
         {% if features.satellite %}
-        <div class="tab-pane fade show active" id="pane-upstream">
-          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main Pantry Raider server.</p>
-
+        {% macro upstream_cards() %}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-hdd-network text-info"></i> Main Pantry Raider Server</div>
-            <p class="text-secondary small">Enter the server's address and its API key. This device authenticates with that key, pulls the shared config, then talks to Grocy/Mealie/AI directly. Find the API key in the server's Settings under Security.</p>
+            <p class="text-secondary small">Enter the server's address and its API key. This device authenticates with that key, pulls the shared config, then talks to Grocy/Mealie/AI directly. Find the API key in the server's Settings under Security &amp; Access.</p>
             <div class="mb-3">
               <label class="form-label">Server URL</label>
               <div class="input-group">
@@ -1099,7 +1038,7 @@
             <div class="mb-3">
               <label class="form-label">Server API Key</label>
               {{ secret_input('upstream_api_key', 'The API key set on the main server') }}
-              <div class="form-text">Must match the API key configured on the main server (Settings &rarr; Security).</div>
+              <div class="form-text">Must match the API key configured on the main server (Settings &rarr; Security &amp; Access).</div>
             </div>
             <button class="btn btn-primary btn-sm" onclick="syncFromUpstream()">
               <i class="bi bi-arrow-repeat me-1"></i>Sync from server
@@ -1140,51 +1079,19 @@
           </div>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-keypad text-info"></i> Kiosk PIN
-              <span class="badge bg-secondary badge-req">Optional</span></div>
-            <p class="text-secondary small">A satellite turns the UI password off by default (the main server owns access control). Set a short numeric PIN for a lightweight lock that is easy to enter on the touchscreen. Leave blank for no lock.</p>
-            <div class="mb-2" style="max-width: 220px;">
-              <label class="form-label">PIN <span class="text-secondary small">(digits only)</span></label>
-              {{ secret_input('kiosk_pin', 'e.g. 1234') }}
-            </div>
-            <div class="form-check mt-2">
-              <input class="form-check-input" type="checkbox" id="kiosk_readonly_when_locked"
-                     {% if s.kiosk_readonly_when_locked %}checked{% endif %}>
-              <label class="form-check-label" for="kiosk_readonly_when_locked">
-                Allow read-only browsing while locked
-              </label>
-              <div class="form-text">When enabled, visitors can browse inventory without entering the PIN. Write actions (adding or editing items) are blocked until they log in.</div>
-            </div>
-            <div class="form-text mt-1">Applies only to this device's screen. Use Settings here to change or clear it. It does not affect the main server.</div>
-          </div>
-
-          <div class="section-card">
             <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> About satellite mode</div>
             <p class="text-secondary small">Backend settings and expiry defaults are managed on the main server and mirrored here read-only. Edit them there, then Sync. This device keeps its own display, Stream Deck, and security settings.</p>
           </div>
-
-          {% if s.hosted_stack_parked %}
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-box-arrow-in-left text-warning"></i> Return to full stack</div>
-            <p class="text-secondary small">This appliance used to run its own inventory stack, and that stack is
-              still on the device, paused, with all its data. Switching back starts it again, disconnects from the
-              main server, and restores the inventory, recipe, and AI settings this device had before the switch.</p>
-            <button class="btn btn-outline-warning btn-sm" id="switch-hosted-btn" onclick="switchToHosted(this)">
-              <i class="bi bi-box-arrow-in-left me-1"></i>Switch back to full stack
-            </button>
-            <div class="test-result mt-2" id="switch-hosted-result"></div>
-          </div>
-          {% endif %}
 
           <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneUpstream(this)">
             <i class="bi bi-check-lg me-1"></i>Save Main Server
           </button>
           <div class="test-result mt-2" id="upstream-save-result"></div>
-        </div>
+        {% endmacro %}
         {% endif %}
 
-        <!-- Inventory (Grocy + storage) -->
-        <div class="tab-pane fade {{ '' if features.satellite else 'show active' }}" id="pane-inventory">
+        <!-- Inventory & Storage (Grocy + custom storage categories) -->
+        <div class="tab-pane fade" id="pane-inventory">
           <p class="pane-intro">Where your stock lives: the Grocy backend and the storage buckets it's grouped into.</p>
 
           <div class="section-card">
@@ -1224,14 +1131,6 @@
                      value="{{ s.grocy_public_url }}">
               <div class="form-text">External address used when the UI links you to Grocy. Empty = internal URL.</div>
             </div>
-            <div class="mb-3">
-              <label class="form-label">Device hostname <span class="text-secondary small">(optional, for local browser links)</span></label>
-              <input type="text" class="form-control" id="device_hostname" name="device_hostname"
-                     placeholder="kitchen-pi"
-                     value="{{ s.device_hostname }}">
-              <div class="form-text">Used to build <span class="text-info">&lt;hostname&gt;.local</span> links to Grocy and Mealie on this device.
-                Empty = auto-detect. Set this when several Pantry Raider devices share one network.</div>
-            </div>
             <button class="btn btn-outline-info btn-sm" onclick="testGrocy()">
               <i class="bi bi-plug me-1"></i>Test Connection
             </button>
@@ -1243,14 +1142,11 @@
               <div class="test-result mt-2" id="grocy-save-result"></div>
             </div>
           </div>
-        </div>
 
-        <!-- Personalization: Custom Storage Categories (moved from Inventory).
-             Server-only / Pi Hosted: a satellite pulls categories from the main
-             server, so the sidebar link and this pane are gated out for it. -->
-        {% if not features.satellite %}
-        <div class="tab-pane fade" id="pane-personalization-storage">
-          <p class="pane-intro">Extra storage buckets beyond the built-ins, mapped to your Grocy locations.</p>
+          {# Custom Storage Categories share the pane with the Grocy backend:
+             both describe where stock lives. A satellite pulls categories from
+             the main server, so the card is gated out for it. #}
+          {% if not features.satellite %}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-grid-3x3-gap text-info"></i> Custom Storage Categories</div>
             <p class="text-secondary small">Add storage buckets beyond the four built-ins (Refrigerated, Frozen,
@@ -1294,12 +1190,52 @@
               <span id="catSaveResult" class="small"></span>
             </div>
           </div>
+          {% endif %}
         </div>
-        {% endif %}
 
-        <!-- AI Providers -->
-        <div class="tab-pane fade" id="pane-ai">
-          <p class="pane-intro">Models that read your food photos, receipts, and barcodes.</p>
+        <!-- Scanning & Intake: the barcode scanner, enrichment, and the AI
+             models that read photos, receipts, and barcodes -->
+        <div class="tab-pane fade" id="pane-scanning">
+          <p class="pane-intro">How items get into the pantry: the barcode scanner, barcode enrichment, and the AI models that read your food photos and receipts.</p>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-upc-scan text-success"></i> Barcode Scanner</div>
+            <p class="text-secondary small">A USB or Bluetooth scanner plugged into any device (this server, a Pi host, or a Pi Remote) works on the Manage Pantry page automatically, all at once, alongside the in-browser camera scanner. USB and Bluetooth HID scanners act as keyboard wedges, so no drivers are needed. This setting is just a hint for which method to reach for first; it does not turn the others off.</p>
+            <div class="mb-3">
+              <label class="form-label">Scanner type</label>
+              <select class="form-select" id="scanner_type" onchange="scannerTypeChanged()">
+                <option value=""    {{ 'selected' if not s.scanner_type else '' }}>Not set (pick on Manage Pantry page)</option>
+                <option value="usb" {{ 'selected' if s.scanner_type == 'usb' else '' }}>USB / Bluetooth HID (keyboard wedge)</option>
+                <option value="camera" {{ 'selected' if s.scanner_type == 'camera' else '' }}>Camera / built-in scan module</option>
+              </select>
+            </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="barcode_global_capture"
+                     {{ 'checked' if s.barcode_global_capture else '' }}>
+              <label class="form-check-label" for="barcode_global_capture">Scan from any page</label>
+              <div class="form-text">When on, a barcode scanned on any screen is saved to Pending and the app jumps to Manage Pantry. When off, scanning only works on the Manage Pantry page.</div>
+            </div>
+            <div id="scanner-usb-hint" class="{{ '' if s.scanner_type == 'usb' else 'd-none' }}">
+              <p class="text-secondary small mb-2">Plug in the scanner and test below — click the field and scan a barcode.</p>
+              <div class="input-group mb-2">
+                <span class="input-group-text"><i class="bi bi-upc"></i></span>
+                <input type="text" class="form-control font-monospace" id="scanner-test-input"
+                       placeholder="Scan a barcode here…" autocomplete="off" spellcheck="false"
+                       oninput="scannerTestInput(this.value)" onkeydown="if(event.key==='Enter'){scannerTestEnter(this.value);this.select();}">
+              </div>
+              <div class="test-result" id="scanner-test-result"></div>
+              <p class="form-text mt-2">Running a Waveshare scan-engine module on a kiosk? See the
+                <a href="https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
+                to make it scan on sight without the button.</p>
+            </div>
+            <div id="scanner-camera-hint" class="{{ '' if s.scanner_type == 'camera' else 'd-none' }}">
+              <p class="text-secondary small">Camera scanning runs in the browser — make sure this site has camera permission.</p>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHardware(this)">
+              <i class="bi bi-check-lg me-1"></i>Save scanner
+            </button>
+            <div class="test-result mt-2" id="hardware-save-result"></div>
+          </div>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-magic text-warning"></i> Vision Provider</div>
@@ -1395,6 +1331,15 @@
                 queue for review. Only useful with LLM enrichment enabled.</div>
             </div>
             <div class="mb-3">
+              <div class="form-check form-switch">
+                <input class="form-check-input" type="checkbox" id="barcode_autocheck_shopping" {% if s.barcode_autocheck_shopping %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
+                <label class="form-check-label" for="barcode_autocheck_shopping">
+                  Auto-check Mealie shopping list when item is scanned and committed
+                </label>
+              </div>
+              <div class="form-text">Needs a Mealie connection, set up under Recipes &amp; Meals.</div>
+            </div>
+            <div class="mb-3">
               <label class="form-label">Provider Override <span class="text-secondary small">(optional)</span></label>
               <select class="form-select" id="enrich_provider" onchange="onEnrichProviderChange()" {% if features.satellite %}disabled{% endif %}>
                 <option value="" {{ 'selected' if not s.enrich_provider else '' }}>Same as vision provider</option>
@@ -1459,9 +1404,9 @@
           </div>
         </div>
 
-        <!-- Recipes -->
+        <!-- Recipes & Meals: sources, Mealie, and suggestion tuning -->
         <div class="tab-pane fade" id="pane-recipes">
-          <p class="pane-intro">Recipe sources and how "What can I cook?" ranks them against your stock.</p>
+          <p class="pane-intro">Recipe sources, the Mealie connection, and how "What can I cook?" ranks recipes against your stock.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-journal-richtext text-primary"></i> Mealie — Recipe Manager
@@ -1506,12 +1451,6 @@
               <i class="bi bi-plug me-1"></i>Test Connection
             </button>
             <div class="test-result" id="mealie-result"></div>
-            <div class="form-check form-switch mt-2">
-              <input class="form-check-input" type="checkbox" id="barcode_autocheck_shopping" {% if s.barcode_autocheck_shopping %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
-              <label class="form-check-label" for="barcode_autocheck_shopping">
-                Auto-check Mealie shopping list when item is scanned and committed
-              </label>
-            </div>
           </div>
 
           <div class="section-card">
@@ -1557,16 +1496,11 @@
           </button>
           <div class="test-result mt-2" id="recipes-save-result"></div>
           {% endif %}
-        </div>
 
-        <!-- Personalization: Recipe Preferences — suggestion tuning + the kitchen
-             appliances checklist (moved from the Settings Recipes pane,
-             FoodAssistant-pszk). Shown to every mode; on a satellite the inputs
-             are read-only because they are managed on the main server. -->
-        <div class="tab-pane fade" id="pane-personalization-recipes">
-          <p class="pane-intro">How "What can I cook?" ranks recipes against your stock, and what your kitchen can make.</p>
-
-          <div class="section-card">
+          {# Suggestion tuning + the kitchen appliances checklist share the pane
+             with the recipe sources: they all shape the same Cook page. On a
+             satellite the inputs are read-only (managed on the main server). #}
+          <div class="section-card mt-3">
             <div class="section-title"><i class="bi bi-sliders text-primary"></i> Suggestion Tuning</div>
             <div class="mb-3">
               <label class="form-label">Pantry Staples <span class="text-secondary small">(comma-separated)</span></label>
@@ -1643,9 +1577,9 @@
           {% endif %}
         </div>
 
-        <!-- Interface -->
-        <div class="tab-pane fade" id="pane-theme">
-          <p class="pane-intro">The colour theme for the whole app.</p>
+        <!-- Appearance: theme, background image, and the navigation tabs -->
+        <div class="tab-pane fade show active" id="pane-appearance">
+          <p class="pane-intro">How the app looks everywhere: the colour theme, an optional background photo, and which pages appear in the navigation.</p>
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-palette text-success"></i> Theme</div>
@@ -1777,16 +1711,10 @@
             </div>
             <div class="test-result mt-2" id="background-result"></div>
           </div>
-        </div>
 
-        <div class="tab-pane fade" id="pane-navigation">
-          <p class="pane-intro">How the app's navigation looks and which pages appear.</p>
-
-          {# Display scale/orientation live in the Display pane, which only
-             appears on devices with an attached panel (is_pi). They have no
-             effect on a headless server or a phone/laptop browser, so they are
-             intentionally not duplicated into this generic menu. #}
-
+          {# The nav tab editor shares the pane with the theme: both shape how
+             the app looks on every device. The on-screen nav bar and quiet
+             mode live under Screen & Sleep; the QR address under Connections. #}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-layout-sidebar text-success"></i> Navigation Tabs</div>
             <p class="text-secondary small">Drag a row to re-order it, or use the up and down buttons. Drop a tab onto
@@ -1841,80 +1769,27 @@
               </div>
               <div class="form-text" id="custom-tab-hint">Icons use <a href="https://icons.getbootstrap.com/" target="_blank" rel="noopener">Bootstrap Icons</a> names, e.g. bi-house. A full http(s) link opens in a new tab.</div>
             </div>
-          </div>
-
-          <div class="form-check form-switch mb-3">
-            <input class="form-check-input" type="checkbox" role="switch" id="quiet_mode"
-                   {{ 'checked' if s.quiet_mode else '' }}>
-            <label class="form-check-label" for="quiet_mode">Quiet mode (visual-only alerts)</label>
-            <div class="form-text">When on, a finished kitchen timer is shown only by highlighting it in the timer window, with no audible chime. This setting is per device, so each kiosk can be loud or silent.</div>
-          </div>
-
-          <div class="mb-3">
-            <label class="form-label" for="qr_url_mode">Phone QR code address{{ info('Which address the "Add items from your phone" QR code points at. Auto uses this device\'s network address, so a phone on the same network can open it even when the kiosk itself browses at localhost. Public URL encodes the external address below, for phones that reach this app through a reverse proxy or tunnel.') }}</label>
-            <select class="form-select form-select-sm" id="qr_url_mode" style="max-width:320px">
-              <option value="auto"   {{ 'selected' if (s.qr_url_mode or 'auto') == 'auto' else '' }}>Auto (this device's network address)</option>
-              <option value="public" {{ 'selected' if s.qr_url_mode == 'public' else '' }}>Public URL</option>
-            </select>
-            <input type="url" class="form-control form-control-sm mt-2" id="qr_public_url"
-                   placeholder="https://pantry.yourdomain.com" style="max-width:420px"
-                   value="{{ s.qr_public_url }}">
-            <div class="form-text">Public URL to encode when the mode above is Public URL. Leave it empty to use the remote-access tunnel address when one is active.</div>
-          </div>
-
-          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNavigation(this)">
-            <i class="bi bi-check-lg me-1"></i>Save Navigation
-          </button>
-          <div class="test-result mt-2 mb-3" id="interface-save-result"></div>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-layout-sidebar-inset text-success"></i> On-screen navigation bar</div>
-            <p class="text-secondary small">An optional fixed bar of nav icons docked to a screen edge, handy on touch
-              screens. It reserves space so it never overlaps the page. Bottom is a horizontal bar; left and right are
-              vertical. The setting below is the default for devices that haven't been customised on this device.</p>
-            <div class="mb-3">
-              <label class="form-label" for="nav_visibility">On-screen nav menu{{ info('Whether the on-screen nav bar shows at all. Auto hides it on a Stream Deck kiosk at large / extra-large scale, where the deck does the navigating and the small screen is better used for content. The top bar keeps a hamburger menu either way, so you can always reach Settings.') }}</label>
-              <select class="form-select form-select-sm" id="nav_visibility" style="max-width:320px">
-                <option value="auto"   {{ 'selected' if (s.nav_visibility or 'auto') == 'auto' else '' }}>Auto (hide on a Stream Deck kiosk at large scale)</option>
-                <option value="shown"  {{ 'selected' if s.nav_visibility == 'shown' else '' }}>Always show</option>
-                <option value="hidden" {{ 'selected' if s.nav_visibility == 'hidden' else '' }}>Always hide</option>
-              </select>
+            <div class="mt-3">
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNavigation(this)">
+                <i class="bi bi-check-lg me-1"></i>Save Navigation
+              </button>
+              <div class="test-result mt-2" id="interface-save-result"></div>
             </div>
-            <div class="mb-3">
-              <label class="form-label" for="floating_nav_position">Dock position{{ info('Which screen edge the on-screen nav bar docks to. Bottom is a horizontal bar; left and right are vertical. A drag on the device overrides this per-device.') }}</label>
-              <select class="form-select form-select-sm" id="floating_nav_position" style="max-width:260px">
-                <option value="off"    {{ 'selected' if s.floating_nav_position == 'off' else '' }}>Off</option>
-                <option value="bottom" {{ 'selected' if s.floating_nav_position == 'bottom' else '' }}>Bottom edge</option>
-                <option value="left"   {{ 'selected' if s.floating_nav_position == 'left' else '' }}>Left edge</option>
-                <option value="right"  {{ 'selected' if s.floating_nav_position == 'right' else '' }}>Right edge</option>
-              </select>
-            </div>
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="floating_nav_autohide_streamdeck"
-                     {{ 'checked' if s.floating_nav_autohide_streamdeck else '' }}>
-              <label class="form-check-label" for="floating_nav_autohide_streamdeck">Hide it when a Stream Deck is connected{{ info('A narrower version of Auto: hides the on-screen nav whenever a Stream Deck is connected, at any scale.') }}</label>
-            </div>
-            <button type="button" class="btn btn-outline-info btn-sm" onclick="saveFloatingNav()">
-              <i class="bi bi-check-lg me-1"></i>Save navigation menu
-            </button>
-            <div class="test-result mt-2" id="floating-nav-result"></div>
           </div>
-
-          <div class="form-text"><i class="bi bi-house-gear me-1"></i>Home Assistant and Cameras now have their own pages in the
-            menu on the left.</div>
         </div>
 
-        <!-- Home Assistant -->
-        <div class="tab-pane fade" id="pane-homeassistant">
+        <!-- Connections: Home Assistant, cameras, remote access, and the phone QR code -->
+        <div class="tab-pane fade" id="pane-connections">
+          <p class="pane-intro">Links to the world around the app: Home Assistant, camera feeds, remote access from outside your network, and the "add from your phone" QR code.</p>
+
           <div class="alert alert-secondary d-flex align-items-center gap-2 mt-2">
             <i class="bi bi-info-circle"></i>
             <div><strong>Home Assistant is optional.</strong> If you don't run a Home Assistant
-              server, skip this whole tab. Everything else works without it.</div>
+              server, skip its two cards. Everything else works without it.</div>
           </div>
-          <p class="pane-intro">Connect a Home Assistant instance to drive its entities from the Stream Deck keys and to discover cameras. The URL and token are stored on the main server, so a second Pi remote inherits them.</p>
 
           <div class="section-card">
-            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Connection
+            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Home Assistant Connection
               {% if s.streamdeck_ha_base_url and has.streamdeck_ha_token %}
               <span class="badge bg-success ms-2" id="ha-conn-status"><i class="bi bi-check-circle me-1"></i>Configured</span>
               {% else %}
@@ -1999,7 +1874,7 @@
             <details class="mt-3" id="ha-setup-details">
               <summary class="small text-info" style="cursor:pointer">Home Assistant setup (rest_command + automation)</summary>
               <p class="text-secondary small mt-2 mb-1">This device's URL is filled in below. Paste an API key from
-                <a href="#" onclick="document.querySelector('[data-bs-target=&quot;#pane-security&quot;]')?.click();return false;">Settings &gt; Security</a>
+                <a href="#" onclick="document.querySelector('[data-bs-target=&quot;#pane-security&quot;]')?.click();return false;">Settings &gt; Security &amp; Access</a>
                 where the placeholder is, then add this to your Home Assistant <code>configuration.yaml</code>:
                 <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="_haCopySnippet('ha-snippet-rest', this)"><i class="bi bi-clipboard"></i> Copy</button></p>
 <pre class="small bg-body-tertiary border rounded p-2" id="ha-snippet-rest" style="white-space:pre-wrap">rest_command:
@@ -2033,11 +1908,8 @@
               <p class="text-secondary small mb-0">The <code>camera</code> name must match one configured on the Cameras page. Notifications take <code>message</code>, optional <code>title</code>, and <code>level</code> (info/success/warning/error).</p>
             </details>
           </div>
-        </div>
 
-        <!-- Cameras -->
-        <div class="tab-pane fade" id="pane-cameras">
-          <p class="pane-intro">Camera feeds for the on-screen <a href="ui/camera" target="_blank">Camera page</a> and, when a Stream Deck is connected, a snapshot key or the full-deck overlay. Add them from Home Assistant, by IP, or by hand.</p>
+          <p class="text-secondary small mb-2 mt-3"><i class="bi bi-camera-video me-1"></i>The camera cards below feed the on-screen <a href="ui/camera" target="_blank">Camera page</a> and, when a Stream Deck is connected, a snapshot key or the full-deck overlay. Add cameras from Home Assistant, by IP, or by hand.</p>
 
           {% if not features.satellite %}
           <div class="section-card">
@@ -2155,104 +2027,10 @@
             <div class="test-result mt-2" id="cameras-result"></div>
             {% endif %}
           </div>
-        </div>
 
-        <!-- Security -->
-        <div class="tab-pane fade" id="pane-security">
-          <p class="pane-intro">Who can reach the app and how login is protected.</p>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
-              <span class="badge bg-danger badge-req">Required</span></div>
-            <p class="text-secondary small">A UI password is required by default. Turn off
-              <em>Require authentication</em> only when an outer layer already gates access — a
-              reverse proxy (Pangolin, Authelia, Cloudflare Access) or the Home Assistant add-on,
-              which authenticates through HA itself.</p>
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="auth_required"
-                     {% if s.auth_required %}checked{% endif %} onchange="toggleAuthRequired()">
-              <label class="form-check-label" for="auth_required">Require authentication to use the app</label>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">UI Password</label>
-              {{ secret_input('auth_password', 'Protects the web UI login page') }}
-              <div class="form-text" id="auth-pw-hint">Required while authentication is on. The app will not
-                finish setup without it.</div>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">API Key <span class="text-secondary small">(Home Assistant, headless clients, satellite devices)</span></label>
-              {{ secret_input('api_key', 'Sent as X-API-Key header') }}
-              <div class="d-flex align-items-center gap-2 mt-1">
-                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generateApiKey()">
-                  <i class="bi bi-arrow-repeat me-1"></i>Generate
-                </button>
-                <span class="form-text mb-0">Primary key — regenerating this disconnects all existing satellites.</span>
-              </div>
-            </div>
-            {% if not features.satellite %}
-            {{ satellite_keys() }}
-            <div class="alert alert-secondary py-2 small mb-0">
-              <i class="bi bi-broadcast me-1"></i>Satellites enter one of these keys in their setup wizard under "Main Server." Use <strong>Add satellite key</strong> to give each satellite its own key so you can rotate or remove it without touching the others.
-            </div>
-            {% endif %}
-          </div>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-shield-check text-success"></i> Two-Factor Authentication (TOTP)
-              <span class="badge bg-secondary badge-req">Optional</span></div>
-            <p class="text-secondary small">When a UI password is set, enable TOTP to require a
-              6-digit code from an authenticator app (Google Authenticator, Authy, Bitwarden, 1Password, etc.)
-              on each login. Works offline — no email or SMS required.</p>
-            {% if s.totp_secret %}
-            <div class="alert alert-success py-2 small">
-              <i class="bi bi-check-circle-fill me-1"></i>Two-factor authentication is <strong>enabled</strong>.
-            </div>
-            <button class="btn btn-outline-danger btn-sm" onclick="disableTOTP()">
-              <i class="bi bi-shield-x me-1"></i>Disable 2FA
-            </button>
-            {% else %}
-            <button class="btn btn-outline-info btn-sm" onclick="setupTOTP()">
-              <i class="bi bi-shield-plus me-1"></i>Set Up 2FA
-            </button>
-            {% endif %}
-            <div id="totp-setup" class="mt-3 d-none">
-              <div class="text-center mb-2">
-                <img id="totp-qr" src="" alt="QR code" style="max-width:200px">
-              </div>
-              <p class="small text-secondary">Scan with your authenticator app, then enter the code to confirm.</p>
-              <div class="input-group mb-2">
-                <input type="text" class="form-control font-monospace" id="totp-code"
-                       placeholder="000000" maxlength="6" inputmode="numeric">
-                <button class="btn btn-success" onclick="verifyTOTP()">
-                  <i class="bi bi-check2 me-1"></i>Enable
-                </button>
-              </div>
-              <div class="form-text small" id="totp-secret-display"></div>
-              <div id="totp-result" class="mt-2"></div>
-            </div>
-          </div>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are stored</div>
-            <ul class="small text-secondary mb-0">
-              <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
-              <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
-              <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
-              <li>Connection-test errors have key material redacted before display.</li>
-            </ul>
-          </div>
-
-          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneSecurity(this)">
-            <i class="bi bi-check-lg me-1"></i>Save Security
-          </button>
-          <div class="test-result mt-2" id="security-save-result"></div>
-        </div>
-
-        <!-- Remote Access -->
-        {% if not is_satellite %}
-        <div class="tab-pane fade" id="pane-tunnel">
-          <p class="pane-intro">Expose Pantry Raider over the internet without port-forwarding your router.</p>
-
+          {% if not is_satellite %}
+          {# Remote access: expose Pantry Raider over the internet without
+             port-forwarding your router. #}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-globe text-info"></i> Remote Access Mode</div>
             <p class="text-secondary small">
@@ -2325,11 +2103,144 @@
 
             <div class="test-result" id="tunnel-result"></div>
           </div>
-        </div>
-        {% endif %}
+          {% endif %}
 
-        <!-- Backup & Updates -->
-        <div class="tab-pane fade" id="pane-data">
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-qr-code text-info"></i> Phone QR code</div>
+            <p class="text-secondary small">The Manage Pantry page shows an "Add items from your phone" QR code so a phone can add items without typing an address. Pick which address it encodes.</p>
+            <div class="mb-3">
+              <label class="form-label" for="qr_url_mode">Phone QR code address{{ info('Which address the "Add items from your phone" QR code points at. Auto uses this device\'s network address, so a phone on the same network can open it even when the kiosk itself browses at localhost. Public URL encodes the external address below, for phones that reach this app through a reverse proxy or tunnel.') }}</label>
+              <select class="form-select form-select-sm" id="qr_url_mode" style="max-width:320px">
+                <option value="auto"   {{ 'selected' if (s.qr_url_mode or 'auto') == 'auto' else '' }}>Auto (this device's network address)</option>
+                <option value="public" {{ 'selected' if s.qr_url_mode == 'public' else '' }}>Public URL</option>
+              </select>
+              <input type="url" class="form-control form-control-sm mt-2" id="qr_public_url"
+                     placeholder="https://pantry.yourdomain.com" style="max-width:420px"
+                     value="{{ s.qr_public_url }}">
+              <div class="form-text">Public URL to encode when the mode above is Public URL. Leave it empty to use the remote-access tunnel address when one is active.</div>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="saveQrSettings(this)">
+              <i class="bi bi-check-lg me-1"></i>Save QR address
+            </button>
+            <div class="test-result mt-2" id="qr-save-result"></div>
+          </div>
+        </div>
+
+        <!-- Security -->
+        <div class="tab-pane fade" id="pane-security">
+          <p class="pane-intro">Who can reach the app and how login is protected.</p>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-shield-lock text-success"></i> Authentication
+              <span class="badge bg-danger badge-req">Required</span></div>
+            <p class="text-secondary small">A UI password is required by default. Turn off
+              <em>Require authentication</em> only when an outer layer already gates access — a
+              reverse proxy (Pangolin, Authelia, Cloudflare Access) or the Home Assistant add-on,
+              which authenticates through HA itself.</p>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="auth_required"
+                     {% if s.auth_required %}checked{% endif %} onchange="toggleAuthRequired()">
+              <label class="form-check-label" for="auth_required">Require authentication to use the app</label>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">UI Password</label>
+              {{ secret_input('auth_password', 'Protects the web UI login page') }}
+              <div class="form-text" id="auth-pw-hint">Required while authentication is on. The app will not
+                finish setup without it.</div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">API Key <span class="text-secondary small">(Home Assistant, headless clients, satellite devices)</span></label>
+              {{ secret_input('api_key', 'Sent as X-API-Key header') }}
+              <div class="d-flex align-items-center gap-2 mt-1">
+                <button class="btn btn-outline-secondary btn-sm" type="button" onclick="generateApiKey()">
+                  <i class="bi bi-arrow-repeat me-1"></i>Generate
+                </button>
+                <span class="form-text mb-0">Primary key — regenerating this disconnects all existing satellites.</span>
+              </div>
+            </div>
+            {% if not features.satellite %}
+            {{ satellite_keys() }}
+            <div class="alert alert-secondary py-2 small mb-0">
+              <i class="bi bi-broadcast me-1"></i>Satellites enter one of these keys in their setup wizard under "Main Server." Use <strong>Add satellite key</strong> to give each satellite its own key so you can rotate or remove it without touching the others.
+            </div>
+            {% endif %}
+          </div>
+
+          {% if features.satellite %}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-keypad text-info"></i> Kiosk PIN
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">A satellite turns the UI password off by default (the main server owns access control). Set a short numeric PIN for a lightweight lock that is easy to enter on the touchscreen. Leave blank for no lock.</p>
+            <div class="mb-2" style="max-width: 220px;">
+              <label class="form-label">PIN <span class="text-secondary small">(digits only)</span></label>
+              {{ secret_input('kiosk_pin', 'e.g. 1234') }}
+            </div>
+            <div class="form-check mt-2">
+              <input class="form-check-input" type="checkbox" id="kiosk_readonly_when_locked"
+                     {% if s.kiosk_readonly_when_locked %}checked{% endif %}>
+              <label class="form-check-label" for="kiosk_readonly_when_locked">
+                Allow read-only browsing while locked
+              </label>
+              <div class="form-text">When enabled, visitors can browse inventory without entering the PIN. Write actions (adding or editing items) are blocked until they log in.</div>
+            </div>
+            <div class="form-text mt-1">Applies only to this device's screen; it does not affect the main server. Saved with Save Security below.</div>
+          </div>
+          {% endif %}
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-shield-check text-success"></i> Two-Factor Authentication (TOTP)
+              <span class="badge bg-secondary badge-req">Optional</span></div>
+            <p class="text-secondary small">When a UI password is set, enable TOTP to require a
+              6-digit code from an authenticator app (Google Authenticator, Authy, Bitwarden, 1Password, etc.)
+              on each login. Works offline — no email or SMS required.</p>
+            {% if s.totp_secret %}
+            <div class="alert alert-success py-2 small">
+              <i class="bi bi-check-circle-fill me-1"></i>Two-factor authentication is <strong>enabled</strong>.
+            </div>
+            <button class="btn btn-outline-danger btn-sm" onclick="disableTOTP()">
+              <i class="bi bi-shield-x me-1"></i>Disable 2FA
+            </button>
+            {% else %}
+            <button class="btn btn-outline-info btn-sm" onclick="setupTOTP()">
+              <i class="bi bi-shield-plus me-1"></i>Set Up 2FA
+            </button>
+            {% endif %}
+            <div id="totp-setup" class="mt-3 d-none">
+              <div class="text-center mb-2">
+                <img id="totp-qr" src="" alt="QR code" style="max-width:200px">
+              </div>
+              <p class="small text-secondary">Scan with your authenticator app, then enter the code to confirm.</p>
+              <div class="input-group mb-2">
+                <input type="text" class="form-control font-monospace" id="totp-code"
+                       placeholder="000000" maxlength="6" inputmode="numeric">
+                <button class="btn btn-success" onclick="verifyTOTP()">
+                  <i class="bi bi-check2 me-1"></i>Enable
+                </button>
+              </div>
+              <div class="form-text small" id="totp-secret-display"></div>
+              <div id="totp-result" class="mt-2"></div>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-info-circle text-secondary"></i> How secrets are stored</div>
+            <ul class="small text-secondary mb-0">
+              <li>Saved keys are never sent back to the browser — fields show a placeholder instead.</li>
+              <li>Leave a field blank to keep the stored value; use the <i class="bi bi-trash3"></i> button to erase it.</li>
+              <li><code>settings.json</code> is written with owner-only permissions (0600).</li>
+              <li>Connection-test errors have key material redacted before display.</li>
+            </ul>
+          </div>
+
+          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneSecurity(this)">
+            <i class="bi bi-check-lg me-1"></i>Save Security
+          </button>
+          <div class="test-result mt-2" id="security-save-result"></div>
+        </div>
+
+
+        <!-- Backups & Updates -->
+        <div class="tab-pane fade" id="pane-backups">
           <p class="pane-intro">Save your data off-box and keep the app up to date.</p>
 
           <div class="section-card">
@@ -2497,6 +2408,12 @@ docker compose up -d</code></pre>
             <span class="test-result ms-1" id="auto-update-result"></span>
           </div>
 
+        </div>
+
+        <!-- Advanced: timezone, maintenance, diagnostics, and deployment-mode switches -->
+        <div class="tab-pane fade" id="pane-advanced">
+          <p class="pane-intro">Maintenance that is not day-to-day: the timezone, reloads and reboots, diagnostics, and switching this device's role.</p>
+
           {% if s.deployment_mode == 'pi_hosted' %}
           <div class="section-card">
             <div class="section-title"><i class="bi bi-hdd-network text-warning"></i> Run as a satellite</div>
@@ -2520,7 +2437,7 @@ docker compose up -d</code></pre>
             <div class="mb-3" style="max-width:520px">
               <label class="form-label">Main server API key</label>
               <input type="text" class="form-control font-monospace" id="switch_upstream_api_key"
-                     placeholder="the API key from that server's Settings, under Security" autocomplete="off">
+                     placeholder="the API key from that server's Settings, under Security &amp; Access" autocomplete="off">
             </div>
             <button class="btn btn-outline-warning btn-sm" id="switch-satellite-btn" onclick="switchToSatellite(this)">
               <i class="bi bi-hdd-network me-1"></i>Switch to satellite mode
@@ -2568,18 +2485,6 @@ docker compose up -d</code></pre>
               {% endif %}
               <span class="test-result ms-1" id="maintenance-result"></span>
             </div>
-            {% if is_pi_appliance %}
-            <div class="d-flex flex-wrap gap-2 align-items-end">
-              <div>
-                <label class="form-label" for="scheduled_reboot_time">Nightly reboot{{ info('Reboot the appliance automatically at this time every day, to keep a long-running kiosk fresh. Leave blank to disable.') }}</label>
-                <input type="time" class="form-control form-control-sm" id="scheduled_reboot_time" style="max-width:150px" value="{{ scheduled_reboot_time }}">
-              </div>
-              <button type="button" class="btn btn-outline-info btn-sm" onclick="saveScheduledReboot(this)">
-                <i class="bi bi-check-lg me-1"></i>Save schedule
-              </button>
-              <span class="test-result" id="scheduled-reboot-result"></span>
-            </div>
-            {% endif %}
           </div>
 
           <div class="section-card">
@@ -2596,13 +2501,45 @@ docker compose up -d</code></pre>
             </button>
             <span class="test-result ms-2" id="logging-result"></span>
           </div>
+
+          {% if features.satellite and s.hosted_stack_parked %}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-box-arrow-in-left text-warning"></i> Return to full stack</div>
+            <p class="text-secondary small">This appliance used to run its own inventory stack, and that stack is
+              still on the device, paused, with all its data. Switching back starts it again, disconnects from the
+              main server, and restores the inventory, recipe, and AI settings this device had before the switch.</p>
+            <button class="btn btn-outline-warning btn-sm" id="switch-hosted-btn" onclick="switchToHosted(this)">
+              <i class="bi bi-box-arrow-in-left me-1"></i>Switch back to full stack
+            </button>
+            <div class="test-result mt-2" id="switch-hosted-result"></div>
+          </div>
+          {% endif %}
         </div>
 
-        {% if not features.satellite %}
-        <!-- Satellite Devices (main server only) -->
-        <div class="tab-pane fade" id="pane-devices">
-          <p class="pane-intro">Pi Remote satellites that pull their config from this server. Each device checks in on every config sync, so this list updates itself. You can queue a resync or forget a device here.</p>
 
+        {# Shared sub-area toggle for the Devices pane: This Device, the
+           on-screen Start Page, and (on a Pi) the physical Stream Deck. The
+           Start Page and Stream Deck editors stay separate tab-panes so their
+           long editors keep working; showDeckStart() flips between them. #}
+        {% macro ds_toggle(active) %}
+        <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between this device, the Start Page, and the Stream Deck">
+          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'devices' else '' }}" data-ds="devices" onclick="showDeckStart('devices')"><i class="bi bi-hdd-stack me-1"></i>This Device</button>
+          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'start' else '' }}" data-ds="start" onclick="_startEditorInit(); showDeckStart('start')"><i class="bi bi-display me-1"></i>Start Page</button>
+          {% if is_pi %}
+          <button type="button" class="btn btn-outline-primary{{ ' active' if active == 'deck' else '' }}" data-ds="deck" onclick="showDeckStart('deck')"><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</button>
+          {% endif %}
+        </div>
+        {% endmacro %}
+
+        <!-- Devices: this device's hardware and network, the Start Page and
+             Stream Deck editors, and the satellite fleet -->
+        <div class="tab-pane fade" id="pane-devices">
+          {{ ds_toggle('devices') }}
+          {% if features.satellite %}
+          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main Pantry Raider server.</p>
+          {{ upstream_cards() }}
+          {% else %}
+          <p class="pane-intro">This device's hardware and links, plus any Pi Remote satellites that pull their config from this server. Each satellite checks in on every config sync, so the list updates itself.</p>
           <div class="section-card mb-3">
             <div class="section-title d-flex align-items-center">
               <i class="bi bi-hdd-stack text-info"></i> Known Devices
@@ -2626,24 +2563,124 @@ docker compose up -d</code></pre>
             </div>
             <div class="test-result" id="scan-result"></div>
           </div>
+          {% endif %}
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-link-45deg text-info"></i> Device hostname</div>
+            <div class="mb-3">
+              <label class="form-label">Device hostname <span class="text-secondary small">(optional, for local browser links)</span></label>
+              <input type="text" class="form-control" id="device_hostname" name="device_hostname"
+                     placeholder="kitchen-pi"
+                     value="{{ s.device_hostname }}">
+              <div class="form-text">Used to build <span class="text-info">&lt;hostname&gt;.local</span> links to Grocy and Mealie on this device.
+                Empty = auto-detect. Set this when several Pantry Raider devices share one network.{% if is_pi %} The Hostname card below changes the device's actual network name; this field only shapes the links the app shows.{% endif %}</div>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="saveDeviceHostname(this)">
+              <i class="bi bi-check-lg me-1"></i>Save hostname
+            </button>
+            <div class="test-result mt-2" id="device-hostname-result"></div>
+          </div>
+
+          {% if is_pi %}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
+            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
+            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-display me-1"></i>Display</span>
+                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
+                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+            </div>
+            {# Detected-but-not-set-up hints: shown only when the hardware is
+               attached and the matching service was never provisioned, with a
+               one-click enable (FoodAssistant-92e.3). #}
+            <div id="hwdetect-kiosk-hint" class="d-none mb-2">
+              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Display detected, but the kiosk is not set up.</div>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('kiosk', this, 'hwdetect-enable-result')">
+                <i class="bi bi-display me-1"></i>Enable kiosk
+              </button>
+            </div>
+            <div id="hwdetect-streamdeck-hint" class="d-none mb-2">
+              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Stream Deck detected, but its service is not set up.</div>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('streamdeck', this, 'hwdetect-enable-result')">
+                <i class="bi bi-grid-3x3-gap me-1"></i>Enable Stream Deck
+              </button>
+            </div>
+            <div class="test-result mb-2" id="hwdetect-enable-result"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
+              <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
+          </div>
+          <div class="section-card mb-3">
+            <div class="section-title"><i class="bi bi-wifi text-info"></i> Wi-Fi</div>
+            <div id="wifi-status-row" class="mb-3">
+              <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Checking connection...</span>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Network name (SSID)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="wifi_ssid" placeholder="Your Wi-Fi network name" autocomplete="off">
+                <button class="btn btn-outline-secondary" type="button" onclick="scanWifi()" id="wifi-scan-btn" title="Scan for networks">
+                  <i class="bi bi-search me-1"></i>Scan
+                </button>
+              </div>
+              <div id="wifi-scan-results" class="mt-2"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password</label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="wifi_password" placeholder="Leave blank for open networks" autocomplete="new-password">
+                <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('wifi_password')" title="Show/hide">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </div>
+            </div>
+            <div class="alert alert-warning py-2 small mb-3">
+              <i class="bi bi-exclamation-triangle me-1"></i>The device will briefly disconnect while switching networks.
+              If you are connected via Wi-Fi you may need to reconnect on the new network to reach the web UI.
+              Connecting via Ethernet avoids this.
+            </div>
+            <button class="btn btn-outline-warning btn-sm" onclick="changeWifi()">
+              <i class="bi bi-wifi me-1"></i>Switch Network
+            </button>
+            <div class="test-result mt-2" id="wifi-result"></div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-pc-display text-info"></i> Hostname</div>
+            <div id="hostname-status-row" class="mb-3">
+              <span class="text-secondary small">Checking...</span>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Hostname</label>
+              <input type="text" class="form-control" id="new_hostname" placeholder="foodassistant" autocomplete="off" style="max-width:320px">
+              <div class="form-text">This device is reachable at <code>&lt;hostname&gt;.local</code>.
+                Lowercase letters, digits, and hyphens only. Takes effect immediately.</div>
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="changeHostname()">
+              <i class="bi bi-check-lg me-1"></i>Update Hostname
+            </button>
+            <div class="test-result mt-2" id="hostname-result"></div>
+          </div>
+          {% endif %}
         </div>
 
         {# Weather location/units no longer have their own settings section: they
            are set on the Weather page itself (Pantry Raider). These hidden inputs
            stay so the Stream Deck save still reads the current location/units the
            deck weather key should use. #}
+        {% if not features.satellite %}
         <input type="hidden" id="streamdeck_weather_location" value="{{ s.streamdeck_weather_location }}">
         <input type="hidden" id="streamdeck_weather_units" value="{{ s.streamdeck_weather_units }}">
         {% endif %}
 
-        <!-- Personalization: on-screen Start Page (Pantry Raider) -->
+        <!-- On-screen Start Page: a sub-area of the Devices pane -->
         <div class="tab-pane fade" id="pane-start-page">
-          {% if is_pi %}
-          <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between Start Page and Stream Deck">
-            <button type="button" class="btn btn-outline-primary active" data-ds="start" onclick="showDeckStart('start')"><i class="bi bi-display me-1"></i>Start Page</button>
-            <button type="button" class="btn btn-outline-primary" data-ds="deck" onclick="showDeckStart('deck')"><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</button>
-          </div>
-          {% endif %}
+          {{ ds_toggle('start') }}
           <p class="pane-intro">An optional full-screen launcher that works like an on-screen Stream Deck. It opens at <a href="ui/start" target="_blank">/ui/start</a> and replaces the fixed and floating menus while shown.</p>
           <div class="section-card editor-dense">
             <div class="section-title"><i class="bi bi-grid-3x3-gap text-success"></i> Start Page</div>
@@ -2715,95 +2752,16 @@ docker compose up -d</code></pre>
           </div>
         </div>
 
-        <!-- Hardware: barcode scanner (all devices) -->
-        <div class="tab-pane fade" id="pane-hardware">
-          <p class="pane-intro">Physical input devices connected to this machine.</p>
 
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-upc-scan text-success"></i> Barcode Scanner</div>
-            <p class="text-secondary small">A USB or Bluetooth scanner plugged into any device (this server, a Pi host, or a Pi Remote) works on the Manage Pantry page automatically, all at once, alongside the in-browser camera scanner. USB and Bluetooth HID scanners act as keyboard wedges, so no drivers are needed. This setting is just a hint for which method to reach for first; it does not turn the others off.</p>
-            <div class="mb-3">
-              <label class="form-label">Scanner type</label>
-              <select class="form-select" id="scanner_type" onchange="scannerTypeChanged()">
-                <option value=""    {{ 'selected' if not s.scanner_type else '' }}>Not set (pick on Manage Pantry page)</option>
-                <option value="usb" {{ 'selected' if s.scanner_type == 'usb' else '' }}>USB / Bluetooth HID (keyboard wedge)</option>
-                <option value="camera" {{ 'selected' if s.scanner_type == 'camera' else '' }}>Camera / built-in scan module</option>
-              </select>
-            </div>
-            <div class="form-check form-switch mb-3">
-              <input class="form-check-input" type="checkbox" role="switch" id="barcode_global_capture"
-                     {{ 'checked' if s.barcode_global_capture else '' }}>
-              <label class="form-check-label" for="barcode_global_capture">Scan from any page</label>
-              <div class="form-text">When on, a barcode scanned on any screen is saved to Pending and the app jumps to Manage Pantry. When off, scanning only works on the Manage Pantry page.</div>
-            </div>
-            <div id="scanner-usb-hint" class="{{ '' if s.scanner_type == 'usb' else 'd-none' }}">
-              <p class="text-secondary small mb-2">Plug in the scanner and test below — click the field and scan a barcode.</p>
-              <div class="input-group mb-2">
-                <span class="input-group-text"><i class="bi bi-upc"></i></span>
-                <input type="text" class="form-control font-monospace" id="scanner-test-input"
-                       placeholder="Scan a barcode here…" autocomplete="off" spellcheck="false"
-                       oninput="scannerTestInput(this.value)" onkeydown="if(event.key==='Enter'){scannerTestEnter(this.value);this.select();}">
-              </div>
-              <div class="test-result" id="scanner-test-result"></div>
-              <p class="form-text mt-2">Running a Waveshare scan-engine module on a kiosk? See the
-                <a href="https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/docs/hardware/waveshare-barcode-scanner.md" target="_blank" rel="noopener">hands-free setup codes</a>
-                to make it scan on sight without the button.</p>
-            </div>
-            <div id="scanner-camera-hint" class="{{ '' if s.scanner_type == 'camera' else 'd-none' }}">
-              <p class="text-secondary small">Camera scanning runs in the browser — make sure this site has camera permission.</p>
-            </div>
-          </div>
-
-          <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHardware(this)">
-            <i class="bi bi-check-lg me-1"></i>Save Hardware
-          </button>
-          <div class="test-result mt-2 mb-3" id="hardware-save-result"></div>
+        <!-- Screen & Sleep: the kiosk panel plus the on-screen nav bar -->
+        <div class="tab-pane fade" id="pane-screen">
+          {% if is_pi %}
+          <p class="pane-intro">The screen wired to this appliance, plus the on-screen navigation bar. Panel settings only affect the local kiosk display, not browsers on other devices.</p>
+          {% else %}
+          <p class="pane-intro">How the app behaves on a screen: the on-screen navigation bar and quiet mode. Panel, sleep, and screensaver settings appear here on a device with an attached display.</p>
+          {% endif %}
 
           {% if is_pi %}
-          {# Live attached-hardware detection from the appliance host bridge
-             (FoodAssistant-bbz8): this belongs with Hardware, not Stream Deck. #}
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
-            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
-            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-display me-1"></i>Display</span>
-                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-              <div class="d-flex align-items-center justify-content-between">
-                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
-                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
-              </div>
-            </div>
-            {# Detected-but-not-set-up hints: shown only when the hardware is
-               attached and the matching service was never provisioned, with a
-               one-click enable (FoodAssistant-92e.3). #}
-            <div id="hwdetect-kiosk-hint" class="d-none mb-2">
-              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Display detected, but the kiosk is not set up.</div>
-              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('kiosk', this, 'hwdetect-enable-result')">
-                <i class="bi bi-display me-1"></i>Enable kiosk
-              </button>
-            </div>
-            <div id="hwdetect-streamdeck-hint" class="d-none mb-2">
-              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Stream Deck detected, but its service is not set up.</div>
-              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('streamdeck', this, 'hwdetect-enable-result')">
-                <i class="bi bi-grid-3x3-gap me-1"></i>Enable Stream Deck
-              </button>
-            </div>
-            <div class="test-result mb-2" id="hwdetect-enable-result"></div>
-            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
-              <i class="bi bi-arrow-repeat me-1"></i>Refresh
-            </button>
-          </div>
-          {% endif %}
-        </div>
-
-        {% if is_pi %}
-
-        <!-- Display (Pi appliance only) -->
-        <div class="tab-pane fade" id="pane-display">
-          <p class="pane-intro">Configure the screen wired to this appliance. These settings only affect the local kiosk display, not browsers on other devices.</p>
-
           <div class="section-card mb-3">
             <div class="section-title"><i class="bi bi-aspect-ratio text-info"></i> Kiosk Display</div>
             <p class="text-secondary small">Scale and CSS rotation apply immediately in the kiosk browser without a reboot.</p>
@@ -2939,6 +2897,64 @@ docker compose up -d</code></pre>
               <i class="bi bi-info-circle me-1"></i>Run <code>sudo foodassistant-set-rotation 90</code> via SSH for the same effect.
             </div>
           </div>
+          {% endif %}
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-layout-sidebar-inset text-success"></i> On-screen navigation bar</div>
+            <p class="text-secondary small">An optional fixed bar of nav icons docked to a screen edge, handy on touch
+              screens. It reserves space so it never overlaps the page. Bottom is a horizontal bar; left and right are
+              vertical. The setting below is the default for devices that haven't been customised on this device.</p>
+            <div class="mb-3">
+              <label class="form-label" for="nav_visibility">On-screen nav menu{{ info('Whether the on-screen nav bar shows at all. Auto hides it on a Stream Deck kiosk at large / extra-large scale, where the deck does the navigating and the small screen is better used for content. The top bar keeps a hamburger menu either way, so you can always reach Settings.') }}</label>
+              <select class="form-select form-select-sm" id="nav_visibility" style="max-width:320px">
+                <option value="auto"   {{ 'selected' if (s.nav_visibility or 'auto') == 'auto' else '' }}>Auto (hide on a Stream Deck kiosk at large scale)</option>
+                <option value="shown"  {{ 'selected' if s.nav_visibility == 'shown' else '' }}>Always show</option>
+                <option value="hidden" {{ 'selected' if s.nav_visibility == 'hidden' else '' }}>Always hide</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="form-label" for="floating_nav_position">Dock position{{ info('Which screen edge the on-screen nav bar docks to. Bottom is a horizontal bar; left and right are vertical. A drag on the device overrides this per-device.') }}</label>
+              <select class="form-select form-select-sm" id="floating_nav_position" style="max-width:260px">
+                <option value="off"    {{ 'selected' if s.floating_nav_position == 'off' else '' }}>Off</option>
+                <option value="bottom" {{ 'selected' if s.floating_nav_position == 'bottom' else '' }}>Bottom edge</option>
+                <option value="left"   {{ 'selected' if s.floating_nav_position == 'left' else '' }}>Left edge</option>
+                <option value="right"  {{ 'selected' if s.floating_nav_position == 'right' else '' }}>Right edge</option>
+              </select>
+            </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="floating_nav_autohide_streamdeck"
+                     {{ 'checked' if s.floating_nav_autohide_streamdeck else '' }}>
+              <label class="form-check-label" for="floating_nav_autohide_streamdeck">Hide it when a Stream Deck is connected{{ info('A narrower version of Auto: hides the on-screen nav whenever a Stream Deck is connected, at any scale.') }}</label>
+            </div>
+            <div class="form-check form-switch mb-3">
+              <input class="form-check-input" type="checkbox" role="switch" id="quiet_mode"
+                     {{ 'checked' if s.quiet_mode else '' }}>
+              <label class="form-check-label" for="quiet_mode">Quiet mode (visual-only alerts){{ info('When on, a finished kitchen timer is shown only by highlighting it in the timer window, with no audible chime. This setting is per device, so each kiosk can be loud or silent.') }}</label>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="saveFloatingNav()">
+              <i class="bi bi-check-lg me-1"></i>Save navigation menu
+            </button>
+            <div class="test-result mt-2" id="floating-nav-result"></div>
+          </div>
+
+          {% if is_pi_appliance %}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-moon text-info"></i> Nightly reboot</div>
+            <p class="text-secondary small">Reboot the appliance automatically every night to keep a long-running kiosk fresh.</p>
+            <div class="d-flex flex-wrap gap-2 align-items-end">
+              <div>
+                <label class="form-label" for="scheduled_reboot_time">Nightly reboot{{ info('Reboot the appliance automatically at this time every day, to keep a long-running kiosk fresh. Leave blank to disable.') }}</label>
+                <input type="time" class="form-control form-control-sm" id="scheduled_reboot_time" style="max-width:150px" value="{{ scheduled_reboot_time }}">
+              </div>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="saveScheduledReboot(this)">
+                <i class="bi bi-check-lg me-1"></i>Save schedule
+              </button>
+              <span class="test-result" id="scheduled-reboot-result"></span>
+            </div>
+          </div>
+          {% endif %}
+
+          {% if is_pi %}
 
           {# Kiosk Service sits at the bottom: it is a one-time provision step and
              rarely touched, so the everyday display controls come first. #}
@@ -2952,14 +2968,13 @@ docker compose up -d</code></pre>
             <div class="test-result mt-2" id="kiosk-install-result"></div>
             <pre class="install-log d-none bg-body-tertiary border rounded p-2 small mt-2 mb-0" data-log="kiosk"></pre>
           </div>
+          {% endif %}
         </div>
 
-        <!-- Stream Deck (Pi appliance only) -->
+        {% if is_pi %}
+        <!-- Stream Deck (Pi appliance only): a sub-area of the Devices pane -->
         <div class="tab-pane fade" id="pane-streamdeck">
-          <div class="btn-group mb-3 ds-toggle" role="group" aria-label="Switch between Start Page and Stream Deck">
-            <button type="button" class="btn btn-outline-primary" data-ds="start" onclick="showDeckStart('start')"><i class="bi bi-display me-1"></i>Start Page</button>
-            <button type="button" class="btn btn-outline-primary active" data-ds="deck" onclick="showDeckStart('deck')"><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</button>
-          </div>
+          {{ ds_toggle('deck') }}
           <p class="pane-intro">Configure the Elgato Stream Deck attached to this appliance.</p>
 
           {% if features.satellite %}
@@ -3041,8 +3056,8 @@ docker compose up -d</code></pre>
                   <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_sdAddOverrideRow()">
                     <i class="bi bi-plus-lg me-1"></i>Add custom key
                   </button>
-                  <span class="form-text mt-0"><i class="bi bi-house me-1"></i>Home Assistant keys use the "Home Assistant action" type{{ info('The HA URL and token are set once under Home Assistant in the Settings menu.') }}</span>
-                  <span class="form-text mt-0"><i class="bi bi-camera-video me-1"></i>Camera feeds come from Cameras{{ info('Camera feeds are configured under Cameras in the Settings menu (they also power the on-screen Camera page) and are pushed to the deck from there.') }}</span>
+                  <span class="form-text mt-0"><i class="bi bi-house me-1"></i>Home Assistant keys use the "Home Assistant action" type{{ info('The HA URL and token are set once under Connections in the Settings menu.') }}</span>
+                  <span class="form-text mt-0"><i class="bi bi-camera-video me-1"></i>Camera feeds come from Connections{{ info('Camera feeds are configured under Connections in the Settings menu (they also power the on-screen Camera page) and are pushed to the deck from there.') }}</span>
                 </div>
               </div>
 
@@ -3138,62 +3153,6 @@ docker compose up -d</code></pre>
 
         </div>
 
-        <!-- Network (Pi appliance only) -->
-        <div class="tab-pane fade" id="pane-network">
-          <p class="pane-intro">Manage the Wi-Fi connection and hostname for this appliance.</p>
-
-          <div class="section-card mb-3">
-            <div class="section-title"><i class="bi bi-wifi text-info"></i> Wi-Fi</div>
-            <div id="wifi-status-row" class="mb-3">
-              <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Checking connection...</span>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Network name (SSID)</label>
-              <div class="input-group">
-                <input type="text" class="form-control" id="wifi_ssid" placeholder="Your Wi-Fi network name" autocomplete="off">
-                <button class="btn btn-outline-secondary" type="button" onclick="scanWifi()" id="wifi-scan-btn" title="Scan for networks">
-                  <i class="bi bi-search me-1"></i>Scan
-                </button>
-              </div>
-              <div id="wifi-scan-results" class="mt-2"></div>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Password</label>
-              <div class="input-group">
-                <input type="password" class="form-control" id="wifi_password" placeholder="Leave blank for open networks" autocomplete="new-password">
-                <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('wifi_password')" title="Show/hide">
-                  <i class="bi bi-eye"></i>
-                </button>
-              </div>
-            </div>
-            <div class="alert alert-warning py-2 small mb-3">
-              <i class="bi bi-exclamation-triangle me-1"></i>The device will briefly disconnect while switching networks.
-              If you are connected via Wi-Fi you may need to reconnect on the new network to reach the web UI.
-              Connecting via Ethernet avoids this.
-            </div>
-            <button class="btn btn-outline-warning btn-sm" onclick="changeWifi()">
-              <i class="bi bi-wifi me-1"></i>Switch Network
-            </button>
-            <div class="test-result mt-2" id="wifi-result"></div>
-          </div>
-
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-pc-display text-info"></i> Hostname</div>
-            <div id="hostname-status-row" class="mb-3">
-              <span class="text-secondary small">Checking...</span>
-            </div>
-            <div class="mb-3">
-              <label class="form-label">Hostname</label>
-              <input type="text" class="form-control" id="new_hostname" placeholder="foodassistant" autocomplete="off" style="max-width:320px">
-              <div class="form-text">This device is reachable at <code>&lt;hostname&gt;.local</code>.
-                Lowercase letters, digits, and hyphens only. Takes effect immediately.</div>
-            </div>
-            <button class="btn btn-outline-info btn-sm" onclick="changeHostname()">
-              <i class="bi bi-check-lg me-1"></i>Update Hostname
-            </button>
-            <div class="test-result mt-2" id="hostname-result"></div>
-          </div>
-        </div>
 
         {% endif %}
 
@@ -4250,8 +4209,21 @@ function savePaneGrocy(btn) {
     grocy_base_url:   optVal('grocy_base_url'),
     grocy_api_key:    document.getElementById('grocy_api_key') ? secretVal('grocy_api_key') : undefined,
     grocy_public_url: optVal('grocy_public_url'),
-    device_hostname:  optVal('device_hostname'),
   }, btn, 'grocy-save-result');
+}
+
+// Device hostname (link building) lives in the Devices pane; it has its own
+// save so the card posts only its own field.
+function saveDeviceHostname(btn) {
+  return savePane({ device_hostname: optVal('device_hostname') }, btn, 'device-hostname-result');
+}
+
+// Phone QR code card (Connections pane).
+function saveQrSettings(btn) {
+  return savePane({
+    qr_url_mode: optVal('qr_url_mode'),
+    qr_public_url: optVal('qr_public_url'),
+  }, btn, 'qr-save-result');
 }
 
 function savePaneAi(btn) {
@@ -4268,6 +4240,7 @@ function savePaneAi(btn) {
     ai_extra_keys:     document.querySelector('.extra-keys') ? collectExtraKeys() : undefined,
     barcode_enrichment: optVal('barcode_enrichment'),
     barcode_llm_fallback: chk('barcode_llm_fallback'),
+    barcode_autocheck_shopping: chk('barcode_autocheck_shopping'),
     enrich_provider:   optVal('enrich_provider'),
     enrich_model:      optVal('enrich_model'),
     ai_token_budget:   document.getElementById('ai_token_budget') ? num('ai_token_budget', 0) : undefined,
@@ -4341,16 +4314,14 @@ function savePaneRecipes(btn) {
     mealie_base_url:   optVal('mealie_base_url'),
     mealie_api_key:    document.getElementById('mealie_api_key') ? secretVal('mealie_api_key') : undefined,
     mealie_public_url: optVal('mealie_public_url'),
-    barcode_autocheck_shopping: chk('barcode_autocheck_shopping'),
     recipe_source:     optVal('recipe_source'),
     themealdb_api_key: document.getElementById('themealdb_api_key') ? secretVal('themealdb_api_key') : undefined,
     spoonacular_api_key: document.getElementById('spoonacular_api_key') ? secretVal('spoonacular_api_key') : undefined,
   }, btn, 'recipes-save-result');
 }
 
-// Personalization: recipe suggestion tuning + the kitchen appliances checklist.
-// These moved out of the Settings Recipes pane (FoodAssistant-pszk); their inputs
-// live in pane-personalization-recipes now, so they are collected and saved here.
+// Recipe suggestion tuning + the kitchen appliances checklist: the Suggestion
+// Tuning card of the Recipes & Meals pane, saved by its own button.
 function savePaneRecipePrefs(btn) {
   return savePane({
     staple_items:      optVal('staple_items'),
@@ -4362,14 +4333,11 @@ function savePaneRecipePrefs(btn) {
   }, btn, 'recipe-prefs-save-result');
 }
 
-// Navigation pane save: the tab editor, the quiet-mode switch, and (on the
-// Theme pane being separate now) nothing theme related. Theme changes persist
-// through applyTheme()/saveCustomTheme() instead.
+// Navigation Tabs card save (Appearance pane): just the tab editor. Quiet mode
+// saves with the nav-bar card under Screen & Sleep, the QR address under
+// Connections, and theme changes persist through applyTheme()/saveCustomTheme().
 function savePaneNavigation(btn) {
   return savePane({
-    quiet_mode: chk('quiet_mode'),
-    qr_url_mode: optVal('qr_url_mode'),
-    qr_public_url: optVal('qr_public_url'),
     ...navPayload(),
   }, btn, 'interface-save-result');
 }
@@ -4502,30 +4470,37 @@ function resetNavEditor(btn) {
   if (out) out.innerHTML = '<span class="text-secondary"><i class="bi bi-info-circle me-1"></i>Reset to defaults. Click Save Navigation to keep it.</span>';
 }
 
-// Combined "Start & Stream Deck" menu: a top toggle switches the one pane
-// between the on-screen Start Page (#pane-start-page) and the physical Stream
-// Deck editor (#pane-streamdeck). The deck pane has no sidebar pill of its own;
-// it is shown only via this toggle, so we activate/deactivate it manually.
+// Devices pane sub-areas: a top toggle switches between This Device
+// (#pane-devices), the on-screen Start Page (#pane-start-page), and the
+// physical Stream Deck editor (#pane-streamdeck). Only the Devices pane has a
+// sidebar pill; the other two are shown via this toggle, so their active
+// classes are flipped manually.
 function showDeckStart(which) {
+  const v = document.getElementById('pane-devices');
   const s = document.getElementById('pane-start-page');
   const d = document.getElementById('pane-streamdeck');
   if (which === 'deck' && d) {
     // Bring any custom keys built on the Start Page across to the deck before
     // showing it, so a key made in one editor appears in the other with no reload.
     _deckStartSyncDefs('start-overrides', 'streamdeck-overrides', _sdOverrideRow);
+    if (v) v.classList.remove('active', 'show');
     if (s) s.classList.remove('active', 'show');
     d.classList.add('active', 'show');
     _sdRefreshCustom();
-  } else {
+  } else if (which === 'start' && s) {
+    if (v) v.classList.remove('active', 'show');
     if (d) d.classList.remove('active', 'show');
-    if (s) {
-      s.classList.add('active', 'show');
-      _startEditorInit();
-      // ...and the same the other way: deck-built custom keys show on the Start Page.
-      _deckStartSyncDefs('streamdeck-overrides', 'start-overrides', _startBuildRow);
-      _startRenderPalette();
-      _startEditorRender();
-    }
+    s.classList.add('active', 'show');
+    _startEditorInit();
+    // ...and the same the other way: deck-built custom keys show on the Start Page.
+    _deckStartSyncDefs('streamdeck-overrides', 'start-overrides', _startBuildRow);
+    _startRenderPalette();
+    _startEditorRender();
+  } else {
+    which = 'devices';
+    if (s) s.classList.remove('active', 'show');
+    if (d) d.classList.remove('active', 'show');
+    if (v) v.classList.add('active', 'show');
   }
   document.querySelectorAll('.ds-toggle [data-ds]').forEach(b =>
     b.classList.toggle('active', b.dataset.ds === which));
@@ -6066,7 +6041,23 @@ function showKioskWizard() {
 // resolve to the current pane id here, so bookmarks, docs links, and in-app
 // links keep landing on the right pane when a pane is renamed. Add a row
 // ('pane-old-name': 'pane-new-name') in the same change that renames a pane.
-const PANE_HASH_ALIASES = {};
+const PANE_HASH_ALIASES = {
+  'pane-theme': 'pane-appearance',
+  'pane-navigation': 'pane-appearance',
+  'pane-display': 'pane-screen',
+  'pane-ai': 'pane-scanning',
+  'pane-hardware': 'pane-scanning',
+  'pane-personalization-recipes': 'pane-recipes',
+  'pane-personalization-storage': 'pane-inventory',
+  'pane-homeassistant': 'pane-connections',
+  'pane-cameras': 'pane-connections',
+  'pane-tunnel': 'pane-connections',
+  'pane-start-page': 'pane-devices',
+  'pane-streamdeck': 'pane-devices',
+  'pane-network': 'pane-devices',
+  'pane-upstream': 'pane-devices',
+  'pane-data': 'pane-backups',
+};
 function _resolvePaneHash(hash) {
   if (!hash || !hash.startsWith('#pane-')) return hash;
   const id = hash.slice(1);
@@ -6074,9 +6065,9 @@ function _resolvePaneHash(hash) {
 }
 
 // Settings search: filters the side menu to panes whose title, section
-// headers, or field labels contain the query, across both menu groups at
-// once, and outlines the matching section cards so the hit is findable
-// inside a long pane. Clearing the box restores the normal group view.
+// headers, or field labels contain the query, and outlines the matching
+// section cards so the hit is findable inside a long pane. Clearing the box
+// restores the full menu.
 let _settingsSearchIndex = null;  // [{pill, panes, text}]
 function _buildSettingsSearchIndex() {
   _settingsSearchIndex = [];
@@ -6085,11 +6076,13 @@ function _buildSettingsSearchIndex() {
     const pane = target ? document.querySelector(target) : null;
     if (!pane) return;
     const panes = [pane];
-    // The Stream Deck pane has no pill of its own; it is reached through the
-    // combined Start & Stream Deck pill, so index its text under that pill.
+    // The Start Page and Stream Deck panes have no pill of their own; they are
+    // reached through the Devices pill, so index their text under that pill.
     if (pill.id === 'pill-deckstart') {
-      const deck = document.getElementById('pane-streamdeck');
-      if (deck) panes.push(deck);
+      ['pane-start-page', 'pane-streamdeck'].forEach(function (id) {
+        const sub = document.getElementById(id);
+        if (sub) panes.push(sub);
+      });
     }
     const parts = [pill.textContent];
     panes.forEach(function (p) {
@@ -6110,17 +6103,12 @@ function settingsSearch(q) {
   if (_settingsSearchIndex === null) _buildSettingsSearchIndex();
   _clearSearchHits();
   if (!q) {
-    // Back to the normal one-group menu (last-used group).
-    var group;
-    try { group = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { group = 'p'; }
-    showSettingsMenu(group);
+    // Back to the full menu; the active pane stays where it is.
+    document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(function (el) {
+      el.classList.remove('d-none');
+    });
     return;
   }
-  // While a search is active, both groups are searched and the section
-  // headers are hidden; only matching pills stay visible.
-  document.querySelectorAll('.side-menu .menu-section').forEach(function (el) {
-    el.classList.add('d-none');
-  });
   var firstHit = null;
   var activeIsHit = false;
   _settingsSearchIndex.forEach(function (entry) {
@@ -6143,36 +6131,6 @@ function settingsSearch(q) {
   }
 }
 
-// Top toggle: show one side-menu group ('p' Personalization or 's' Settings),
-// hide the other, and activate a pill in the shown group so a pane is visible.
-// Pass an explicit pill to activate (e.g. from a #pane- hash); otherwise the
-// first visible pill of the group is shown.
-function showSettingsMenu(group, activate) {
-  group = (group === 'p') ? 'p' : 's';
-  // A group toggle exits any active search.
-  var searchBox = document.getElementById('settings-search');
-  if (searchBox && searchBox.value) { searchBox.value = ''; _clearSearchHits(); }
-  try { localStorage.setItem('settingsMenu', group); } catch (e) { }
-  var ts = document.getElementById('menu-toggle-s');
-  var tp = document.getElementById('menu-toggle-p');
-  if (ts) ts.classList.toggle('active', group === 's');
-  if (tp) tp.classList.toggle('active', group === 'p');
-  var sidebar = document.querySelector('.side-menu .nav-pills');
-  if (!sidebar) return;
-  var firstPill = null;
-  sidebar.querySelectorAll('.menu-section, [data-bs-toggle="pill"]').forEach(function (el) {
-    var g = el.getAttribute('data-mgroup') || 's';
-    var show = (g === group);
-    el.classList.toggle('d-none', !show);
-    if (show && el.getAttribute('data-bs-toggle') === 'pill' && !firstPill) firstPill = el;
-  });
-  var pill = (activate && (activate.getAttribute('data-mgroup') || 's') === group) ? activate : firstPill;
-  if (pill) {
-    try { bootstrap.Tab.getOrCreateInstance(pill).show(); }
-    catch (e) { pill.click(); }
-  }
-}
-
 // Failsafe: never leave the menu/content hidden, even if init() throws before
 // it reaches the reveal step. A blank Settings page is worse than a brief flash.
 function _revealMenu() {
@@ -6183,21 +6141,17 @@ function _revealMenu() {
 setTimeout(_revealMenu, 1500);
 
 (function init() {
-  // Resolve the menu group and reveal the content first, so a later failure in
-  // any optional init step cannot leave the page blank or stuck on the wrong
-  // group. A #pane-* hash wins (and selects its group); else the last-used
-  // choice; else default to Personalization (the everyday screen).
+  // Activate the pane a #pane-* hash asks for, then reveal the content, so a
+  // later failure in any optional init step cannot leave the page blank.
+  // Renamed panes resolve through PANE_HASH_ALIASES first.
   try {
     var hash0 = _resolvePaneHash(window.location.hash);
     var hashBtn0 = (hash0 && hash0.startsWith('#pane-'))
       ? document.querySelector('[data-bs-target="' + hash0 + '"]') : null;
-    var startGroup0;
     if (hashBtn0) {
-      startGroup0 = hashBtn0.getAttribute('data-mgroup') || 's';
-    } else {
-      try { startGroup0 = localStorage.getItem('settingsMenu') || 'p'; } catch (e) { startGroup0 = 'p'; }
+      try { bootstrap.Tab.getOrCreateInstance(hashBtn0).show(); }
+      catch (e) { hashBtn0.click(); }
     }
-    showSettingsMenu(startGroup0, hashBtn0);
   } catch (e) { }
   _revealMenu();
 
@@ -6205,17 +6159,19 @@ setTimeout(_revealMenu, 1500);
   showRecipeSource();
   scannerTypeChanged();
   renderNavEditor();
-  // Combined Start/Stream Deck menu: the deck pane has no pill, so make sure it
-  // never lingers visible. Hide it whenever any sidebar pill is clicked, and
-  // default the combined pane to the Start Page view when it is opened.
+  // Devices sub-areas: the Start Page and Stream Deck panes have no pill of
+  // their own (they are reached through the Devices pill's toggle), so make
+  // sure they never linger visible when any sidebar pill is clicked.
   document.querySelectorAll('.side-menu [data-bs-toggle="pill"]').forEach(p => {
     p.addEventListener('click', () => {
-      const d = document.getElementById('pane-streamdeck');
-      if (d) d.classList.remove('active', 'show');
+      ['pane-streamdeck', 'pane-start-page'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.remove('active', 'show');
+      });
     });
   });
   const _dsPill = document.getElementById('pill-deckstart');
-  if (_dsPill) _dsPill.addEventListener('shown.bs.tab', () => showDeckStart('start'));
+  if (_dsPill) _dsPill.addEventListener('shown.bs.tab', () => showDeckStart('devices'));
   {% if not is_satellite %}
   tunnelModeChanged();
   _initTunnelStatus();
@@ -6239,13 +6195,15 @@ setTimeout(_revealMenu, 1500);
   toggleAuthRequired();
   {% endif %}
 
-  // A bookmark to the (now pill-less) Stream Deck pane still works: open the
-  // combined pill and toggle to the deck view.
-  if (_resolvePaneHash(window.location.hash) === '#pane-streamdeck') {
+  // A bookmark to the (pill-less) Start Page or Stream Deck panes still works:
+  // open the Devices pill, then flip its toggle to the right sub-area. The raw
+  // hash is checked here because the alias map sends both to #pane-devices.
+  var rawHash = window.location.hash;
+  if (rawHash === '#pane-streamdeck' || rawHash === '#pane-start-page') {
     var dsPill = document.getElementById('pill-deckstart');
     if (dsPill) {
       try { bootstrap.Tab.getOrCreateInstance(dsPill).show(); } catch (e) { dsPill.click(); }
-      setTimeout(function () { showDeckStart('deck'); }, 60);
+      setTimeout(function () { showDeckStart(rawHash === '#pane-streamdeck' ? 'deck' : 'start'); }, 60);
     }
   }
   // If we arrived via a #pane-* hash, scroll it into view (the group was
@@ -6326,10 +6284,11 @@ async function saveFloatingNav() {
   const floating_nav_position = document.getElementById('floating_nav_position')?.value || 'off';
   const floating_nav_autohide_streamdeck = document.getElementById('floating_nav_autohide_streamdeck')?.checked || false;
   const nav_visibility = document.getElementById('nav_visibility')?.value || 'auto';
+  const quiet_mode = document.getElementById('quiet_mode')?.checked || false;
   try {
     await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({floating_nav_position, floating_nav_autohide_streamdeck, nav_visibility}),
+      body: JSON.stringify({floating_nav_position, floating_nav_autohide_streamdeck, nav_visibility, quiet_mode}),
     });
     // Clear any per-device override so the new default dock takes effect here.
     try { localStorage.removeItem('floatNavPosition'); } catch (e) {}
@@ -6994,7 +6953,7 @@ function _sdOverrideRow(o) {
         <label class="form-label small mb-1">Camera</label>
         <input type="text" class="form-control form-control-sm sd-ov-camera" list="${camListId}" placeholder="(first camera)" value="${escapeHtml(o.camera || o.camera_name || '')}">
         <datalist id="${camListId}">${camOpts}</datalist>
-        <div class="form-text">Which configured camera to show. Leave blank for the first one. Configure cameras under Cameras in the Settings menu.</div>
+        <div class="form-text">Which configured camera to show. Leave blank for the first one. Configure cameras under Connections in the Settings menu.</div>
       </div>
       <div class="col-md-5 d-flex align-items-end">
         <div class="form-check">

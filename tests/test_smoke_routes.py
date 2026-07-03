@@ -834,37 +834,38 @@ def test_streamdeck_count_endpoints_degrade_when_unconfigured(client):
         settings.mealie_base_url, settings.mealie_api_key = saved
 
 
-def test_settings_menu_has_logical_groups(client):
-    """The revamped settings menu renders its section headers and the default
-    non-satellite Services pills (FoodAssistant-y9nd)."""
+def test_settings_menu_has_intent_groups(client):
+    """The single settings menu renders the ten intent-group pills on a
+    normal server (docs/design/settings-reorg.md)."""
     r = client.get("/setup")
     assert r.status_code == 200
-    for header in ("Services", "App", "Devices &amp; Hardware", "System"):
-        assert header in r.text, f"missing menu group: {header}"
-    # Non-satellite: the backend service pills are present.
-    assert 'data-bs-target="#pane-inventory"' in r.text
-    assert 'data-bs-target="#pane-ai"' in r.text
-    # Satellite-only Main Server pill is not shown on a normal server.
-    assert 'data-bs-target="#pane-upstream"' not in r.text
+    for pane in ("pane-appearance", "pane-screen", "pane-scanning",
+                 "pane-recipes", "pane-inventory", "pane-connections",
+                 "pane-devices", "pane-security", "pane-backups",
+                 "pane-advanced"):
+        assert f'data-bs-target="#{pane}"' in r.text, f"missing pill: {pane}"
+    # Satellite-only Main Server card is not shown on a normal server.
+    assert 'id="remote_server_url"' not in r.text
 
 
-def test_remote_access_pane_hidden_on_satellite(client, monkeypatch):
-    """The Remote Access (tunnel) pane and its nav pill are meaningless on a
-    pi_remote satellite, so they must not render there but stay on a normal
-    server (FoodAssistant-3bu5)."""
+def test_remote_access_card_hidden_on_satellite(client, monkeypatch):
+    """The remote access (tunnel) card is meaningless on a pi_remote
+    satellite, so it must not render there but stay on a normal server
+    (FoodAssistant-3bu5); it lives in the Connections pane now."""
     from app.config import settings
 
-    # Normal server: the pane and its nav pill are present.
+    # Normal server: the card renders inside Connections.
     page = client.get("/setup").text
-    assert 'data-bs-target="#pane-tunnel"' in page
-    assert 'id="pane-tunnel"' in page
+    assert 'id="pane-connections"' in page
+    assert 'id="tunnel-result"' in page
+    assert 'name="tunnel_mode"' in page
 
-    # Satellite: both are gone.
+    # Satellite: the card is gone.
     monkeypatch.setattr(settings, "deployment_mode", "pi_remote")
     assert settings.is_satellite()
     sat = client.get("/setup").text
-    assert 'data-bs-target="#pane-tunnel"' not in sat
-    assert 'id="pane-tunnel"' not in sat
+    assert 'id="tunnel-result"' not in sat
+    assert 'id="tunnel_mode_cloudflare"' not in sat
 
 
 def test_generate_recipe_threads_custom_prompt(client, monkeypatch):

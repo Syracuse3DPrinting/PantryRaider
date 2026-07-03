@@ -253,7 +253,7 @@ def main() -> int:
             ("/ui/add", "add.png", None),
             ("/ui/cook", "cook.png", "text=Cheesy Chicken and Rice"),
             ("/ui/mealplan", "mealplan.png", "text=Shakshuka"),
-            ("/setup#pane-ai", "setup.png", None),
+            ("/setup#pane-scanning", "setup.png", None),
             ("/ui/expiring", "expiring.png", "text=Baby Spinach"),
         ]
         OUT.mkdir(parents=True, exist_ok=True)
