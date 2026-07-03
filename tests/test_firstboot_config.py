@@ -739,3 +739,65 @@ def test_env_file_profiles_include_ollama(tmp_path):
     rc, out = run_firstboot(tmp_path, "ENABLE_MEALIE=true\nENABLE_OLLAMA=true\n")
     assert rc == 0, out
     assert "COMPOSE_PROFILES=with-mealie,with-ollama" in out
+
+
+# --- Quiet boot (kernel cmdline) --------------------------------------------
+
+PI_CMDLINE = ("console=serial0,115200 console=tty1 root=PARTUUID=deadbeef-02 "
+              "rootfstype=ext4 fsck.repair=yes rootwait")
+
+
+def test_quiet_boot_appends_params_for_a_kiosk_device(tmp_path):
+    # With a kiosk configured, provisioning ends by quieting the boot console:
+    # the quiet params are appended to the kernel cmdline so they only take
+    # effect from the NEXT boot on (the first boot keeps its console output).
+    cmdline = tmp_path / "cmdline.txt"
+    cmdline.write_text(PI_CMDLINE + "\n")
+    rc, out = run_firstboot(
+        tmp_path, "ENABLE_KIOSK=true\n",
+        extra_env={"CMDLINE_CANDIDATES": str(cmdline)})
+    assert rc == 0, out
+    assert f"DRY_RUN would append to {cmdline}:" in out
+    for p in ("quiet", "loglevel=3", "vt.global_cursor_default=0",
+              "logo.nologo", "consoleblank=0", "rd.systemd.show_status=false",
+              "systemd.show_status=false"):
+        assert p in out
+    # DRY_RUN never writes.
+    assert cmdline.read_text() == PI_CMDLINE + "\n"
+
+
+def test_quiet_boot_skipped_without_a_kiosk(tmp_path):
+    # No display and ENABLE_KIOSK=auto means no kiosk, so the boot console
+    # stays verbose (nothing scrolls over a screen that is not there).
+    cmdline = tmp_path / "cmdline.txt"
+    cmdline.write_text(PI_CMDLINE + "\n")
+    rc, out = run_firstboot(
+        tmp_path, "HOSTNAME=foodassistant\n",
+        extra_env={"CMDLINE_CANDIDATES": str(cmdline)})
+    assert rc == 0, out
+    assert "Quiet boot skipped" in out
+    assert "DRY_RUN would append to" not in out
+
+
+def test_quiet_boot_already_quiet_cmdline_adds_nothing(tmp_path):
+    cmdline = tmp_path / "cmdline.txt"
+    cmdline.write_text(
+        PI_CMDLINE + " quiet loglevel=3 vt.global_cursor_default=0"
+        " logo.nologo consoleblank=0 rd.systemd.show_status=false"
+        " systemd.show_status=false\n")
+    rc, out = run_firstboot(
+        tmp_path, "ENABLE_KIOSK=true\n",
+        extra_env={"CMDLINE_CANDIDATES": str(cmdline)})
+    assert rc == 0, out
+    assert "Boot cmdline already quiet" in out
+    assert "DRY_RUN would append to" not in out
+
+
+def test_quiet_boot_missing_cmdline_is_a_noop(tmp_path):
+    missing = tmp_path / "no-cmdline.txt"
+    rc, out = run_firstboot(
+        tmp_path, "ENABLE_KIOSK=true\n",
+        extra_env={"CMDLINE_CANDIDATES": str(missing)})
+    assert rc == 0, out
+    assert "No boot cmdline file found" in out
+    assert not missing.exists()

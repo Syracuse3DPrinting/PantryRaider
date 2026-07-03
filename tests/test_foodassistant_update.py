@@ -331,6 +331,76 @@ def test_cursor_dropin_respects_hide_cursor_false(rig, tmp_path):
     assert not (tmp_path / "kiosk.d" / "20-foodassistant-cursor.conf").exists()
 
 
+PI_CMDLINE = ("console=serial0,115200 console=tty1 root=PARTUUID=deadbeef-02 "
+              "rootfstype=ext4 fsck.repair=yes rootwait")
+QUIET_PARAMS = ["quiet", "loglevel=3", "vt.global_cursor_default=0",
+                "logo.nologo", "consoleblank=0", "rd.systemd.show_status=false",
+                "systemd.show_status=false"]
+
+
+def _quiet_rig(rig, tmp_path, cmdline_text=PI_CMDLINE + "\n"):
+    unit = tmp_path / "foodassistant-kiosk.service"
+    unit.write_text(_kiosk_unit_text())
+    cmdline = tmp_path / "cmdline.txt"
+    if cmdline_text is not None:
+        cmdline.write_text(cmdline_text)
+    rig["env"]["KIOSK_UNIT"] = str(unit)
+    rig["env"]["KIOSK_DROPIN_DIR"] = str(tmp_path / "kiosk.d")
+    rig["env"]["CURSOR_THEME_DIR"] = str(tmp_path / "icons" / "hidden")
+    rig["env"]["CMDLINE_CANDIDATES"] = str(cmdline)
+    return cmdline
+
+
+def test_quiet_boot_params_added_once_to_kiosk_cmdline(rig, tmp_path):
+    # A deployed kiosk device gets the quiet-boot kernel params appended to its
+    # single-line cmdline, keeping console=tty1 intact (FoodAssistant-go5e).
+    cmdline = _quiet_rig(rig, tmp_path)
+    result, out = run_update(rig)
+    text = cmdline.read_text()
+    assert text.endswith("\n") and text.count("\n") == 1  # still one line
+    params = text.strip().split()
+    assert params[:2] == ["console=serial0,115200", "console=tty1"]
+    for p in QUIET_PARAMS:
+        assert params.count(p) == 1, p
+    assert "takes effect after the next reboot" in out
+
+
+def test_quiet_boot_rerun_is_idempotent(rig, tmp_path):
+    cmdline = _quiet_rig(rig, tmp_path)
+    run_update(rig)
+    first = cmdline.read_text()
+    _, out = run_update(rig)
+    assert cmdline.read_text() == first
+    assert "Quieted the boot console" not in out
+
+
+def test_quiet_boot_missing_cmdline_is_a_noop(rig, tmp_path):
+    cmdline = _quiet_rig(rig, tmp_path, cmdline_text=None)
+    result, out = run_update(rig)
+    assert not cmdline.exists()
+    assert "Quieted the boot console" not in out
+    assert "WARN: could not update" not in out
+
+
+def test_quiet_boot_keeps_an_operator_set_loglevel(rig, tmp_path):
+    # A key the operator already pinned (loglevel=7 for debugging) is never
+    # overridden or duplicated; the other params are still added.
+    cmdline = _quiet_rig(rig, tmp_path, cmdline_text=PI_CMDLINE + " loglevel=7\n")
+    run_update(rig)
+    params = cmdline.read_text().strip().split()
+    assert "loglevel=7" in params and "loglevel=3" not in params
+    assert "quiet" in params and "systemd.show_status=false" in params
+
+
+def test_quiet_boot_skipped_without_a_kiosk_unit(rig, tmp_path):
+    # Headless boxes keep a verbose console: no kiosk unit, no cmdline edit.
+    cmdline = tmp_path / "cmdline.txt"
+    cmdline.write_text(PI_CMDLINE + "\n")
+    rig["env"]["CMDLINE_CANDIDATES"] = str(cmdline)
+    run_update(rig)
+    assert cmdline.read_text() == PI_CMDLINE + "\n"
+
+
 def test_self_update_reexecs_the_new_version(rig):
     # The updater replaces itself, then must re-exec the NEW version so steps
     # added in it apply on the same press (previously one press behind). The

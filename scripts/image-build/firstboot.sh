@@ -31,8 +31,8 @@ set -euo pipefail
 DRY_RUN="${DRY_RUN:-0}"
 # STEPS= comma-list of step names to run instead of the full sequence, bypassing
 # the done-marker check and skipping mark_done.  Valid names: hostname, timezone,
-# mdns, docker, stack, rotation, kiosk, streamdeck, hostbridge.  Leave empty (the
-# default) to run all.
+# mdns, docker, stack, rotation, kiosk, streamdeck, hostbridge, quiet_boot.
+# Leave empty (the default) to run all.
 # Example: STEPS=streamdeck sudo bash firstboot.sh
 STEPS="${STEPS:-}"
 LOG_FILE="${LOG_FILE:-/var/log/foodassistant-firstboot.log}"
@@ -52,6 +52,9 @@ DONE_MARKER="${DONE_MARKER:-/var/lib/foodassistant/firstboot.done}"
 # build from source with no manual steps.
 REPO_DIR="${REPO_DIR:-/home/foodassistant/FoodAssistant}"
 REPO_URL="${REPO_URL:-https://github.com/Syracuse3DPrintingOrg/PantryRaider.git}"
+# The kernel boot cmdline (a single-line file on the boot partition). The first
+# existing candidate wins; /boot/firmware is Pi OS Bookworm, /boot is legacy.
+CMDLINE_CANDIDATES="${CMDLINE_CANDIDATES:-/boot/firmware/cmdline.txt /boot/cmdline.txt}"
 
 # Logging helpers
 log()  { printf '%s [firstboot] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
@@ -1379,6 +1382,63 @@ EOF
   install_accel_rotation
 }
 
+# Step: quiet the boot console on a kiosk device
+# Runs at the END of provisioning, so THIS first boot keeps its console output
+# (the firstboot log scrolling on screen is useful while a device provisions);
+# the quieting only takes effect from the next boot on. Appends the kernel
+# cmdline params that stop text scrolling on the attached display before the
+# kiosk appears:
+#   quiet loglevel=3            - suppress kernel messages on the console
+#   rd.systemd.show_status=false systemd.show_status=false
+#                               - hide the systemd unit status lines
+#   vt.global_cursor_default=0  - no blinking text cursor on the blank console
+#   logo.nologo                 - no boot logo
+#   consoleblank=0              - never blank the console VT (the kiosk owns
+#                                 display power via foodassistant-display-power)
+# console=tty1 is deliberately left alone: the kiosk unit takes over tty1
+# (Conflicts=getty@tty1, TTYPath=/dev/tty1) and moving the kernel console to
+# tty2 would re-enter the getty conflict dance for no gain, since quiet plus
+# loglevel=3 already keeps tty1 clean. tty2+ gettys stay available for
+# debugging. Idempotent: params already present (or a key an operator set to
+# another value, like loglevel=7) are never duplicated or overridden.
+QUIET_BOOT_PARAMS="quiet loglevel=3 vt.global_cursor_default=0 logo.nologo consoleblank=0 rd.systemd.show_status=false systemd.show_status=false"
+configure_quiet_boot() {
+  if ! flag_enabled "$ENABLE_KIOSK" has_display; then
+    log "Quiet boot skipped (no kiosk on this device); boot console stays verbose"
+    return 0
+  fi
+  local cmdline="" f
+  for f in $CMDLINE_CANDIDATES; do
+    if [ -f "$f" ]; then cmdline="$f"; break; fi
+  done
+  if [ -z "$cmdline" ]; then
+    log "No boot cmdline file found (looked in: $CMDLINE_CANDIDATES); skipping quiet boot"
+    return 0
+  fi
+  local line missing="" p key
+  line="$(tr -d '\n' < "$cmdline")"
+  for p in $QUIET_BOOT_PARAMS; do
+    key="${p%%=*}"
+    if [ "$p" = "$key" ]; then
+      case " $line " in *" $p "*) continue ;; esac
+    else
+      case " $line " in *" $key="*) continue ;; esac
+    fi
+    missing="$missing $p"
+  done
+  missing="${missing# }"
+  if [ -z "$missing" ]; then
+    log "Boot cmdline already quiet ($cmdline); nothing to add"
+    return 0
+  fi
+  if [ "$DRY_RUN" = "1" ]; then
+    log "DRY_RUN would append to $cmdline: $missing"
+    return 0
+  fi
+  printf '%s\n' "$line $missing" > "$cmdline"
+  log "Quiet boot params added to $cmdline: $missing (takes effect on the next reboot)"
+}
+
 # Step: Stream Deck controller (auto-detected by default)
 configure_streamdeck() {
   if ! flag_enabled "$ENABLE_STREAMDECK" has_streamdeck; then
@@ -2093,6 +2153,7 @@ main() {
     _step_requested "touch"          && configure_touch
     _step_requested "kiosk"          && configure_kiosk
     _step_requested "streamdeck"     && configure_streamdeck
+    _step_requested "quiet_boot"     && configure_quiet_boot
     [ -z "$STEPS" ] && mark_done
     local _svc_url="http://${HOSTNAME}.local/"
     log "FoodAssistant satellite first-boot complete."
@@ -2109,6 +2170,7 @@ main() {
   _step_requested "touch"       && configure_touch
   _step_requested "kiosk"       && configure_kiosk
   _step_requested "streamdeck"  && configure_streamdeck
+  _step_requested "quiet_boot"  && configure_quiet_boot
   [ -z "$STEPS" ] && mark_done
 
   log "FoodAssistant first-boot complete. Reach the UI at:"

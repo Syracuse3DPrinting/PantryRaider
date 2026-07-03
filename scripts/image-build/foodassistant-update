@@ -341,6 +341,43 @@ RULES
   fi
 fi
 
+# Quiet the boot console on deployed kiosk devices. Fresh provisions get the
+# kernel cmdline additions from firstboot's quiet_boot step, but devices imaged
+# earlier still scroll kernel and systemd text on the attached display before
+# the kiosk appears (FoodAssistant-go5e). Append any missing params to the
+# single-line cmdline file; params already present, or a key an operator set to
+# another value (say loglevel=7), are left alone, so re-runs never duplicate
+# anything. console=tty1 stays untouched (the kiosk unit owns tty1) and tty2+
+# gettys remain available for debugging. Gated on the kiosk unit so headless
+# boxes keep a verbose console. Paths are env-overridable for tests.
+CMDLINE_CANDIDATES="${CMDLINE_CANDIDATES:-/boot/firmware/cmdline.txt /boot/cmdline.txt}"
+_quiet_params="quiet loglevel=3 vt.global_cursor_default=0 logo.nologo consoleblank=0 rd.systemd.show_status=false systemd.show_status=false"
+if [ -f "$KIOSK_UNIT" ]; then
+  for _cmdline in $CMDLINE_CANDIDATES; do
+    [ -f "$_cmdline" ] || continue
+    _cline="$(tr -d '\n' < "$_cmdline")"
+    _missing=""
+    for _p in $_quiet_params; do
+      _k="${_p%%=*}"
+      if [ "$_p" = "$_k" ]; then
+        case " $_cline " in *" $_p "*) continue ;; esac
+      else
+        case " $_cline " in *" $_k="*) continue ;; esac
+      fi
+      _missing="$_missing $_p"
+    done
+    _missing="${_missing# }"
+    if [ -n "$_missing" ]; then
+      if printf '%s\n' "$_cline $_missing" > "$_cmdline" 2>/dev/null; then
+        log "Quieted the boot console in $_cmdline (added: $_missing); takes effect after the next reboot."
+      else
+        log "WARN: could not update $_cmdline to quiet the boot console."
+      fi
+    fi
+    break
+  done
+fi
+
 _bsrc="$REPO/scripts/image-build/foodassistant-host-bridge"
 _bdst="$BIN_DIR/foodassistant-host-bridge"
 if [ -f "$_bsrc" ]; then
