@@ -171,8 +171,19 @@ _SETUP_BYPASS = {
     "/api/config/satellite",
     "/health", "/docs", "/openapi.json", "/redoc",
 }
-# "/" only redirects to /ui/, so it can safely skip auth (the target enforces it)
-_PUBLIC_PATHS = _SETUP_BYPASS | {"/ui/login", "/"}
+# Paths that are public REGARDLESS of configuration state: the login page,
+# the root redirect ("/" only redirects to /ui/, whose target enforces auth),
+# health/docs, and the satellite config pull (its handler enforces its own
+# X-API-Key). Everything else in _SETUP_BYPASS is only auth-exempt while the
+# instance is UNCONFIGURED: the wizard must work before credentials exist, but
+# once setup completes the settings surface is as protected as any other page.
+# Before this split, /setup/save stayed permanently unauthenticated, letting
+# any LAN client overwrite settings including auth_password (rules audit, Jul
+# 2026).
+_ALWAYS_PUBLIC = {
+    "/api/config/satellite", "/health", "/docs", "/openapi.json", "/redoc",
+    "/ui/login", "/",
+}
 
 
 def _is_static(path: str) -> bool:
@@ -209,7 +220,9 @@ async def require_auth(request: Request, call_next):
         return await call_next(request)
     # Static assets (PWA manifest, icons) are public: the OS fetches install
     # icons without session cookies.
-    if request.url.path in _PUBLIC_PATHS or _is_static(request.url.path):
+    if request.url.path in _ALWAYS_PUBLIC or _is_static(request.url.path):
+        return await call_next(request)
+    if request.url.path in _SETUP_BYPASS and not settings.is_configured():
         return await call_next(request)
 
     # Requests from the loopback address are always trusted (local kiosk, cron jobs).

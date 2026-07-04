@@ -83,6 +83,18 @@ your network, so a headless box is a perfectly normal setup. For a dedicated
 kitchen panel, the appliance image runs a Chromium kiosk (via the `cage` Wayland
 compositor) pointed at the local UI.
 
+**Size recommendation:** a 7 inch screen or larger is the recommended minimum
+for the kiosk; it fits the navigation, the inventory panels, and the touch
+targets comfortably. A 4 inch panel is workable when paired with a Stream Deck
+that does the navigating, with the screen used for content (the on-screen nav
+bar auto-hides in that setup).
+
+A kiosk screen stays clean from power-on: the boot text is suppressed, a short
+branded intro plays when the app first appears, and the mouse cursor is hidden
+(the Pi's HDMI CEC devices, which otherwise announce themselves as a pointer,
+are ignored as input; a real mouse still works, and `HIDE_CURSOR=false` in the
+device config keeps the pointer visible).
+
 Display options:
 
 - **HDMI panels.** Any standard HDMI display. The kiosk renders through DRM/KMS,
@@ -138,20 +150,22 @@ SUBSYSTEM=="usb", ATTR{idVendor}=="0fd9", GROUP="plugdev", MODE="0660"
 
 The Python controller pins `streamdeck>=0.9.8`, because 0.9.5 does not recognise
 the USB product id used on current XL / Module 32 hardware. Setup and the
-controller service live in [`streamdeck/`](../streamdeck/README.md).
+controller service live in [`streamdeck/`](https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/streamdeck/README.md).
 
 If a connected deck is never detected (`No Stream Deck found` in the service
 log), or it drops off and comes back at random, see
 [Power and cabling](#power-and-cabling) above: a charge-only USB cable and an
 undersized power supply are the two usual causes.
 
-## Accelerometer (optional auto-rotation)
+## Accelerometer (optional auto-rotation and wake on motion)
 
 If an Adafruit LSM6DSOX accelerometer is wired to the Pi's default I2C-1 bus (it
 answers at address 0x6A or 0x6B), the first-boot provisioner detects it and
 installs an auto-rotation helper. The kiosk service can then call the helper to
-orient the display to match how the panel is physically mounted. This is purely
-optional; nothing breaks when the sensor is absent.
+orient the display to match how the panel is physically mounted. The same sensor
+drives the "Wake on motion" display option (Settings, Personalization, Screen &
+Sleep), which wakes a sleeping screen when the device is moved or bumped. This
+is purely optional; nothing breaks when the sensor is absent.
 
 ## Barcode scanners
 
@@ -168,5 +182,5 @@ For a fully headless scanner that submits directly without a focused browser
 field, the Home Assistant integration captures the scanner with the
 `keyboard_remote` integration and posts the barcode to Pantry Raider. That path
 requires Home Assistant OS or Supervised; see
-[homeassistant/barcode-scanner.md](../homeassistant/barcode-scanner.md) and
+[homeassistant/barcode-scanner.md](https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/homeassistant/barcode-scanner.md) and
 [Platforms](platforms.md).

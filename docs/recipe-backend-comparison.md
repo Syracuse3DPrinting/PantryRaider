@@ -99,7 +99,7 @@ connection. The Recipes, Cook, Meal plan, and Shopping tabs become available onc
 the connection succeeds.
 
 See [Platforms](platforms.md) for the full profile and port reference, and the
-[README](../README.md) install section for the one-line installers.
+[README](https://github.com/Syracuse3DPrintingOrg/PantryRaider#install) install section for the one-line installers.
 
 ## A note on Grocy's own recipe feature
 

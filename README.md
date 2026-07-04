@@ -42,6 +42,10 @@ All AI features are optional. You can run Pantry Raider without any AI provider 
 - **Recipe suggestions**: "What Can I Cook?" ranks your recipes by how much of them you already have in stock; items expiring soon float to the top
 - **Recipe import**: import from any webpage, photograph a recipe card or handwritten note, load a recipe file (generic recipe JSON, a schema.org Recipe JSON-LD file, or a Mealie export), browse TheMealDB, or have the AI write a recipe from scratch
 - **On the Line (Current Recipe)**: set any recipe (from Mealie, an import, or AI-generated) as the active one with a "Cook" button, and the app holds it server-side with servings scaling and step-by-step instructions; step durations like "simmer 20 minutes" become ready-to-start named timers shared across surfaces, surfaced in a floating timer window and on the Stream Deck's timer keys
+- **Manage Pantry**: one page for the scanner with four tabs (Stock up, Use stock, Shopping list, Audit stock) that are the shared scanner mode itself, so picking a tab switches every scanner and Stream Deck mode key at once; consuming by barcode links unrecorded barcodes to their product on the fly, and an Open on phone button shows a QR code that jumps the page to your phone's camera and keyboard
+- **Shared kitchen timers**: a Timers tab with one-tap presets and named custom timers; timers live on the server, so the page, the floating timer window, the Stream Deck keys, and every satellite screen show the same countdowns, with +1 min and Clear all buttons
+- **Kiosk screensaver**: a bouncing-logo or USB photo-slideshow screensaver with running timers floating along as countdown pills, an option to span an attached Stream Deck as one surface, and a switch to run it in every browser viewing the install
+- **On-screen keyboard**: in kiosk mode a touch keyboard slides up whenever a text field is tapped, so a wall-mounted panel needs no physical keyboard
 - **Pantry audit**: a read-only, location-scoped stock count on its own Audit tab. Lock the scanner to one storage location and scan the items there; each scan is compared against Grocy's recorded stock so missing and unexpected items stand out, and nothing is written back to Grocy
 - **Nutrition tracker**: log what you eat with calories and macros (protein, carbs, fat) on a Nutrition tab, with daily and recent-day totals; an optional AI estimate fills in macros from a food name when a provider is configured
 - **Weather page**: a full forecast page on the kiosk display, opened by a Stream Deck weather or forecast key and reachable from the nav. Forecasts come from Open-Meteo (free, no key) with wttr.in as a fallback, using the same location and units as the Stream Deck weather widget
@@ -64,7 +68,7 @@ All AI features are optional. You can run Pantry Raider without any AI provider 
 | | |
 |---|---|
 | ![Inventory](docs/screenshots/inventory.png) | ![Add item / barcode scan](docs/screenshots/add.png) |
-| **Inventory**: stock grouped by storage, drag-to-move | **Add item**: barcode scan, photo analysis, manual entry |
+| **Inventory**: stock grouped by storage, drag-to-move | **Manage Pantry**: barcode scan, photo analysis, manual entry |
 | ![Recipe suggestions](docs/screenshots/cook.png) | ![Meal plan](docs/screenshots/mealplan.png) |
 | **Cook**: recipes ranked by what's in stock | **Meal plan**: week view with Mealie integration |
 | ![Settings](docs/screenshots/setup.png) | ![Expiring items](docs/screenshots/expiring.png) |
@@ -176,6 +180,8 @@ On a Pi appliance, a full Grocy and Mealie snapshot restore runs via the host br
 
 For automated cloud backup, configure an [rclone](https://rclone.org) remote in **Settings > Backups & Updates**. Rclone supports S3, Backblaze B2, SFTP, Google Drive, Dropbox, and 40+ other backends.
 
+For automatic local backups with no cloud at all, plug a formatted USB flash drive into the device: **Settings > Backups & Updates** can save backups to a `pantryraider-backups` folder on it, on a schedule in hours or with a Back up now button. The newest 14 backups are kept and nothing else on the drive is touched. A Pi appliance saves a full stack snapshot, a satellite saves its device settings, and a server saves the app-data zip.
+
 ## Troubleshooting logs
 
 For support, turn on **Settings > Advanced > Debug logging** to raise the log level and write a rotating log file under the data directory, then use the Download control to grab that log. Secret values are redacted from the download. Leave it off in normal use.
@@ -197,7 +203,7 @@ docker compose up -d
 
 > The GHCR package must be **Public**, or the pull fails with `Head "https://ghcr.io/v2/.../manifests/latest": unauthorized` and nothing (including Watchtower auto-updates) can pull the image. After the publish workflow pushes the image for the first time the package defaults to private; make it public once under the org or user Packages page (foodassistant, Package settings, Danger Zone, Change visibility, Public). If you must keep it private, run `docker login ghcr.io` with a token that has `read:packages` on each host before pulling.
 
-Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v1.3.1` in `.env`.
+Pin a specific version instead of latest by setting `FOODASSISTANT_TAG=v0.7.0` in `.env`.
 
 **Automatic updates (server):** the prod compose runs Watchtower, which checks for a new Pantry Raider image and recreates the service container when one is published. This is **on by default** so a server install stays current without intervention, and updated Python dependencies come along for free because they are baked into the image. It only touches the Pantry Raider container (the others stay on their pinned versions) and polls daily (override with `WATCHTOWER_POLL_INTERVAL` seconds in `.env`).
 
@@ -206,7 +212,7 @@ To turn auto-updates off, stop the one service or pin to a fixed version:
 ```bash
 docker compose stop watchtower        # disable auto-updates
 # or pin a version in .env so no newer image is ever picked up:
-# FOODASSISTANT_TAG=v1.3.1
+# FOODASSISTANT_TAG=v0.7.0
 ```
 
 Watchtower needs the Docker socket, which is host-root-equivalent access; that is the tradeoff for hands-off updates on a server with no host bridge.

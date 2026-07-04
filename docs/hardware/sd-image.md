@@ -37,7 +37,7 @@ Raspberry Pi's security updates. (Maintainer/build details:
    Raspberry Pi OS Lite (64-bit)*. **Choose Storage:** your card.
 3. Click the gear / **Edit Settings** and set:
    - **Hostname:** `foodassistant` (this becomes `foodassistant.local`).
-   - **Enable SSH** (use a password or your public key) — required for Step 3.
+   - **Enable SSH** (use a password or your public key); it is required for Step 3.
    - **Wi-Fi** credentials (skip if using Ethernet).
    - **Locale / timezone.**
 4. **Write** the image, then eject the card.
@@ -70,9 +70,9 @@ The installer shows what it detected (board, display, Stream Deck) and asks one
 question:
 
 - **Deployment mode**
-  - **Pi Hosted** — run the full Pantry Raider stack on this Pi (Pantry Raider +
+  - **Pi Hosted**: run the full Pantry Raider stack on this Pi (Pantry Raider +
     Grocy). Pick this for a normal appliance.
-  - **Pi Remote** — thin client. Installs **no** Docker, Grocy, or Mealie; this
+  - **Pi Remote**: thin client. Installs **no** Docker, Grocy, or Mealie; this
     device only drives a kiosk and/or Stream Deck pointed at a Pantry Raider
     server already running elsewhere on your LAN. Viable on a Pi 3. It asks for
     that server's URL.
@@ -176,8 +176,12 @@ systemctl status foodassistant-kiosk
 systemctl restart foodassistant-kiosk
 ```
 
-A display added later still lights up the kiosk after a re-run (see
-Troubleshooting).
+A display added later lights the kiosk up on its own: the device notices the
+screen within about a minute of it being plugged in and provisions (or starts)
+the kiosk with no reflash or SSH needed. The Settings Hardware pane shows the
+same detection with a one-click Enable button. On a kiosk device the boot
+console is also quieted, so the screen stays clean from power-on until the app
+appears.
 
 ## Hardware coverage
 
@@ -202,7 +206,7 @@ See [supported-hardware.md](supported-hardware.md) for the full matrix.
 IP, or install Bonjour (Windows) / ensure `avahi-daemon` is running on the
 device (`systemctl status avahi-daemon`). Find the IP from your router.
 
-**The install seems stuck.** It's pulling Docker images: give it 5–10 minutes on
+**The install seems stuck.** It's pulling Docker images: give it 5 to 10 minutes on
 a slow connection. The provisioner logs to
 `/var/log/foodassistant-firstboot.log` (`tail -f` it in another SSH session).
 

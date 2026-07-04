@@ -158,6 +158,6 @@ scanner is captured with the `keyboard_remote` integration, an automation buffer
 the typed digits, and a `rest_command` posts the completed barcode to
 `/pending/scan` on the Pantry Raider LAN URL. `keyboard_remote` only works on
 Home Assistant OS / Supervised. See
-[homeassistant/barcode-scanner.md](../homeassistant/barcode-scanner.md) for the
+[homeassistant/barcode-scanner.md](https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/homeassistant/barcode-scanner.md) for the
 full walkthrough, and remember the LAN-URL caveat above for all REST sensors and
 commands.

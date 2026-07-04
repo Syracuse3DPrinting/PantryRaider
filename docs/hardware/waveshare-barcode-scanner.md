@@ -133,5 +133,5 @@ up against Open Food Facts with your defaults applied, and saved to **Pending**.
 commit from the Pending page. On a Pi Remote the scan is saved on the main server, so it
 shows up in the server's Pending list and on every device at once.
 
-See also: [Headless wireless barcode scanner via Home Assistant](../../homeassistant/barcode-scanner.md)
+See also: [Headless wireless barcode scanner via Home Assistant](https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/homeassistant/barcode-scanner.md)
 for the alternative `keyboard_remote` automation path.

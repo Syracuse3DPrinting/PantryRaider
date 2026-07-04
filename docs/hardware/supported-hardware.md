@@ -11,7 +11,7 @@ good experience.
 
 | Resource | Minimum | Recommended |
 |----------|---------|-------------|
-| Architecture | ARM64 (aarch64) or x86-64 | — |
+| Architecture | ARM64 (aarch64) or x86-64 | 64-bit only |
 | RAM | 2 GB | 4 GB |
 | Storage | 16 GB | 32 GB+ (Mealie recipe images add up) |
 | OS | 64-bit Linux with Docker + Compose v2 | Raspberry Pi OS Lite (64-bit) / Debian / Ubuntu Server |
@@ -30,7 +30,7 @@ AI provider, or a machine with 16 GB+ if you want fully local inference.
 | Raspberry Pi 4B | 4 GB / 8 GB | ✅ Supported | Solid; 2 GB works for Grocy-only setups. |
 | Raspberry Pi 4B | 2 GB | 🟡 Limited | Pantry Raider + Grocy only. Mealie may be tight. |
 | Generic x86-64 mini PC (N100, etc.) | 8 GB+ | ✅ Supported | Runs everything; best for local Ollama. |
-| Raspberry Pi 3B+ | 1 GB | ❌ Unsupported | Insufficient RAM for the full stack. |
+| Raspberry Pi 3B+ | 1 GB | 🟡 Pi Remote only | Insufficient RAM for the full stack; fine as a thin Pi Remote kiosk or Stream Deck. |
 | Raspberry Pi Zero 2 W | 512 MB | ❌ Unsupported | Insufficient RAM. |
 
 > **Status key:** ✅ Supported (tested, expected to work well) · 🟡 Limited (works with
@@ -59,7 +59,9 @@ phone), no dedicated hardware required.
 
 A display is optional: Pantry Raider is a web app you can reach from any browser on your
 network. For a dedicated touchscreen setup, DSI and HDMI capacitive touch panels both
-work; see the [SD-card image guide](sd-image.md) for kiosk-mode setup.
+work; see the [SD-card image guide](sd-image.md) for kiosk-mode setup. A 7 inch screen
+or larger is the recommended minimum for the kiosk; a 4 inch panel is workable when a
+Stream Deck handles the navigation and the screen is used for content.
 
 ### Stream Deck controllers
 
@@ -76,7 +78,7 @@ interface on a headless box.
 | Stream Deck XL / Module 32 | 32 | Supported | Plenty of spare keys. |
 
 Setup, configuration, and the controller service live in
-[`streamdeck/`](../../streamdeck/README.md). The connection is plain USB and
+[`streamdeck/`](https://github.com/Syracuse3DPrintingOrg/PantryRaider/blob/main/streamdeck/README.md). The connection is plain USB and
 the driver is pure Python, so no Elgato software is involved. Use a
 data-capable USB cable (charge-only cables leave the deck lit but undetected)
 and a full-strength power supply; see

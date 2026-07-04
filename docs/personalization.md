@@ -78,6 +78,77 @@ full-screen launcher that works like an on-screen Stream Deck, served at
 On a Pi appliance the section shows a toggle at the top to switch between
 the on-screen Start Page and the physical deck's editor.
 
+## Screen & Sleep
+
+Settings, Personalization, Screen & Sleep gathers everything about the screen:
+interface scale, rotation, display sleep, the screensaver, the on-screen
+navigation bar and keyboard, quiet mode, and (on a Pi appliance) the scheduled
+reboot.
+
+- **Display sleep** switches a kiosk panel off after the idle minutes; a touch,
+  key press, or Stream Deck button wakes it. On kits with the built-in
+  accelerometer, **Wake on motion** also wakes the screen when the device is
+  moved or bumped (Auto turns it on exactly when the sensor is fitted).
+- **Scheduled reboot** (Pi appliances) restarts the device automatically:
+  Off, Nightly, or Weekly with a day-of-week picker, at the time you choose.
+- **Quiet mode** silences the timer chime on this device, leaving the
+  highlighted timer row as the only signal.
+- **On-screen keyboard**: in kiosk mode a touch keyboard slides up whenever a
+  text field is tapped, with shift, a digits row, and Enter, so names,
+  barcodes, and searches can be typed without a physical keyboard. On by
+  default; turn it off on a kiosk with a keyboard attached (per device).
+
+A kiosk also plays a short branded intro when it boots: the raccoon fades in,
+holds a moment, and dissolves into the app. It plays once per boot and a touch
+or key press skips it.
+
+## Screensaver
+
+The screensaver is the softer counterpart to Display sleep: after the idle
+minutes the page dims to a moving clock instead of powering the panel off,
+which suits panels that wake slowly or misbehave when switched off. Any touch
+brings the page right back. It is configured per device in Screen & Sleep:
+
+- **Style**: the bouncing Pantry Raider logo (with a slow, normal, or fast
+  glide speed), or a **photo slideshow** from a USB flash drive. Put images in
+  a folder named photos or pictures at the top of the drive and they fill the
+  screen with a slow pan and crossfade; with no drive or no photos the saver
+  falls back to the logo, so the setting is always safe to leave on.
+- **Running timers float along**: each timer drifts around as a pill with its
+  name, live countdown, and a food icon picked from the name. A pill in its
+  last minute breathes a pulsing pink glow, and a finished timer pulses red
+  and amber, reads Done, and spins until it is dismissed.
+- **Screensaver on every browser** extends the saver beyond the kiosk: any
+  browser viewing the install (a desktop or a phone included) dims after the
+  same idle minutes. Because of this, the screensaver settings also appear on
+  server installs.
+- **Spanning the Stream Deck**: a Screensaver position option in the Stream
+  Deck settings tells the saver which side of the screen the deck sits on.
+  The bouncing logo (and a finished timer's Done pill) then glides off the
+  panel and across the deck keys as if the two were one surface, and the deck
+  joins the screensaver instead of blanking. Pressing any key wakes both.
+- **Test screensaver** starts the saver immediately with the options picked in
+  the form, no waiting for the idle timeout. There is also a Screensaver
+  button on the Timers page for the same jump.
+- The saver stays out of the way of cameras: it never starts while the camera
+  page is open or a Home Assistant camera pop-up is on screen.
+
+## Kitchen timers
+
+Timers are shared: they live on the main server, so the Timers page, the
+floating timer window, the Stream Deck keys, the Start Page keys, and every
+satellite screen show the same countdowns. Timers has its own navigation tab.
+
+- The Timers page has one-tap presets (1 to 60 minutes) and a custom timer
+  with an optional name. Each running timer has a **+1 min** button and a
+  Cancel button (Dismiss once it finishes), and a **Clear all** button stops
+  every timer at once after a confirmation.
+- On a Stream Deck or the Start Page, a timer key shows the live countdown on
+  its face: a press starts it, each press while it runs adds a minute, a press
+  on a finished timer dismisses it, and holding the key resets it.
+- Step durations in the active recipe ("simmer 20 minutes") become ready-to-
+  start named timers on the On the Line page and the deck's timer keys.
+
 ## Weather
 
 The Weather page (`/ui/weather`, also a navigation tab) shows the current

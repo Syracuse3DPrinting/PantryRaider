@@ -26,7 +26,8 @@ Interactive docs (Swagger UI) are available at `/docs` when the app is running.
 | `GET /ui/weather` | Full forecast page for the kiosk |
 | `GET /ui/convert` | Unit converter and measurement cheat sheet |
 | `GET /ui/kitchen-guide` | Kitchen reference guide |
-| `GET /ui/timers` | Standalone timer page |
+| `GET /ui/timers` | Shared kitchen timers (presets, custom timers, +1 min, Clear all) |
+| `GET /ui/start` | Start Page, the optional on-screen Stream Deck launcher |
 | `GET /ui/about` | About and credits |
 
 ## API Endpoints
@@ -49,7 +50,9 @@ Interactive docs (Swagger UI) are available at `/docs` when the app is running.
 ## Current Recipe and Timers
 
 The active recipe and timers live in server memory so every surface (web UI,
-Stream Deck, satellites) shares one state.
+Stream Deck, satellites) shares one state. On a Pi Remote the timer endpoints
+forward to the main server, so a timer started at any screen or deck shows up,
+can be extended, and can be cancelled everywhere.
 
 | Endpoint | Description |
 |---|---|
@@ -63,12 +66,16 @@ Stream Deck, satellites) shares one state.
 | `GET /timers` | List every timer with fresh remaining/state |
 | `POST /timers` | Create and start a timer for `seconds` |
 | `GET /timers/{id}` | Return one timer's current state |
+| `POST /timers/{id}/extend` | Add seconds to a running timer (the +1 min button; an expired timer cannot be extended) |
 | `DELETE /timers/{id}` | Cancel and remove a timer |
+| `DELETE /timers` | Clear every timer at once (the Clear all button) |
 
 ## Barcode Scanning and Scanner Mode
 
 A single physical scanner can mean different things depending on what the user is
-doing. The mode is process-local and in-memory, like the active recipe and timers.
+doing. The mode is shared by every worker process and survives an app restart, so
+the scanner comes back in the mode it was left in. The Manage Pantry page's four
+tabs (Stock up, Use stock, Shopping list, Audit stock) are this same mode.
 
 | Endpoint | Description |
 |---|---|

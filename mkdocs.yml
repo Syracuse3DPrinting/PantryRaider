@@ -4,6 +4,13 @@ repo_url: https://github.com/Syracuse3DPrintingOrg/PantryRaider
 repo_name: Syracuse3DPrintingOrg/PantryRaider
 docs_dir: docs
 
+# Keep internal working notes and the separately deployed browser demo out of
+# the published site (the demo's README also collides with its index.html).
+exclude_docs: |
+  demo/README.md
+  hardware-bead-drafts.md
+  design/
+
 theme:
   name: material
   palette:

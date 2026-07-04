@@ -17,14 +17,24 @@ Mini, extra actions move onto further pages reached by a "More" key.
 
 ## What the keys do
 
-Defaults, in order:
+The common keys:
 
 * **Expiring** shows the number of items expired or expiring within the soon
   window. Press to refresh immediately.
 * **Pending** shows the number of scanned items waiting to commit. Press to
   refresh.
 * **Commit** commits every pending scan into the inventory.
-* **Add**, **Stock**, **Cook** open the matching pages on an attached display.
+* **Pantry**, **Stock**, **Cook**, and the other nav keys open the matching
+  pages on an attached display.
+* **Scan Mode** cycles the barcode scanner between adding stock, consuming
+  stock, adding to the shopping list, and a read-only pantry audit, and shows
+  the active mode on its face. The mode is shared with the Manage Pantry
+  page's tabs, so the deck and every screen agree.
+* **Timer keys** run the shared kitchen timers and show the live countdown on
+  the key face: a press starts the timer, each press while it runs adds a
+  minute, a press on a finished (flashing) timer dismisses it, and holding
+  the key resets it. Timers live on the main server, so they also appear on
+  the Timers page and every other screen, and vice versa.
 * **Brightness** cycles the deck brightness.
 * **Unlock** (the `pin` action) turns the deck into a numeric keypad so you can
   unlock the PIN-locked app without a keyboard or touchscreen. Tap the digits
@@ -34,6 +44,14 @@ Defaults, in order:
 
 Status keys repaint on a timer (every 30 seconds by default), so the expiring
 and pending counts stay current without you touching anything.
+
+The key layout, custom keys (Home Assistant actions, quick-add shopping items,
+timers, weather, cameras, media, macros), the key style, and the icon colours
+are all edited in the app under Settings, Personalization, Start Page & Stream
+Deck; the deck picks changes up on its next sync. While the service starts,
+the keys show the Pantry Raider raccoon instead of the factory logo, and with
+a screensaver position set in those settings the deck joins the kiosk
+screensaver instead of blanking.
 
 ## Install
 
