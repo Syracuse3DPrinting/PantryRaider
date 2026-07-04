@@ -70,6 +70,46 @@ async def download_logs():
     )
 
 
+@router.get("/support-bundle")
+async def support_bundle():
+    """Stream a one-click support bundle zip (FoodAssistant-w7mb).
+
+    App side: version manifest, redacted settings, the diagnostics log, state
+    files, the last update-check result, and Python/package versions. On a Pi
+    appliance the host bridge contributes a root-level report (unit states,
+    journal tail, display and input probes); the bridge being down just leaves
+    a note in the zip, it never fails the download. Everything in the zip is
+    scrubbed of the configured secret values.
+    """
+    from ..hardware import is_raspberry_pi
+    from ..services import support_bundle as sb
+
+    host_sections = None
+    if is_raspberry_pi():
+        import httpx
+        try:
+            # The bridge shells out to systemctl and journalctl; give it time.
+            async with httpx.AsyncClient(timeout=20.0) as c:
+                r = await c.get("http://127.0.0.1:9299/support-bundle")
+            if r.status_code == 200:
+                data = r.json()
+                sections = data.get("sections")
+                if isinstance(sections, dict):
+                    host_sections = {str(k): str(v) for k, v in sections.items()}
+        except Exception as e:
+            logger.info("Support bundle: host bridge unavailable (%s)", e)
+
+    files = sb.build_bundle_files(settings, host_sections)
+    zip_bytes = sb.build_zip_bytes(files)
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return StreamingResponse(
+        io.BytesIO(zip_bytes),
+        media_type="application/zip",
+        headers={"Content-Disposition":
+                 f'attachment; filename="foodassistant-support-{stamp}.zip"'},
+    )
+
+
 @router.get("/check-update")
 async def check_update():
     """Compare the running version with the latest on the main branch.

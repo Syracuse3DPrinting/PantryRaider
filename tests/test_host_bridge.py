@@ -1667,3 +1667,89 @@ def test_authorized_denies_wrong_token_with_401(monkeypatch):
     d = Dummy()
     assert bridge._Handler._authorized(d) is False
     assert d.sent[0] == 401
+# --- Support bundle helpers (FoodAssistant-w7mb) ---------------------------
+
+def test_run_capture_notes_a_missing_command():
+    out = bridge._run_capture(["definitely-not-a-command-xyz"])
+    assert out.startswith("note: definitely-not-a-command-xyz is not installed")
+
+
+def test_support_unit_names_parses_list_unit_files():
+    def fake_run(cmd, timeout=15):
+        return ("foodassistant-host-bridge.service enabled enabled\n"
+                "foodassistant-kiosk.service enabled enabled\n"
+                "somethingelse.service static -\n")
+    assert bridge._support_unit_names(fake_run) == [
+        "foodassistant-host-bridge.service", "foodassistant-kiosk.service"]
+
+
+def test_support_units_reports_enabled_and_active():
+    def fake_run(cmd, timeout=15):
+        if cmd[:2] == ["systemctl", "list-unit-files"]:
+            return "foodassistant-kiosk.service enabled enabled"
+        if cmd[:2] == ["systemctl", "is-enabled"]:
+            return "enabled"
+        if cmd[:2] == ["systemctl", "is-active"]:
+            return "active"
+        return ""
+    out = bridge._support_units(fake_run)
+    assert out == "foodassistant-kiosk.service: enabled=enabled active=active"
+
+
+def test_support_units_notes_when_none_found():
+    out = bridge._support_units(lambda cmd, timeout=15: "")
+    assert out.startswith("note: no foodassistant-* systemd units")
+
+
+def test_support_dropins_reads_unit_files_and_dropins(tmp_path):
+    (tmp_path / "foodassistant-kiosk.service").write_text("[Unit]\nkiosk\n")
+    d = tmp_path / "foodassistant-kiosk.service.d"
+    d.mkdir()
+    (d / "override.conf").write_text("[Service]\noverride\n")
+    (tmp_path / "unrelated.service").write_text("nope")
+    out = bridge._support_dropins(str(tmp_path))
+    assert "foodassistant-kiosk.service =====" in out
+    assert "kiosk" in out
+    assert "override" in out
+    assert "nope" not in out
+
+
+def test_support_helper_hashes(tmp_path):
+    import hashlib
+    p = tmp_path / "foodassistant-update"
+    p.write_bytes(b"#!/bin/sh\necho hi\n")
+    (tmp_path / "other-tool").write_bytes(b"x")
+    out = bridge._support_helper_hashes(str(tmp_path))
+    expected = hashlib.sha1(p.read_bytes()).hexdigest()
+    assert out == f"{expected}  {p}"
+
+
+def test_support_drm_lists_every_connector(tmp_path):
+    c1 = tmp_path / "card0-HDMI-A-1"
+    c1.mkdir()
+    (c1 / "status").write_text("connected\n")
+    c2 = tmp_path / "card0-DSI-1"
+    c2.mkdir()
+    (c2 / "status").write_text("disconnected\n")
+    out = bridge._support_drm(str(tmp_path))
+    assert "card0-HDMI-A-1: connected" in out
+    assert "card0-DSI-1: disconnected" in out
+
+
+def test_read_file_or_note_missing_and_tail(tmp_path):
+    assert bridge._read_file_or_note(str(tmp_path / "gone")).startswith("note: ")
+    big = tmp_path / "big.log"
+    big.write_text("x" * 100)
+    out = bridge._read_file_or_note(str(big), max_bytes=10)
+    assert out.startswith("note: showing the last 10 bytes of 100")
+
+
+def test_support_bundle_has_every_section_and_never_raises():
+    result = bridge._support_bundle(lambda cmd, timeout=15: "stub output")
+    assert result["ok"] is True
+    sections = result["sections"]
+    for key in ("systemd-units", "systemd-unit-files", "boot-cmdline",
+                "helper-sha1", "bridge-journal", "input-devices",
+                "drm-connectors", "disk-usage", "throttled", "update-log"):
+        assert key in sections, key
+        assert isinstance(sections[key], str) and sections[key]

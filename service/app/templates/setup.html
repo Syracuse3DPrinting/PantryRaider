@@ -2527,6 +2527,9 @@ docker compose up -d</code></pre>
             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="downloadLogs()">
               <i class="bi bi-download me-1"></i>Download logs
             </button>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="downloadSupportBundle()">
+              <i class="bi bi-file-earmark-zip me-1"></i>Download support bundle
+            </button>{{ info('One zip with everything useful for a bug report: version, settings, logs, and (on a Pi) the device health report. Attach it when reporting a problem. Passwords and API keys are removed.') }}
             <span class="test-result ms-2" id="logging-result"></span>
           </div>
 
@@ -5660,6 +5663,18 @@ async function toggleDebugLogging(box) {
 function downloadLogs() {
   // A plain navigation triggers the attachment download without fetch/blob.
   window.location = 'admin/logs/download';
+}
+
+function downloadSupportBundle() {
+  // Same plain-navigation trick; on a Pi the server also asks the host bridge
+  // for its report, so the zip can take a few seconds to start downloading.
+  const out = document.getElementById('logging-result');
+  if (out) {
+    out.className = 'test-result ms-2 text-secondary';
+    out.textContent = 'Building the bundle, the download starts in a moment...';
+    setTimeout(() => { if (out.textContent.startsWith('Building')) out.textContent = ''; }, 12000);
+  }
+  window.location = 'admin/support-bundle';
 }
 
 // Satellite: passively detect whether a newer version exists, without touching

@@ -35,6 +35,7 @@ POST /mealie/start         start Mealie in the background (docker compose --prof
 GET  /logs/<name>          tail of an install/start log (name in mealie/kiosk/streamdeck/grocy)
 GET  /hardware/status      display/Stream Deck presence + service/install state
 GET  /system/health        power/thermal/disk warnings (vcgencmd get_throttled, temp, df)
+GET  /support-bundle       host facts for the app's support zip (units, journal, probes)
 POST /kiosk/install        provision the kiosk service (display attached later)
 POST /streamdeck/install   provision the Stream Deck service (attached later)
 GET  /ap/status            whether the fallback AP is active {active: bool}
@@ -1580,6 +1581,160 @@ def _system_health():
     }
 
 
+# --- Support bundle (FoodAssistant-w7mb) -----------------------------------
+# GET /support-bundle returns a JSON report of host-level facts the app folds
+# into its downloadable support zip: systemd unit states, drop-in contents,
+# helper hashes, journal and log tails, display and input probes. Every probe
+# is best-effort: a missing command or file yields a "note: ..." line in its
+# section, never an error, so a partial device still produces a full bundle.
+
+_SUPPORT_UPDATE_LOG = "/var/log/foodassistant-update.log"
+_SUPPORT_TAIL_BYTES = 32768
+
+
+def _run_capture(cmd, timeout=15):
+    """Run a command and return its stdout as text, degrading to a note.
+
+    A nonzero exit with output still returns the output (df and systemctl
+    exit nonzero for benign reasons); anything unrunnable becomes a one-line
+    note so support bundle sections never raise.
+    """
+    try:
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        out = (r.stdout or "").strip()
+        if out:
+            return out
+        err = (r.stderr or "").strip()
+        if r.returncode != 0:
+            return "note: %s exited %d: %s" % (cmd[0], r.returncode, err or "no output")
+        return err or ("note: %s produced no output" % cmd[0])
+    except FileNotFoundError:
+        return "note: %s is not installed on this device" % cmd[0]
+    except subprocess.TimeoutExpired:
+        return "note: %s timed out" % cmd[0]
+    except Exception as e:
+        return "note: %s failed: %s" % (cmd[0], e)
+
+
+def _read_file_or_note(path, max_bytes=_SUPPORT_TAIL_BYTES):
+    """Tail of a text file, or a note when it is missing or unreadable."""
+    try:
+        with open(path, "rb") as f:
+            f.seek(0, os.SEEK_END)
+            size = f.tell()
+            f.seek(max(0, size - max_bytes))
+            data = f.read()
+        text = data.decode("utf-8", "replace")
+        if size > max_bytes:
+            text = "note: showing the last %d bytes of %d\n%s" % (max_bytes, size, text)
+        return text if text.strip() else "note: %s is empty" % path
+    except FileNotFoundError:
+        return "note: %s does not exist" % path
+    except OSError as e:
+        return "note: could not read %s: %s" % (path, e)
+
+
+def _support_unit_names(run=_run_capture):
+    """Names of every foodassistant-* systemd unit file on the device."""
+    out = run(["systemctl", "list-unit-files", "foodassistant-*",
+               "--no-legend", "--no-pager"])
+    names = []
+    for line in out.splitlines():
+        first = line.split()[0] if line.split() else ""
+        if first.startswith("foodassistant-"):
+            names.append(first)
+    return names
+
+
+def _support_units(run=_run_capture):
+    """One line per foodassistant-* unit: name, enabled state, active state."""
+    names = _support_unit_names(run)
+    if not names:
+        return "note: no foodassistant-* systemd units found"
+    lines = []
+    for name in names:
+        enabled = run(["systemctl", "is-enabled", name]).splitlines()
+        active = run(["systemctl", "is-active", name]).splitlines()
+        lines.append("%s: enabled=%s active=%s" % (
+            name,
+            enabled[0] if enabled else "?",
+            active[0] if active else "?",
+        ))
+    return "\n".join(lines)
+
+
+def _support_dropins(root="/etc/systemd/system"):
+    """Contents of every foodassistant-* unit file and drop-in under root."""
+    import glob
+    paths = sorted(
+        glob.glob(os.path.join(root, "foodassistant-*"))
+        + glob.glob(os.path.join(root, "foodassistant-*.d", "*"))
+    )
+    parts = []
+    for p in paths:
+        if os.path.isfile(p):
+            parts.append("===== %s =====\n%s" % (p, _read_file_or_note(p)))
+    return "\n\n".join(parts) or "note: no foodassistant-* unit files under %s" % root
+
+
+def _support_helper_hashes(bin_dir=_HELPER_BIN_DIR):
+    """sha1 of each installed foodassistant-* helper, so version skew between
+    devices (or against the repo) is visible at a glance."""
+    import glob
+    import hashlib
+    lines = []
+    for p in sorted(glob.glob(os.path.join(bin_dir, "foodassistant-*"))):
+        if not os.path.isfile(p):
+            continue
+        try:
+            with open(p, "rb") as f:
+                digest = hashlib.sha1(f.read()).hexdigest()
+            lines.append("%s  %s" % (digest, p))
+        except OSError as e:
+            lines.append("note: could not hash %s: %s" % (p, e))
+    return "\n".join(lines) or "note: no foodassistant-* helpers under %s" % bin_dir
+
+
+def _support_boot_cmdline():
+    for path in ("/boot/firmware/cmdline.txt", "/boot/cmdline.txt"):
+        if os.path.exists(path):
+            return "%s:\n%s" % (path, _read_file_or_note(path))
+    return "note: no boot cmdline file found"
+
+
+def _support_drm(root="/sys/class/drm"):
+    """Every DRM connector's status, connected or not, one per line."""
+    import glob
+    lines = []
+    for status_path in sorted(glob.glob(os.path.join(root, "*", "status"))):
+        name = os.path.basename(os.path.dirname(status_path))
+        lines.append("%s: %s" % (name, _read_sysfs(status_path) or "unreadable"))
+    return "\n".join(lines) or "note: no DRM connectors under %s" % root
+
+
+def _support_bundle(run=_run_capture):
+    """Assemble the host-side support report: {section name: text}.
+
+    Section names become file names inside the app's support zip (host/<name>
+    .txt). Everything is text and everything degrades to a note.
+    """
+    sections = {
+        "systemd-units": _support_units(run),
+        "systemd-unit-files": _support_dropins(),
+        "boot-cmdline": _support_boot_cmdline(),
+        "helper-sha1": _support_helper_hashes(),
+        "bridge-journal": run(["journalctl", "-u", "foodassistant-host-bridge",
+                               "-n", "200", "--no-pager"]),
+        "input-devices": _read_file_or_note("/proc/bus/input/devices"),
+        "drm-connectors": _support_drm(),
+        "disk-usage": run(["df", "-h", INSTALL_DIR])
+                      if os.path.isdir(INSTALL_DIR) else run(["df", "-h", "/"]),
+        "throttled": run(["vcgencmd", "get_throttled"]),
+        "update-log": _read_file_or_note(_SUPPORT_UPDATE_LOG),
+    }
+    return {"ok": True, "sections": sections}
+
+
 def _streamdeck_present():
     try:
         out = subprocess.run(["lsusb"], capture_output=True, text=True, timeout=5).stdout
@@ -2245,6 +2400,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._hardware_status()
         elif self.path == "/system/health":
             self._system_health()
+        elif self.path == "/support-bundle":
+            self._support_bundle_get()
         elif self.path == "/streamdeck/config":
             self._streamdeck_get_config()
         elif self.path == "/streamdeck/actions":
@@ -2892,6 +3049,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
 
+    def _support_bundle_get(self):
+        """Host facts for the app's downloadable support zip (FoodAssistant-w7mb)."""
+        try:
+            self._send(200, _support_bundle())
+        except Exception as e:
+            self._send(500, {"ok": False, "error": str(e)})
+
     def _provision(self, step, unit):
         if _installing(step):
             self._send(200, {"ok": True, "started": False, "message": "Already installing."})
@@ -2980,6 +3144,14 @@ class _Handler(http.server.BaseHTTPRequestHandler):
                 })
                 return
             result["log"] = out
+            # Keep the latest update transcript on disk so the support bundle
+            # can show what the last OTA did (best-effort, overwrite in place).
+            try:
+                with open(_SUPPORT_UPDATE_LOG, "w") as lf:
+                    lf.write("=== foodassistant-update at %s ===\n%s\n"
+                             % (time.strftime("%Y-%m-%d %H:%M:%S"), out))
+            except OSError:
+                pass
             self._send(200 if result.get("ok") else 500, result)
         except subprocess.TimeoutExpired:
             self._send(500, {"ok": False, "error": "update timed out"})

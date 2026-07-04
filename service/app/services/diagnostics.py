@@ -75,6 +75,19 @@ def _redactions(secrets: "list[str]") -> "list[str]":
     return sorted(seen, key=len, reverse=True)
 
 
+def redact_text(text: str, secrets: "list[str] | None") -> str:
+    """Replace every configured secret value in a text blob with [redacted].
+
+    The single scrubbing point for anything user-shareable (the log download
+    and every file in the support bundle), so redaction behaves the same
+    everywhere: values shorter than 4 characters are ignored (too generic to
+    scrub safely) and longer values are replaced before their substrings.
+    """
+    for value in _redactions(secrets or []):
+        text = text.replace(value, "[redacted]")
+    return text
+
+
 def read_log_text(data_dir: str, secrets: "list[str] | None" = None) -> str:
     """Return the current log plus rolled-over files, oldest first, with any
     configured secret values replaced by [redacted]. Empty string when no log
@@ -88,10 +101,7 @@ def read_log_text(data_dir: str, secrets: "list[str] | None" = None) -> str:
             parts.append(_safe_read(rolled))
     if base.exists():
         parts.append(_safe_read(base))
-    text = "".join(parts)
-    for value in _redactions(secrets or []):
-        text = text.replace(value, "[redacted]")
-    return text
+    return redact_text("".join(parts), secrets)
 
 
 def _safe_read(p: Path) -> str:
