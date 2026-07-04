@@ -279,6 +279,7 @@ class SetupPayload(BaseModel):
     ha_events_enabled: bool = False
     ha_camera_popup_seconds: int = 20
     auto_update: bool = True
+    update_channel: str = "main"
     convert_custom_rows: list = []
     floating_nav_position: str = ""
     floating_nav_orientation: str = ""
@@ -1195,6 +1196,9 @@ async def save_setup(payload: SetupPayload):
     # Same for an unknown wake-on-motion mode: keep the stored value.
     if "wake_on_motion" in data and data["wake_on_motion"] not in ("auto", "on", "off"):
         data.pop("wake_on_motion", None)
+    # And the update channel: only "stable" (releases) or "main" (every change).
+    if "update_channel" in data and data["update_channel"] not in ("stable", "main"):
+        data.pop("update_channel", None)
     if data.get("remote_server_url"):
         data["remote_server_url"] = data["remote_server_url"].rstrip("/")
     settings.save(data)
@@ -1218,6 +1222,13 @@ async def save_setup(payload: SetupPayload):
     # so the system clock and the reboot timer match the saved settings. Best
     # effort: a missing/old bridge just leaves the host as-is.
     if settings.is_pi_appliance():
+        # Mirror the update channel to the host as well: the OTA helper runs on
+        # the host and reads /etc/foodassistant/update-channel, which the app
+        # container cannot write itself, so the bridge lands it there (wkwx).
+        # Best effort; the update trigger re-pushes it so a stale bridge only
+        # delays the switch by one update.
+        if "update_channel" in data:
+            await _push_update_channel(settings.update_channel)
         if data.get("timezone"):
             try:
                 async with bridge_client(timeout=15.0) as c:
@@ -1968,9 +1979,28 @@ async def update_software():
     return JSONResponse(await run_host_bridge_update())
 
 
+async def _push_update_channel(channel: str) -> bool:
+    """Land the update channel in /etc/foodassistant/update-channel via the host
+    bridge, where the OTA helper reads it (FoodAssistant-wkwx). Best effort: an
+    old bridge without the route answers 404 and the channel just stays as-is
+    until the next update refreshes the bridge. Never raises."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as c:
+            r = await c.post(f"{_HOST_BRIDGE}/update/channel",
+                             json={"channel": channel})
+        return r.status_code == 200
+    except Exception:
+        return False
+
+
 async def run_host_bridge_update() -> dict:
     """POST the host bridge OTA and return its JSON result. Shared by the manual
-    Update button and the automatic-update scheduler (FoodAssistant-k2kk)."""
+    Update button and the automatic-update scheduler (FoodAssistant-k2kk).
+
+    The current update channel is re-pushed first so the helper always follows
+    the saved setting, even when the settings-save push was missed (bridge down
+    or predating the /update/channel route)."""
+    await _push_update_channel(settings.update_channel)
     try:
         async with bridge_client(timeout=620.0) as c:
             r = await c.post(f"{_HOST_BRIDGE}/update")

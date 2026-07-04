@@ -232,6 +232,25 @@ def _push_timezone(tz: str, timeout: float = 4.0) -> bool:
         return False
 
 
+def _push_update_channel(channel: str, timeout: float = 4.0) -> bool:
+    """Mirror the fleet update channel to this satellite's host, where the OTA
+    helper reads it (/etc/foodassistant/update-channel, FoodAssistant-wkwx).
+
+    Best-effort and only meaningful on a Pi appliance. An old bridge without the
+    /update/channel route answers 404; the update trigger re-pushes the channel,
+    so the switch lands once the bridge has refreshed. Never raises."""
+    try:
+        from ..hardware import is_raspberry_pi
+        if channel not in ("stable", "main") or not is_raspberry_pi():
+            return False
+        resp = httpx.post(f"{_HOST_BRIDGE}/update/channel",
+                          json={"channel": channel}, timeout=timeout)
+        return resp.status_code == 200
+    except Exception as exc:  # bridge down / old: leave the host file as-is
+        logger.warning("satellite sync: could not push update channel: %s", exc)
+        return False
+
+
 def _apply_defaults(rows: list[dict]) -> int:
     """Replace the local expiry-defaults table with the server's copy.
 
@@ -452,6 +471,11 @@ def _do_sync_from_upstream(timeout: float = 8.0) -> dict:
     # value to this satellite's own host clock so its logs and kiosk read right.
     if "timezone" in applied:
         _push_timezone(settings.timezone)
+
+    # The fleet shares one update channel too; land the pulled value on this
+    # satellite's host so its own OTA helper follows it (wkwx).
+    if "update_channel" in applied:
+        _push_update_channel(settings.update_channel)
 
     command = data.get("command")
     if command == "resync":

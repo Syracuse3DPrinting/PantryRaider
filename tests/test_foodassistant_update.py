@@ -87,6 +87,10 @@ def rig(tmp_path):
         "VENV_DIR": str(tmp_path / "no-venv"),
         "SD_DST": str(tmp_path / "no-deck" / "pkg"),
         "INSTALL_DIR": str(tmp_path / "no-install"),
+        # Keep the channel plumbing hermetic: never read or write the real
+        # /etc/foodassistant files, even when the test host is a deployed Pi.
+        "CHANNEL_FILE": str(tmp_path / "update-channel"),
+        "PIN_STATE_FILE": str(tmp_path / "update-tag-restore"),
     }
     return {"origin": origin, "work": work, "device": device,
             "bin": bin_dir, "env": env}
@@ -477,6 +481,169 @@ def test_ap_watchdog_sbin_copy_untouched_when_current(rig, tmp_path):
     before = installed.stat().st_mtime_ns
     _, out = run_update(rig)
     assert installed.stat().st_mtime_ns == before
+
+
+# -- update channel (FoodAssistant-wkwx) --------------------------------------
+
+def _full_head(repo):
+    return subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo,
+                          check=True, capture_output=True, text=True).stdout.strip()
+
+
+def _tag_head(rig, name):
+    """Tag the work repo's HEAD and push the tag to origin."""
+    _git(rig["work"], "tag", name)
+    _git(rig["work"], "push", "origin", name)
+
+
+def _advance_main(rig, marker):
+    """Push a new commit to origin main; returns its full hash."""
+    (rig["work"] / "scripts" / "image-build" / "foodassistant-set-rotation").write_text(
+        f"#!/usr/bin/env bash\n# {marker}\n")
+    _git(rig["work"], "add", "-A")
+    _git(rig["work"], "commit", "-m", marker)
+    _git(rig["work"], "push", "origin", "main")
+    return _full_head(rig["work"])
+
+
+def test_stable_channel_checks_out_the_newest_release_tag(rig):
+    _tag_head(rig, "v0.1.0")
+    _advance_main(rig, "second release")
+    _tag_head(rig, "v0.2.0")
+    tagged = _full_head(rig["work"])
+    tip = _advance_main(rig, "after the release")  # main tip is past the tag
+
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    result, out = run_update(rig)
+    assert "Checked out release v0.2.0" in out
+    assert _full_head(rig["device"]) == tagged
+    assert _full_head(rig["device"]) != tip
+
+
+def test_stable_channel_is_read_from_the_channel_file(rig):
+    # No UPDATE_CHANNEL env: the persisted file (written by the host bridge on
+    # settings save) decides.
+    _tag_head(rig, "v0.1.0")
+    tagged = _full_head(rig["work"])
+    _advance_main(rig, "past the release")
+    Path(rig["env"]["CHANNEL_FILE"]).write_text("stable\n")
+
+    result, out = run_update(rig)
+    assert "Update channel: stable" in out
+    assert _full_head(rig["device"]) == tagged
+
+
+def test_main_channel_ignores_release_tags(rig):
+    # Regression: with no channel configured, tags change nothing and the
+    # device follows the branch tip exactly as before.
+    _tag_head(rig, "v0.1.0")
+    tip = _advance_main(rig, "newer than any tag")
+    result, out = run_update(rig)
+    assert "Update channel: main" in out
+    assert _full_head(rig["device"]) == tip
+
+
+def test_stable_moves_when_a_new_release_appears(rig):
+    # Tags never move; a new release is a NEW tag, and the next run finds it.
+    _tag_head(rig, "v0.1.0")
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    run_update(rig)
+    first = _full_head(rig["device"])
+
+    _advance_main(rig, "next release")
+    _tag_head(rig, "v0.2.0")
+    result, out = run_update(rig)
+    assert "Checked out release v0.2.0" in out
+    assert _full_head(rig["device"]) != first
+    assert _full_head(rig["device"]) == _full_head(rig["work"])
+
+
+def test_stable_prefers_the_highest_version_not_the_newest_tag(rig):
+    # Version sort, not tag-creation order: a later-created lower tag (a
+    # backport or a re-tag) must not win over the numerically newest release.
+    _advance_main(rig, "big release")
+    _tag_head(rig, "v0.10.0")
+    high = _full_head(rig["work"])
+    _advance_main(rig, "backport")
+    _tag_head(rig, "v0.9.1")  # created later, but numerically older
+
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    result, out = run_update(rig)
+    assert "Checked out release v0.10.0" in out
+    assert _full_head(rig["device"]) == high
+
+
+def test_stable_without_releases_keeps_the_current_checkout(rig):
+    # Stable with no release tags must never jump to the main tip; the device
+    # waits where it is until a release is published.
+    before = _full_head(rig["device"])
+    _advance_main(rig, "unreleased work")
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    result, out = run_update(rig)
+    assert "No release tags found" in out
+    assert _full_head(rig["device"]) == before
+
+
+def test_switching_back_to_main_reattaches_the_branch(rig):
+    # Stable leaves the checkout detached on a tag; a later main-channel run
+    # must reattach to the branch and follow the tip again. The tag is placed
+    # past the device's current commit so the stable run really detaches.
+    _advance_main(rig, "the release")
+    _tag_head(rig, "v0.1.0")
+    tagged = _full_head(rig["work"])
+    tip = _advance_main(rig, "newer main work")
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    run_update(rig)
+    assert _full_head(rig["device"]) == tagged  # parked on the tag, detached
+
+    rig["env"]["UPDATE_CHANNEL"] = "main"
+    result, out = run_update(rig)
+    assert "Reattached the checkout to main" in out
+    assert _full_head(rig["device"]) == tip
+    branch = subprocess.run(["git", "rev-parse", "--abbrev-ref", "HEAD"],
+                            cwd=rig["device"], check=True,
+                            capture_output=True, text=True).stdout.strip()
+    assert branch == "main"
+
+
+def _hosted_rig(rig, tmp_path, env_tag="latest"):
+    """Give the rig a Pi Hosted layout: a compose project dir with a .env."""
+    install = tmp_path / "install"
+    install.mkdir()
+    (install / "docker-compose.yml").write_text(
+        "services:\n  service:\n    image: ghcr.io/syracuse3dprintingorg/"
+        "pantryraider:${FOODASSISTANT_TAG:-latest}\n")
+    (install / ".env").write_text(f"TZ=UTC\nFOODASSISTANT_TAG={env_tag}\n")
+    rig["env"]["INSTALL_DIR"] = str(install)
+    return install
+
+
+def test_stable_pins_the_hosted_image_tag(rig, tmp_path):
+    # On a Pi Hosted box the stable channel pins FOODASSISTANT_TAG to the
+    # release version (the publish workflow tags images per release), and the
+    # replaced value is remembered so main can restore it. The docker stub
+    # fails the pull afterwards; the pin itself must already be on disk.
+    _tag_head(rig, "v0.2.0")
+    install = _hosted_rig(rig, tmp_path)
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    result, out = run_update(rig)
+    env_text = (install / ".env").read_text()
+    assert "FOODASSISTANT_TAG=0.2.0" in env_text
+    assert "Pinned the app image to 0.2.0" in out
+    assert Path(rig["env"]["PIN_STATE_FILE"]).read_text().strip() == "latest"
+
+
+def test_main_restores_the_hosted_image_tag(rig, tmp_path):
+    _tag_head(rig, "v0.2.0")
+    install = _hosted_rig(rig, tmp_path)
+    rig["env"]["UPDATE_CHANNEL"] = "stable"
+    run_update(rig)
+    assert "FOODASSISTANT_TAG=0.2.0" in (install / ".env").read_text()
+
+    rig["env"]["UPDATE_CHANNEL"] = "main"
+    result, out = run_update(rig)
+    assert "FOODASSISTANT_TAG=latest" in (install / ".env").read_text()
+    assert not Path(rig["env"]["PIN_STATE_FILE"]).exists()
 
 
 def test_cec_pointer_ignore_rule_installed(rig, tmp_path):

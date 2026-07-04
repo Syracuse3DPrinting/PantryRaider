@@ -54,6 +54,18 @@ BIN_DIR="${BIN_DIR:-/usr/local/bin}"
 # systemd unit was written at firstboot pointing at /usr/local/sbin, so the
 # copy there is the one that actually executes.
 SBIN_DIR="${SBIN_DIR:-/usr/local/sbin}"
+# Update channel (FoodAssistant-wkwx): "main" follows the branch tip (the
+# historical behavior and the default), "stable" checks out the newest release
+# tag. The app persists the choice to CHANNEL_FILE through the host bridge
+# (POST /update/channel) on settings save and again before each update, which
+# is the one seam both Pi shapes share (Pi Hosted and Pi Remote both run the
+# bridge and this helper); UPDATE_CHANNEL overrides it for tests and manual runs.
+CHANNEL_FILE="${CHANNEL_FILE:-/etc/foodassistant/update-channel}"
+# On a Pi Hosted box the stable channel also pins the app image: the published
+# image carries a tag per release (see .github/workflows/publish-image.yml), so
+# FOODASSISTANT_TAG in the stack .env is set to the release version. The value
+# it replaced is kept in PIN_STATE_FILE so switching back to main restores it.
+PIN_STATE_FILE="${PIN_STATE_FILE:-/etc/foodassistant/update-tag-restore}"
 
 # Plain stdout log lines (the bridge tails stdout for a human summary too).
 log() { printf '%s\n' "$*"; }
@@ -117,37 +129,87 @@ log "Using git checkout at $REPO"
 before="$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo unknown)"
 log "Current commit: $before"
 
-# Best effort fast-forward. A failed pull is not fatal: --ff-only is atomic, so
-# the worst case is we redeploy the commit that is already checked out, which is
-# exactly what we want after a manual pull or when offline.
-log "Fetching and fast-forwarding..."
+# Resolve the update channel: the env var wins, then the persisted file, and
+# anything unrecognized (including an absent file) means "main" so devices that
+# predate the channel keep their historical behavior.
+channel="${UPDATE_CHANNEL:-}"
+if [ -z "$channel" ] && [ -f "$CHANNEL_FILE" ]; then
+  channel="$(head -n1 "$CHANNEL_FILE" 2>/dev/null | tr -d '[:space:]')"
+fi
+case "$channel" in stable) ;; *) channel="main" ;; esac
+log "Update channel: $channel"
+
 recovered=0
-if pull_out="$(git -C "$REPO" pull --ff-only 2>&1)"; then
-  log "$pull_out"
-else
-  log "git pull did not fast-forward:"
-  log "$pull_out"
-  # A rewritten remote (force-push), a diverged local branch, or a dirty tree
-  # would otherwise strand the device on this checkout forever: every future
-  # update would fail the ff-only pull the same way. The checkout is purely an
-  # update SOURCE (the deployed app, deck package, and compose file all live
-  # outside it), so when the remote is reachable it is safe to make the
-  # checkout match origin exactly and carry on.
-  branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
-  if [ "$branch" = "HEAD" ]; then
-    log "Detached HEAD; continuing with the current checkout."
-  elif fetch_out="$(git -C "$REPO" fetch origin "$branch" 2>&1)"; then
-    if reset_out="$(git -C "$REPO" reset --hard "origin/$branch" 2>&1)"; then
-      log "Recovered: reset the checkout to origin/$branch."
-      log "$reset_out"
-      recovered=1
-    else
-      log "WARN: could not reset to origin/$branch (continuing with the current checkout):"
-      log "$reset_out"
-    fi
-  else
-    log "Could not fetch origin/$branch (offline or no upstream); continuing with the current checkout:"
+release_tag=""
+if [ "$channel" = "stable" ]; then
+  # Stable channel: the update target is the newest release tag, not the branch
+  # tip. Tags never move, so there is no ff-only/force-push recovery to worry
+  # about here: a new release is simply a NEW tag, and a re-fetch finds it.
+  # --force covers the pathological re-tag case by letting the fetch update a
+  # tag that was deleted and recreated upstream.
+  log "Fetching release tags..."
+  if fetch_out="$(git -C "$REPO" fetch --tags --force origin 2>&1)"; then
     log "$fetch_out"
+  else
+    log "Could not fetch tags (offline or no upstream); continuing with the current checkout:"
+    log "$fetch_out"
+  fi
+  release_tag="$(git -C "$REPO" tag -l 'v*' | grep -E '^v[0-9]+(\.[0-9]+)*$' | sort -V | tail -n1)"
+  if [ -z "$release_tag" ]; then
+    log "No release tags found; keeping the current checkout until a release is published."
+  elif [ "$(git -C "$REPO" rev-parse HEAD 2>/dev/null)" = \
+         "$(git -C "$REPO" rev-parse "refs/tags/$release_tag^{commit}" 2>/dev/null)" ]; then
+    log "Already on release $release_tag."
+  elif co_out="$(git -C "$REPO" checkout --force --detach "refs/tags/$release_tag" 2>&1)"; then
+    log "Checked out release $release_tag."
+  else
+    log "WARN: could not check out $release_tag; continuing with the current checkout:"
+    log "$co_out"
+  fi
+else
+  # Main channel. A device coming back from the stable channel sits on a
+  # detached tag checkout, which a plain pull cannot move; reattach to the
+  # branch first so the fast-forward below works.
+  if [ "$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)" = "HEAD" ]; then
+    if git -C "$REPO" fetch origin main >/dev/null 2>&1 \
+        && reattach_out="$(git -C "$REPO" checkout --force -B main origin/main 2>&1)"; then
+      log "Reattached the checkout to main."
+      log "$reattach_out"
+    else
+      log "Detached HEAD and could not reattach to main; continuing with the current checkout."
+    fi
+  fi
+  # Best effort fast-forward. A failed pull is not fatal: --ff-only is atomic, so
+  # the worst case is we redeploy the commit that is already checked out, which is
+  # exactly what we want after a manual pull or when offline.
+  log "Fetching and fast-forwarding..."
+  if pull_out="$(git -C "$REPO" pull --ff-only 2>&1)"; then
+    log "$pull_out"
+  else
+    log "git pull did not fast-forward:"
+    log "$pull_out"
+    # A rewritten remote (force-push), a diverged local branch, or a dirty tree
+    # would otherwise strand the device on this checkout forever: every future
+    # update would fail the ff-only pull the same way. The checkout is purely an
+    # update SOURCE (the deployed app, deck package, and compose file all live
+    # outside it), so when the remote is reachable it is safe to make the
+    # checkout match origin exactly and carry on.
+    branch="$(git -C "$REPO" rev-parse --abbrev-ref HEAD 2>/dev/null || echo HEAD)"
+    if [ "$branch" = "HEAD" ]; then
+      log "Detached HEAD; continuing with the current checkout."
+    elif fetch_out="$(git -C "$REPO" fetch origin "$branch" 2>&1)"; then
+      if reset_out="$(git -C "$REPO" reset --hard "origin/$branch" 2>&1)"; then
+        log "Recovered: reset the checkout to origin/$branch."
+        log "$reset_out"
+        recovered=1
+      else
+        log "WARN: could not reset to origin/$branch (continuing with the current checkout):"
+        log "$reset_out"
+      fi
+    else
+      log "Could not fetch origin/$branch (offline or no upstream); continuing with the current checkout:"
+      log "$fetch_out"
+    fi
   fi
 fi
 
@@ -475,6 +537,48 @@ if [ -f "$COMPOSE_FILE" ] && command -v docker >/dev/null 2>&1; then
       log "Migrated compose image reference to ghcr.io/syracuse3dprintingorg/pantryraider"
     else
       log "WARN: could not rewrite the legacy image reference in $COMPOSE_FILE"
+    fi
+  fi
+
+  # Keep the pulled image on the same channel as the source checkout. The
+  # publish workflow tags every release image with its version (0.8.0 and 0.8),
+  # while :latest follows main, so on the stable channel FOODASSISTANT_TAG in
+  # the stack .env is pinned to the resolved release. The value it replaced is
+  # saved once to PIN_STATE_FILE and restored when the device returns to the
+  # main channel, so an operator's own pin is never lost. Compose files that
+  # hardcode their image tag simply ignore the variable, which is harmless.
+  ENV_FILE="${ENV_FILE:-$INSTALL_DIR/.env}"
+  _set_env_tag() {
+    # Set FOODASSISTANT_TAG=$1 in ENV_FILE (replace the line or append it).
+    if [ -f "$ENV_FILE" ] && grep -q '^FOODASSISTANT_TAG=' "$ENV_FILE" 2>/dev/null; then
+      sed -i "s|^FOODASSISTANT_TAG=.*|FOODASSISTANT_TAG=$1|" "$ENV_FILE"
+    else
+      printf 'FOODASSISTANT_TAG=%s\n' "$1" >> "$ENV_FILE"
+    fi
+  }
+  _cur_env_tag="$(grep '^FOODASSISTANT_TAG=' "$ENV_FILE" 2>/dev/null | tail -n1 | cut -d= -f2-)"
+  if [ "$channel" = "stable" ] && [ -n "$release_tag" ]; then
+    _pin_ver="${release_tag#v}"
+    if [ "$_cur_env_tag" != "$_pin_ver" ]; then
+      if [ ! -f "$PIN_STATE_FILE" ]; then
+        mkdir -p "$(dirname "$PIN_STATE_FILE")" 2>/dev/null || true
+        printf '%s\n' "${_cur_env_tag:-latest}" > "$PIN_STATE_FILE" 2>/dev/null \
+          || log "WARN: could not record the previous image tag in $PIN_STATE_FILE"
+      fi
+      if _set_env_tag "$_pin_ver" 2>/dev/null; then
+        log "Pinned the app image to $_pin_ver (stable channel)."
+      else
+        log "WARN: could not pin FOODASSISTANT_TAG in $ENV_FILE; the image stays on $_cur_env_tag."
+      fi
+    fi
+  elif [ "$channel" = "main" ] && [ -f "$PIN_STATE_FILE" ]; then
+    _restore_tag="$(head -n1 "$PIN_STATE_FILE" 2>/dev/null | tr -d '[:space:]')"
+    [ -n "$_restore_tag" ] || _restore_tag="latest"
+    if _set_env_tag "$_restore_tag" 2>/dev/null; then
+      rm -f "$PIN_STATE_FILE" 2>/dev/null || true
+      log "Back on the main channel; the app image follows $_restore_tag again."
+    else
+      log "WARN: could not restore FOODASSISTANT_TAG in $ENV_FILE."
     fi
   fi
 

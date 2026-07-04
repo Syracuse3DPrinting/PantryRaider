@@ -1753,3 +1753,19 @@ def test_support_bundle_has_every_section_and_never_raises():
                 "drm-connectors", "disk-usage", "throttled", "update-log"):
         assert key in sections, key
         assert isinstance(sections[key], str) and sections[key]
+# -- update channel (FoodAssistant-wkwx) --------------------------------------
+
+def test_write_update_channel_persists_valid_channels(tmp_path):
+    f = tmp_path / "etc" / "update-channel"  # parent dir is created on demand
+    for ch in ("stable", "main"):
+        ok, err = bridge._write_update_channel(ch, path=str(f))
+        assert ok is True and err == ""
+        assert f.read_text() == ch + "\n"
+
+
+def test_write_update_channel_rejects_unknown_values(tmp_path):
+    f = tmp_path / "update-channel"
+    for bad in ("", "nightly", "Main", "stable\n"):
+        ok, err = bridge._write_update_channel(bad, path=str(f))
+        assert ok is False and "stable" in err
+    assert not f.exists()

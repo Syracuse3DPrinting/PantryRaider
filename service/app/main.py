@@ -113,7 +113,8 @@ async def _periodic_auto_update():
     while True:
         try:
             if settings.auto_update and settings.is_pi_appliance():
-                if au.should_run(settings.is_satellite(), APP_VERSION, last_server_version()):
+                if au.should_run(settings.is_satellite(), APP_VERSION,
+                                 last_server_version(), settings.update_channel):
                     result = await run_host_bridge_update()
                     if result.get("ok"):
                         import logging

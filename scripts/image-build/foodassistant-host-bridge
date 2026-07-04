@@ -44,6 +44,7 @@ GET  /stack/status         local backend stack presence + per-container run stat
 POST /stack/standdown      stop the local backend containers (grocy/mealie/ollama); data kept
 POST /stack/standup        start the parked local backend containers again
 POST /update               git pull + redeploy app and Stream Deck + restart (Pi Remote OTA)
+POST /update/channel       persist the update channel the OTA helper follows  {channel: stable|main}
 POST /reboot               reboot the host (systemctl reboot, or reboot as fallback)
 POST /restore              full-stack snapshot restore (stop stack, swap data, restart)  {source}
 GET  /activity             shared activity/display state (polled by the deck)
@@ -373,6 +374,26 @@ _DISPLAY_IDLE_FILE = "/etc/foodassistant/display-idle"
 # without the sensor every mode is a safe no-op.
 _WAKE_ON_MOTION_FILE = "/etc/foodassistant/wake-on-motion"
 _WAKE_ON_MOTION_MODES = ("auto", "on", "off")
+
+# Update channel (FoodAssistant-wkwx). The app pushes it on settings save (and
+# again just before each update), and the foodassistant-update helper reads the
+# file to decide what to install: "main" follows the branch tip, "stable" checks
+# out the newest release tag. Absent file means "main" (the historical behavior).
+_UPDATE_CHANNEL_FILE = "/etc/foodassistant/update-channel"
+_UPDATE_CHANNELS = ("stable", "main")
+
+
+def _write_update_channel(channel, path=None):
+    """Persist the update channel for the OTA helper. Returns (ok, error)."""
+    if channel not in _UPDATE_CHANNELS:
+        return False, "channel must be 'stable' or 'main'"
+    p = Path(path or _UPDATE_CHANNEL_FILE)
+    try:
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(channel + "\n")
+        return True, ""
+    except OSError as e:
+        return False, str(e)
 
 # Minimum change of the acceleration vector between samples, in g, that counts
 # as motion. At rest the sensor reports a steady ~1 g gravity vector with noise
@@ -2456,6 +2477,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._ap_disable()
         elif self.path == "/update":
             self._update()
+        elif self.path == "/update/channel":
+            self._update_channel_set()
         elif self.path == "/reboot":
             self._reboot()
         elif self.path == "/usb/backup":
@@ -3095,6 +3118,19 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._send(200, {"ok": True})
         except Exception as e:
             self._send(500, {"ok": False, "error": str(e)})
+
+    def _update_channel_set(self):
+        # Persist the update channel where the foodassistant-update helper reads
+        # it (FoodAssistant-wkwx). The app cannot write /etc from its container,
+        # so it lands the value here on settings save and before each update.
+        body = self._body()
+        channel = (body.get("channel") or "").strip()
+        ok, err = _write_update_channel(channel)
+        if not ok:
+            self._send(400 if "channel must be" in err else 500,
+                       {"ok": False, "error": err})
+            return
+        self._send(200, {"ok": True, "channel": channel})
 
     def _update(self):
         # Pull the latest source and redeploy by delegating to the

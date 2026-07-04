@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.126"
+APP_VERSION = "0.7.127"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -389,7 +389,7 @@ _SAVEABLE = [
     "rclone_remote", "rclone_schedule_hours",
     "usb_backup_interval_hours", "usb_backup_last",
     "tunnel_mode", "tunnel_token", "tunnel_url",
-    "debug_logging", "auto_update", "lan_scan_cidr",
+    "debug_logging", "auto_update", "update_channel", "lan_scan_cidr",
 ]
 
 # Settings a satellite (pi_remote) pulls from its main server and mirrors
@@ -433,6 +433,9 @@ SATELLITE_PULL_FIELDS = [
     # Fleet-wide auto-update flag, so a satellite obeys the main server's choice
     # and the whole fleet updates (or holds) together (FoodAssistant-k2kk).
     "auto_update",
+    # Fleet-wide update channel (releases only vs every change), same reasoning:
+    # one policy, set on the main server, followed by every satellite (wkwx).
+    "update_channel",
     # Timezone: the whole fleet reads timestamps in one zone, set once on the
     # main server. A satellite inherits it (and applies it to its own host clock
     # on sync), so it is not offered as a per-device option on a Pi Remote.
@@ -1287,6 +1290,15 @@ class Settings(BaseSettings):
     # version. A Pi appliance auto-applies via the host-bridge OTA; a non-Pi
     # server applies via the Watchtower container in docker-compose.prod.yml.
     auto_update: bool = True
+
+    # Which updates a device follows (FoodAssistant-wkwx). "main" tracks every
+    # pushed change; "stable" tracks the newest tagged release. Fleet-wide like
+    # auto_update: satellites pull it from their main server so one policy
+    # covers every device. Defaults to "main" for now because the deployed
+    # fleet has always ridden main and a silent flip to "stable" would strand
+    # devices until their first release exists; the 0.8.0 release notes are the
+    # planned point to recommend "stable" and flip this default.
+    update_channel: str = "main"
 
     # Remembered LAN range for the satellite-discovery scan, so a containerized
     # server (which only sees its Docker subnet) does not have to be told the

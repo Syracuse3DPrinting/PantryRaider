@@ -2434,6 +2434,21 @@ docker compose up -d</code></pre>
             <div class="form-text">On by default. This setting also applies to any Pi Remotes connected to this server, so the fleet stays on the same version. This server itself auto-updates through the Watchtower container (see the README).</div>
             {% endif %}
             <span class="test-result ms-1" id="auto-update-result"></span>
+
+            <div class="mt-3">
+              <label class="form-label" for="update_channel">Update channel</label>
+              <select class="form-select form-select-sm" id="update_channel" style="max-width:340px"
+                      {% if is_satellite %}disabled{% else %}onchange="saveUpdateChannel(this)"{% endif %}>
+                <option value="main" {{ 'selected' if s.update_channel != 'stable' else '' }}>Latest (every change)</option>
+                <option value="stable" {{ 'selected' if s.update_channel == 'stable' else '' }}>Releases only</option>
+              </select>
+              {% if is_satellite %}
+              <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Managed on the main server. A remote follows the server's channel so the whole fleet updates from the same source.</div>
+              {% else %}
+              <div class="form-text">Releases only updates to tested, numbered releases. Latest installs every change as soon as it is published, and is the default for now. Starting with release 0.8.0, Releases only is the recommended choice for everyday kitchens.</div>
+              {% endif %}
+              <span class="test-result ms-1" id="update-channel-result"></span>
+            </div>
           </div>
 
         </div>
@@ -5626,6 +5641,28 @@ async function saveAutoUpdate(box) {
       const ok = d.ok !== false;
       out.className = 'test-result ms-1 ' + (ok ? 'text-success' : 'text-danger');
       out.textContent = ok ? (box.checked ? 'Automatic updates on.' : 'Automatic updates off.') : 'Could not save.';
+    }
+  } catch (e) {
+    if (out) { out.className = 'test-result ms-1 text-danger'; out.textContent = 'Could not save.'; }
+  }
+}
+
+// Updates: persist the fleet update channel (FoodAssistant-wkwx).
+async function saveUpdateChannel(sel) {
+  const out = document.getElementById('update-channel-result');
+  if (out) { out.className = 'test-result ms-1 text-secondary'; out.textContent = 'Saving...'; }
+  try {
+    const r = await fetch('setup/save', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ update_channel: sel.value }),
+    });
+    const d = await r.json();
+    if (out) {
+      const ok = d.ok !== false;
+      out.className = 'test-result ms-1 ' + (ok ? 'text-success' : 'text-danger');
+      out.textContent = ok
+        ? (sel.value === 'stable' ? 'Following releases only.' : 'Following every change.')
+        : 'Could not save.';
     }
   } catch (e) {
     if (out) { out.className = 'test-result ms-1 text-danger'; out.textContent = 'Could not save.'; }

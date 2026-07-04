@@ -112,14 +112,20 @@ async def support_bundle():
 
 @router.get("/check-update")
 async def check_update():
-    """Compare the running version with the latest on the main branch.
+    """Compare the running version with the latest on the configured channel.
 
-    APP_VERSION is bumped on every commit but tagged only for minor/major
-    releases (see CLAUDE.md), so the old tag-based check could never see a patch
-    update and always reported "latest" (FoodAssistant-jhug). We instead read
-    APP_VERSION straight from service/app/config.py on the main branch, which
-    reflects every pushed patch. If that is unavailable (offline, private repo,
-    layout change) we fall back to the highest version tag. One or two outbound
+    On the "main" channel: APP_VERSION is bumped on every commit but tagged only
+    for minor/major releases (see CLAUDE.md), so the old tag-based check could
+    never see a patch update and always reported "latest" (FoodAssistant-jhug).
+    We instead read APP_VERSION straight from service/app/config.py on the main
+    branch, which reflects every pushed patch.
+
+    On the "stable" channel (FoodAssistant-wkwx): the newest published release
+    is what the device would install, so the check asks the releases API for the
+    latest release tag instead of reading main.
+
+    Either primary falls back to the highest version tag if unavailable
+    (offline, private repo, layout change, no releases yet). One or two outbound
     calls; returns gracefully on any error. The repo must be public for the
     unauthenticated calls to succeed.
     """
@@ -144,22 +150,42 @@ async def check_update():
     raw_url = (f"https://raw.githubusercontent.com/{GITHUB_REPO}/main/service/app/config.py"
                f"?cb={int(time.time())}")
     _no_cache = {"Cache-Control": "no-cache", "Pragma": "no-cache"}
+    stable = settings.update_channel == "stable"
     try:
         async with httpx.AsyncClient(timeout=8.0, follow_redirects=True) as client:
-            # Primary: the version on main (every patch bump lands here).
-            try:
-                rr = await client.get(raw_url, headers=_no_cache)
-                if rr.status_code == 200:
-                    m = re.search(r'APP_VERSION\s*=\s*["\']([0-9][0-9.]*)["\']', rr.text)
-                    if m:
-                        latest = m.group(1)
-                        avail = _is_newer(latest, APP_VERSION)
-                        _record(latest, avail)
-                        return {"ok": True, "current": APP_VERSION, "latest": latest,
-                                "update_available": avail, "checked_at": time.time(),
-                                "release_url": f"https://github.com/{GITHUB_REPO}"}
-            except Exception:
-                pass  # fall through to the tag check
+            if stable:
+                # Primary on the stable channel: the latest published release,
+                # which is exactly what a stable-channel device would install.
+                try:
+                    rr = await client.get(
+                        f"https://api.github.com/repos/{GITHUB_REPO}/releases/latest",
+                        headers={"Accept": "application/vnd.github+json"})
+                    if rr.status_code == 200:
+                        tag = str(rr.json().get("tag_name", "") or "")
+                        if _is_version_tag(tag):
+                            avail = _is_newer(tag, APP_VERSION)
+                            _record(tag, avail)
+                            return {"ok": True, "current": APP_VERSION, "latest": tag,
+                                    "update_available": avail, "checked_at": time.time(),
+                                    "release_url": f"https://github.com/{GITHUB_REPO}/releases/tag/{tag}"}
+                except Exception:
+                    pass  # fall through to the tag check
+            else:
+                # Primary on main: the version on the branch tip (every patch
+                # bump lands here).
+                try:
+                    rr = await client.get(raw_url, headers=_no_cache)
+                    if rr.status_code == 200:
+                        m = re.search(r'APP_VERSION\s*=\s*["\']([0-9][0-9.]*)["\']', rr.text)
+                        if m:
+                            latest = m.group(1)
+                            avail = _is_newer(latest, APP_VERSION)
+                            _record(latest, avail)
+                            return {"ok": True, "current": APP_VERSION, "latest": latest,
+                                    "update_available": avail, "checked_at": time.time(),
+                                    "release_url": f"https://github.com/{GITHUB_REPO}"}
+                except Exception:
+                    pass  # fall through to the tag check
             # Fallback: the highest version tag (covers tagged releases).
             r = await client.get(
                 f"https://api.github.com/repos/{GITHUB_REPO}/tags",

@@ -342,11 +342,14 @@ maintained by the app, not edited directly.
 
 ## Logging and updates
 
-`debug_logging` is a per-device support toggle. `auto_update` is a fleet-wide
-flag: it is pulled by satellites so a main server and its remotes update (or
-hold) together.
+`debug_logging` is a per-device support toggle. `auto_update` and
+`update_channel` are fleet-wide: both are pulled by satellites so a main server
+and its remotes update (or hold) together, from the same source. The channel is
+`main` (every change) or `stable` (releases only); `main` is the default for
+now, with `stable` the recommended choice from release 0.8.0 on.
 
 | Setting | Secret | Server | Pi Hosted | Pi Remote |
 | --- | --- | --- | --- | --- |
 | `debug_logging` | | Editable | Editable | Device-local |
 | `auto_update` | | Editable | Editable | Inherited (read-only) |
+| `update_channel` | | Editable | Editable | Inherited (read-only) |
