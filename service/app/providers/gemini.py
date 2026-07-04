@@ -3,7 +3,7 @@ import json
 import time
 from datetime import date
 import google.generativeai as genai
-from .base import VisionProvider
+from .base import VisionProvider, parse_json_response
 from ..models.food import AnalysisResult, FoodItem, StorageType, FoodCategory
 
 _FOOD_PROMPT = """
@@ -70,7 +70,7 @@ Return ONLY valid JSON. No markdown, no explanation.
 """.strip()
 
 _RECIPE_PROMPT = """
-Extract the complete recipe from the provided {source}. Transcribe faithfully —
+Extract the complete recipe from the provided {source}. Transcribe faithfully:
 do not invent ingredients or steps that are not present.
 Return a JSON object with these exact fields:
 {{
@@ -155,7 +155,7 @@ class GeminiProvider(VisionProvider):
         image_part = {"mime_type": mime_type, "data": image_data}
         response = await self._gen([_FOOD_PROMPT, image_part])
         raw = response.text
-        data = json.loads(raw)
+        data = parse_json_response(raw)
         item = _parse_item(data, default_confidence=0.8)
         return AnalysisResult(items=[item], image_type="food", raw_response=raw)
 
@@ -163,13 +163,13 @@ class GeminiProvider(VisionProvider):
         image_part = {"mime_type": mime_type, "data": image_data}
         response = await self._gen([_RECEIPT_PROMPT, image_part])
         raw = response.text
-        data = json.loads(raw)
+        data = parse_json_response(raw)
         return _parse_receipt(data, default_confidence=0.8, raw=raw)
 
     async def enrich_product(self, info: dict) -> dict | None:
         prompt = _ENRICH_PROMPT.format(info=json.dumps(info, ensure_ascii=False))
         response = await self._gen([prompt])
-        return json.loads(response.text)
+        return parse_json_response(response.text)
 
     async def extract_recipe(self, image_data: bytes | None = None,
                              mime_type: str | None = None,
@@ -181,17 +181,17 @@ class GeminiProvider(VisionProvider):
             prompt = _RECIPE_PROMPT.format(source="webpage text below")
             parts = [f"{prompt}\n\n--- PAGE TEXT ---\n{page_text}"]
         response = await self._gen(parts)
-        return json.loads(response.text)
+        return parse_json_response(response.text)
 
     async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         prompt = _GENERATE_RECIPE_PROMPT.format(name=name)
         if extra_instructions.strip():
             prompt += "\n\nAdditional instructions from the user (follow these):\n" + extra_instructions.strip() + "\n"
         response = await self._gen([prompt])
-        return json.loads(response.text)
+        return parse_json_response(response.text)
 
     async def estimate_nutrition(self, name: str, servings: float = 1.0) -> dict | None:
-        from .base import NUTRITION_PROMPT, nutrition_fields, parse_json_response
+        from .base import NUTRITION_PROMPT, nutrition_fields
         response = await self._gen(
             [NUTRITION_PROMPT.format(name=name, servings=servings)])
         return nutrition_fields(parse_json_response(response.text))
@@ -203,7 +203,7 @@ class GeminiProvider(VisionProvider):
             items="\n".join(f"- {i}" for i in items), limit=limit,
             preferences_block=pref_block)
         response = await self._gen([prompt])
-        return json.loads(response.text).get("suggestions", [])
+        return parse_json_response(response.text).get("suggestions", [])
 
     async def health_check(self) -> bool:
         # Metadata lookup, not a billed generation; cached to keep /health cheap.

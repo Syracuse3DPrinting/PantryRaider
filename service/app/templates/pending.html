@@ -51,7 +51,7 @@
 <div id="pending-list"></div>
 <div id="pending-empty" class="text-center text-secondary py-5 d-none">
   <i class="bi bi-check2-circle fs-1 d-block mb-2 text-success"></i>
-  No pending scans — all caught up.
+  No pending scans, all caught up.
 </div>
 <div id="commit-status" class="mt-2"></div>
 
@@ -151,7 +151,7 @@ async function loadPending() {
           </span>
         </div>` : ''}
         <div class="meta-text mt-1 ms-1">
-          ${item.lookup_failed ? '<i class="bi bi-exclamation-triangle text-warning me-1"></i>lookup failed — ' : ''}
+          ${item.lookup_failed ? '<i class="bi bi-exclamation-triangle text-warning me-1"></i>lookup failed: ' : ''}
           ${item.barcode ? `barcode ${esc(item.barcode)} · ` : ''}
           ${item.brand ? `${esc(item.brand)} · ` : ''}
           scanned ${item.created_at ? item.created_at.replace('T',' ').slice(0,16) : '?'}

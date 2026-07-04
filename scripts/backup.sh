@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pantry Raider backup — tars the bind-mounted data directories.
+# Pantry Raider backup: tars the bind-mounted data directories.
 #
 # Usage:
 #   ./scripts/backup.sh [destination-dir]      # default: ./backups
@@ -11,10 +11,10 @@
 #   30 2 * * * /path/to/PantryRaider/scripts/backup.sh /mnt/nas/foodassistant-backups
 #
 # What's included:
-#   service/data   — settings.json, SQLite defaults DB, staples.txt
-#   grocy/config   — Grocy SQLite DB + config (inventory lives here)
-#   mealie/data    — Mealie SQLite DB, recipe images
-# Ollama models are NOT backed up — they're re-downloadable.
+#   service/data:   settings.json, SQLite defaults DB, staples.txt
+#   grocy/config:   Grocy SQLite DB + config (inventory lives here)
+#   mealie/data:    Mealie SQLite DB, recipe images
+# Ollama models are NOT backed up, they're re-downloadable.
 
 set -euo pipefail
 
@@ -36,7 +36,7 @@ for d in service/data grocy/config mealie/data; do
 done
 
 if [ ${#DIRS[@]} -eq 0 ]; then
-  echo "ERROR: no data directories found under $REPO_DIR — nothing to back up." >&2
+  echo "ERROR: no data directories found under $REPO_DIR, nothing to back up." >&2
   exit 1
 fi
 

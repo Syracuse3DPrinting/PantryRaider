@@ -1,4 +1,4 @@
-# Production compose: runs the prebuilt image from GHCR — no local build needed.
+# Production compose: runs the prebuilt image from GHCR, no local build needed.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrintingOrg/PantryRaider/main/docker-compose.prod.yml -o docker-compose.yml
 #   docker compose up -d

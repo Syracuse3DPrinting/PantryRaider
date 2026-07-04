@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Pantry Raider installer — pulls the prebuilt image and starts the stack.
+# Pantry Raider installer: pulls the prebuilt image and starts the stack.
 # No git clone or local build required.
 #
 #   curl -fsSL https://raw.githubusercontent.com/Syracuse3DPrintingOrg/PantryRaider/main/scripts/install.sh | bash

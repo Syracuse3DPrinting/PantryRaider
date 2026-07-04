@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# prepare-image.sh — bake the FoodAssistant first-boot provisioner into a stock
+# prepare-image.sh: bake the FoodAssistant first-boot provisioner into a stock
 # Raspberry Pi OS Lite (64-bit) image, or onto an already-flashed boot partition.
 # ==============================================================================
 # WHY THIS APPROACH (and the tradeoff):
@@ -11,7 +11,7 @@
 #   Docker + pull images); the benefit is near-zero build infrastructure, easy
 #   updates (just bump the compose tags), and users keep the upstream image's
 #   security updates. For a reproducible single-file artifact you can still wrap
-#   this in pi-gen later — see docs/hardware/sd-image.md.
+#   this in pi-gen later (see docs/hardware/sd-image.md).
 #
 # This script supports two modes:
 #   (A) Mount an .img file's boot partition and copy assets in (default).

@@ -12,9 +12,9 @@
  * marker so a later run can tell auto-enable from an explicit user toggle.
  *
  * Markers in localStorage:
- *   kioskMode     'true'/'false' — the latched mode kiosk.css / scripts read.
- *   kioskExplicit 'true'         — set by the nav toggle; auto-enable defers to it.
- *   kioskAuto     'true'         — set here, so this was an auto-enable not a toggle.
+ *   kioskMode     'true'/'false': the latched mode kiosk.css / scripts read.
+ *   kioskExplicit 'true':         set by the nav toggle; auto-enable defers to it.
+ *   kioskAuto     'true':         set here, so this was an auto-enable not a toggle.
  *
  * Off-Pi and when the endpoint is unreachable this is a no-op: it never enables
  * kiosk mode anywhere but a Pi with a confirmed display, and never overrides an

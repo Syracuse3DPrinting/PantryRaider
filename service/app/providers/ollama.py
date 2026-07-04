@@ -1,7 +1,7 @@
 import json
 import httpx
 import base64
-from .base import VisionProvider
+from .base import VisionProvider, parse_json_response
 from ..models.food import AnalysisResult
 from .gemini import (_parse_item, _parse_receipt, _FOOD_PROMPT, _RECEIPT_PROMPT,
                      _ENRICH_PROMPT, _RECIPE_PROMPT, _GENERATE_RECIPE_PROMPT,
@@ -52,13 +52,13 @@ class OllamaProvider(VisionProvider):
 
     async def analyze_food(self, image_data: bytes, mime_type: str) -> AnalysisResult:
         raw = await self._generate(_FOOD_PROMPT, image_data)
-        data = json.loads(raw)
+        data = parse_json_response(raw)
         item = _parse_item(data, default_confidence=0.75)
         return AnalysisResult(items=[item], image_type="food", raw_response=raw)
 
     async def analyze_receipt(self, image_data: bytes, mime_type: str) -> AnalysisResult:
         raw = await self._generate(_RECEIPT_PROMPT, image_data)
-        data = json.loads(raw)
+        data = parse_json_response(raw)
         return _parse_receipt(data, default_confidence=0.75, raw=raw)
 
     async def enrich_product(self, info: dict) -> dict | None:
@@ -73,7 +73,7 @@ class OllamaProvider(VisionProvider):
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(f"{self.base_url}/api/generate", json=payload)
             response.raise_for_status()
-            return json.loads(response.json()["response"])
+            return parse_json_response(response.json()["response"])
 
     async def extract_recipe(self, image_data: bytes | None = None,
                              mime_type: str | None = None,
@@ -98,17 +98,17 @@ class OllamaProvider(VisionProvider):
         async with httpx.AsyncClient(timeout=180.0) as client:
             response = await client.post(f"{self.base_url}/api/generate", json=payload)
             response.raise_for_status()
-            return json.loads(response.json()["response"])
+            return parse_json_response(response.json()["response"])
 
     async def generate_recipe(self, name: str, extra_instructions: str = "") -> dict | None:
         prompt = _GENERATE_RECIPE_PROMPT.format(name=name)
         if extra_instructions.strip():
             prompt += "\n\nAdditional instructions from the user (follow these):\n" + extra_instructions.strip() + "\n"
         raw = await self._generate_text(prompt)
-        return json.loads(raw)
+        return parse_json_response(raw)
 
     async def estimate_nutrition(self, name: str, servings: float = 1.0) -> dict | None:
-        from .base import NUTRITION_PROMPT, nutrition_fields, parse_json_response
+        from .base import NUTRITION_PROMPT, nutrition_fields
         raw = await self._generate_text(NUTRITION_PROMPT.format(name=name, servings=servings))
         return nutrition_fields(parse_json_response(raw))
 
@@ -119,7 +119,7 @@ class OllamaProvider(VisionProvider):
             items="\n".join(f"- {i}" for i in items), limit=limit,
             preferences_block=pref_block)
         raw = await self._generate_text(prompt, max_tokens=2048)
-        return json.loads(raw).get("suggestions", [])
+        return parse_json_response(raw).get("suggestions", [])
 
     async def health_check(self) -> bool:
         try:

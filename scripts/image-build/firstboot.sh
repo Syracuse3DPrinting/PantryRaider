@@ -61,7 +61,7 @@ log()  { printf '%s [firstboot] %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 warn() { log "WARN: $*" >&2; }
 die()  { log "ERROR: $*" >&2; exit 1; }
 
-# run CMD...  — execute, or just announce under DRY_RUN.
+# run CMD...: execute, or just announce under DRY_RUN.
 run() {
   if [ "$DRY_RUN" = "1" ]; then
     log "DRY_RUN would run: $*"
@@ -94,7 +94,7 @@ load_config() {
     warn "No config file found (looked in: $CONFIG_CANDIDATES); using defaults"
   fi
 
-  # Defaults — chosen so a device works with NO config file at all. Display
+  # Defaults: chosen so a device works with NO config file at all. Display
   # and Stream Deck default to "auto": the provisioner detects the hardware and
   # turns each on when present. Timezone comes from the OS (set by Raspberry Pi
   # Imager), so nothing here needs editing for a turnkey flash-and-boot.
@@ -1788,7 +1788,7 @@ mark_done() {
 seed_app_settings() {
   local settings_file="$INSTALL_DIR/data/settings.json"
   if grep -q '"grocy_api_key"' "$settings_file" 2>/dev/null; then
-    log "seed_app_settings: settings.json already contains grocy_api_key — skipping"
+    log "seed_app_settings: settings.json already contains grocy_api_key, skipping"
     return 0
   fi
   local sd_val="false"

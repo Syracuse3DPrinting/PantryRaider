@@ -1,4 +1,4 @@
-# Pantry Raider — Home Assistant Integration
+# Pantry Raider: Home Assistant Integration
 #
 # Add the contents of this file to your HA configuration.yaml
 # Replace 192.168.1.170:9284 with your Unraid IP if different.
@@ -43,7 +43,7 @@ rest:
         unit_of_measurement: "items"
         icon: mdi:food-apple
 
-  # Full inventory grouped by storage location — item lists land in the
+  # Full inventory grouped by storage location: item lists land in the
   # sensor's attributes so the Lovelace markdown cards can render them.
   - resource: http://192.168.1.170:9284/inventory/dashboard?sort=expiry_asc
     scan_interval: 300
@@ -63,7 +63,7 @@ rest:
           - room_temp
           - pantry
 
-  # Mealie shopping list — unchecked item names land in the sensor's
+  # Mealie shopping list: unchecked item names land in the sensor's
   # attributes so the Lovelace card can render them. Returns 0/empty when
   # Mealie isn't configured.
   - resource: http://192.168.1.170:9284/mealie/shopping/summary
@@ -80,7 +80,7 @@ rest:
           - items
           - list_name
 
-  # Mealie meal plan — today's count as state, today/tomorrow entry lists in
+  # Mealie meal plan: today's count as state, today/tomorrow entry lists in
   # attributes for the Lovelace card. Returns 0/empty when Mealie isn't
   # configured.
   - resource: http://192.168.1.170:9284/mealie/mealplan/summary
@@ -117,7 +117,7 @@ rest_command:
     url: http://192.168.1.170:9284/pending/scan
     method: POST
     content_type: "application/json"
-    # Uncomment if Pantry Raider has API_KEY set — without the header the
+    # Uncomment if Pantry Raider has API_KEY set: without the header the
     # POST is rejected with 401 and HA only logs a warning (the automation
     # trace still looks successful).
     # headers:

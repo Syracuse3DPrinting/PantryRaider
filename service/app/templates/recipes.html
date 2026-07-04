@@ -237,7 +237,7 @@ function recipeRow(r) {
           <div class="min-width-0">
             <a href="#" class="fw-semibold" onclick="openPreview('${r.external_id}', '${r.source}'); return false;"
                title="Preview this recipe">${r.name}</a>
-            <span class="badge bg-dark border ms-1" title="External recipe — save it to keep it">web</span>
+            <span class="badge bg-dark border ms-1" title="External recipe, save it to keep it">web</span>
             ${r.description ? `<div class="small text-secondary text-truncate">${r.description}</div>` : ''}
           </div>
         </div>
@@ -293,8 +293,8 @@ async function loadRecipes(search = '') {
     if (!r.ok) throw new Error((await r.json()).detail || r.statusText);
     const items = await r.json();
     if (!items.length) {
-      let hint = search ? ' matching that search.' : ' yet — import one above!';
-      if (!mine && external && !search) hint = ' — type a search to look up web recipes.';
+      let hint = search ? ' matching that search.' : ' yet, import one above!';
+      if (!mine && external && !search) hint = '. Type a search to look up web recipes.';
       el.innerHTML = `<div class="text-secondary small p-2">No recipes${hint}</div>`;
       return;
     }
@@ -393,7 +393,7 @@ async function saveFromPreview(btn) {
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
     btn.className = 'btn btn-success';
-    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved — view in Mealie';
+    btn.innerHTML = '<i class="bi bi-check-circle me-1"></i>Saved: view in Mealie';
     btn.disabled = false;
     btn.onclick = () => window.open(`${d.mealie_url}/g/home/r/${d.slug}`, '_blank');
     reloadRecipes();
@@ -462,7 +462,7 @@ async function importUrl() {
   if (!url) return;
   btn.disabled = true;
   status.classList.remove('d-none', 'text-danger');
-  status.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing — this can take ~30s if AI extraction kicks in…';
+  status.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Importing, this can take ~30s if AI extraction kicks in…';
   try {
     const r = await fetch('mealie/recipes/import-url', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -500,7 +500,7 @@ async function extractPhoto(input) {
     const r = await fetch('mealie/recipes/extract-photo', {method: 'POST', body: fd});
     const d = await r.json();
     if (!r.ok) throw new Error(d.detail || r.statusText);
-    openEditor(d.recipe, 'Extracted from your photo — check it over, then save.');
+    openEditor(d.recipe, 'Extracted from your photo. Check it over, then save.');
   } catch (e) {
     progress.classList.add('d-none');
     alert('Photo extraction failed: ' + e.message);
@@ -595,7 +595,7 @@ async function generateFromSearch() {
   const orig = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Generating…';
-  // Reuse the preview modal — it will show a spinner then the result.
+  // Reuse the preview modal: it will show a spinner then the result.
   previewRecipe = null;
   const show = id => document.getElementById(id).classList.toggle('d-none', false);
   const hide = id => document.getElementById(id).classList.add('d-none');

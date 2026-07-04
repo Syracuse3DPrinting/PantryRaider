@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.7.125"
+APP_VERSION = "0.7.126"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -531,8 +531,10 @@ def appliances_clause(keys) -> str:
 
 # Stream Deck key rendering style (FoodAssistant-fygv). Pushed into the deck's
 # config.toml so the controller picks them up. "rich" is a subtle gradient,
-# "glass" a glassmorphism panel, "minimal" the flat legacy fill. icon_color
-# "full" tints glyphs with the action accent; "mono" keeps them monochrome.
+# "glass" a glassmorphism panel, "minimal" the flat legacy fill, "clean" a
+# plain dark face with no coloured background. icon_color "full" tints glyphs
+# with the action accent, "mono" keeps them monochrome, "color" composites the
+# bundled full-colour icon (best paired with the "clean" style).
 STREAMDECK_KEY_STYLES = ("rich", "minimal", "glass", "clean")
 STREAMDECK_ICON_COLORS = ("full", "mono", "color")
 
@@ -1093,8 +1095,9 @@ class Settings(BaseSettings):
     weather_api_base: str = "https://api.open-meteo.com"
 
     # Stream Deck key visual style, pushed into the deck's config.toml
-    # (FoodAssistant-fygv). key_style: rich | minimal | glass. icon_color:
-    # full (accent-tinted glyphs) | mono (monochrome).
+    # (FoodAssistant-fygv). key_style: rich | minimal | glass | clean.
+    # icon_color: full (accent-tinted glyphs) | mono (monochrome) | color
+    # (bundled full-colour icons).
     streamdeck_key_style: str = "rich"
     streamdeck_icon_color: str = "full"
 

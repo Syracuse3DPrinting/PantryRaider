@@ -35,7 +35,7 @@
         <i class="bi bi-fire fs-2 text-warning"></i>
         <div>
           <div class="fw-semibold">What can I cook?</div>
-          <div class="small text-secondary">Recipe ideas ranked by what's in stock — ready now, with pantry staples, or worth a shop run.</div>
+          <div class="small text-secondary">Recipe ideas ranked by what's in stock: ready now, with pantry staples, or worth a shop run.</div>
         </div>
         <i class="bi bi-chevron-right ms-auto text-secondary"></i>
       </div>
@@ -103,8 +103,8 @@ function dayLabel(iso) {
   const today = new Date(); today.setHours(0,0,0,0);
   const diff = Math.round((d - today) / 86400000);
   const name = d.toLocaleDateString(undefined, {weekday: 'long', month: 'short', day: 'numeric'});
-  if (diff === 0) return 'Today — ' + name;
-  if (diff === 1) return 'Tomorrow — ' + name;
+  if (diff === 0) return 'Today: ' + name;
+  if (diff === 1) return 'Tomorrow: ' + name;
   return name;
 }
 

@@ -179,11 +179,23 @@ def test_suggestions_multiple_per_step_keep_index():
 # --- start endpoint (uses the real timer service) ------------------------
 
 
-def test_start_endpoint_creates_timer_from_suggestion():
+def test_start_endpoint_creates_timer_from_suggestion(monkeypatch, tmp_path):
     from fastapi.testclient import TestClient
 
+    from app.config import settings
     from app.main import app
     from app.services import timers
+
+    # Make the app look configured so the setup-redirect middleware stays
+    # out of the way. Historically this test only passed because an earlier
+    # module leaked a configured grocy_base_url into the global settings;
+    # with cross-test isolation in conftest.py it must configure itself.
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    monkeypatch.setattr(settings, "deployment_mode", "server", raising=False)
+    monkeypatch.setattr(settings, "grocy_base_url", "http://grocy.test", raising=False)
+    monkeypatch.setattr(settings, "grocy_api_key", "k", raising=False)
+    monkeypatch.setattr(settings, "auth_required", False, raising=False)
+    monkeypatch.setattr(settings, "auth_password", "", raising=False)
 
     timers.clear_all()
     current_recipe.set_active({"title": "x", "steps": ["Simmer 20 minutes"]})

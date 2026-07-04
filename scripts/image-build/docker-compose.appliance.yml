@@ -6,7 +6,7 @@
 # behind compose profiles, toggled by ENABLE_MEALIE / ENABLE_OLLAMA.
 #
 # Differences from docker-compose.prod.yml:
-#   - Grocy runs by default (no profile) — the appliance is useless without it.
+#   - Grocy runs by default (no profile): the appliance is useless without it.
 #   - Mealie/Ollama still profile-gated (with-mealie / with-ollama).
 services:
   service:

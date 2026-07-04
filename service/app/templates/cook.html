@@ -235,7 +235,7 @@
   </div>
 </div>
 
-<!-- External (web) recipe tiers — always visible regardless of local count -->
+<!-- External (web) recipe tiers: always visible regardless of local count -->
 <div class="d-none mt-3" id="ext-section">
   <div class="d-flex align-items-baseline gap-2 mb-2">
     <h5 class="text-secondary mb-0"><i class="bi bi-globe2 me-1"></i>From the Web</h5>
@@ -840,7 +840,7 @@ function actions(s, tier) {
     btns.push(`<button class="btn btn-sm btn-outline-primary" onclick="openPlan('${s.id}', '${(s.name || '').replace(/'/g, '&#39;')}')"
       title="Add to meal plan"><i class="bi bi-calendar-plus me-1"></i>Plan</button>`);
     btns.push(`<button class="btn btn-sm btn-outline-success" onclick="cookedRecipe('${s.slug}', ${s.matched_ingredients.length}, this)"
-      title="Mark as cooked — consumes the ${s.matched_ingredients.length} matched item${s.matched_ingredients.length !== 1 ? 's' : ''} from inventory">
+      title="Mark as cooked: consumes the ${s.matched_ingredients.length} matched item${s.matched_ingredients.length !== 1 ? 's' : ''} from inventory">
       <i class="bi bi-check2-circle me-1"></i>Cooked it</button>`);
     if (tier === 'shopping' && missing) {
       btns.push(`<button class="btn btn-sm btn-outline-warning" onclick="addMissing('${s.slug}', this)"
@@ -872,7 +872,7 @@ function suggestionCard(s, tier) {
   const external = s.source !== 'mealie';
   const title = external
     ? `<span class="fw-semibold">${s.name}</span>
-       <span class="badge bg-dark border ms-1" title="External recipe — save it to keep it">web</span>`
+       <span class="badge bg-dark border ms-1" title="External recipe, save it to keep it">web</span>`
     : `<a href="${MEALIE_URL}/g/home/r/${s.slug}" target="_blank" class="fw-semibold">${s.name}</a>`;
   return `
   <div class="card h-100">
@@ -955,7 +955,7 @@ async function loadSuggestions() {
       </div>`;
     }).join('');
 
-    // External (web) tiers — rendered separately so local results can't squeeze them out
+    // External (web) tiers: rendered separately so local results can't squeeze them out
     const extData = data.external_tiers || {};
     const hasExt = Object.values(extData).some(arr => arr.length > 0);
     if (hasExt) {

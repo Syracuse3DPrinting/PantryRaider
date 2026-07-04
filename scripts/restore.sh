@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
-# Pantry Raider restore — unpacks a backup made by backup.sh.
+# Pantry Raider restore: unpacks a backup made by backup.sh.
 #
 # Usage:
 #   ./scripts/restore.sh <backup-file.tar.gz>
 #
 # Stops the stack, moves current data dirs aside (suffixed .pre-restore),
-# unpacks the archive, and restarts. Nothing is deleted — if the restore
+# unpacks the archive, and restarts. Nothing is deleted: if the restore
 # went wrong, the previous state is still in the .pre-restore directories.
 
 set -euo pipefail
@@ -38,4 +38,4 @@ tar -xzf "$ARCHIVE" -C "$REPO_DIR"
 echo "Restarting containers…"
 docker compose --profile with-grocy --profile with-mealie --profile with-ollama start
 
-echo "Done. Previous data kept in *.pre-restore-$STAMP directories — delete them once verified."
+echo "Done. Previous data kept in *.pre-restore-$STAMP directories, delete them once verified."

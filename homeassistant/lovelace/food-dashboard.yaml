@@ -71,10 +71,10 @@ views:
           content: >
             {% set expired = states('sensor.food_expired') | int(0) %}
             {% set today = states('sensor.food_expiring_today') | int(0) %}
-            {% if expired > 0 %}❌ **{{ expired }} item(s) EXPIRED** — check the fridge
+            {% if expired > 0 %}❌ **{{ expired }} item(s) EXPIRED**, check the fridge
 
             {% endif %}
-            {% if today > 0 %}🔴 **{{ today }} expiring today** — use them up!{% endif %}
+            {% if today > 0 %}🔴 **{{ today }} expiring today**, use them up!{% endif %}
 
       # ── Inventory Panels ──────────────────────────────────────────────────────
       # Read-only mirror of the web UI's inventory page. Items sorted by
@@ -88,7 +88,7 @@ views:
               {% set items = state_attr('sensor.food_inventory', 'refrigerated') or [] %}
               ### 🧊 Refrigerated ({{ items | length }})
 
-              {% if items %}{% for i in items %}{{ i.name }} —
+              {% if items %}{% for i in items %}{{ i.name }}:
               {%- if i.days_remaining is none %} no date
               {%- elif i.days_remaining < 0 %} **⚠ {{ -i.days_remaining }}d ago**
               {%- elif i.days_remaining == 0 %} **today**
@@ -100,7 +100,7 @@ views:
               {% set items = state_attr('sensor.food_inventory', 'frozen') or [] %}
               ### ❄️ Frozen ({{ items | length }})
 
-              {% if items %}{% for i in items %}{{ i.name }} —
+              {% if items %}{% for i in items %}{{ i.name }}:
               {%- if i.days_remaining is none %} no date
               {%- elif i.days_remaining < 0 %} **⚠ {{ -i.days_remaining }}d ago**
               {%- elif i.days_remaining == 0 %} **today**
@@ -112,7 +112,7 @@ views:
               {% set items = state_attr('sensor.food_inventory', 'room_temp') or [] %}
               ### ☀️ Room Temp ({{ items | length }})
 
-              {% if items %}{% for i in items %}{{ i.name }} —
+              {% if items %}{% for i in items %}{{ i.name }}:
               {%- if i.days_remaining is none %} no date
               {%- elif i.days_remaining < 0 %} **⚠ {{ -i.days_remaining }}d ago**
               {%- elif i.days_remaining == 0 %} **today**
@@ -124,7 +124,7 @@ views:
               {% set items = state_attr('sensor.food_inventory', 'pantry') or [] %}
               ### 📦 Pantry ({{ items | length }})
 
-              {% if items %}{% for i in items %}{{ i.name }} —
+              {% if items %}{% for i in items %}{{ i.name }}:
               {%- if i.days_remaining is none %} no date
               {%- elif i.days_remaining < 0 %} **⚠ {{ -i.days_remaining }}d ago**
               {%- elif i.days_remaining == 0 %} **today**

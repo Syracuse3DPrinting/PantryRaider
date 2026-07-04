@@ -245,7 +245,7 @@ function renderPanel(panelId, countId, items, bucket) {
          data-product-id="${item.product_id}" data-bucket="${bucket}" data-name="${esc(item.name)}"
          ondragstart="dragStart(event)" ondragend="dragEnd(event)">
       <div class="item-name">
-        <div class="item-name-text" title="${esc(item.name)}${item.added_date ? ' — added ' + item.added_date.slice(0,10) : ''}">${esc(item.name)}</div>
+        <div class="item-name-text" title="${esc(item.name)}${item.added_date ? ', added ' + item.added_date.slice(0,10) : ''}">${esc(item.name)}</div>
       </div>
       ${showAdded && item.added_date ? `<span class="item-qty">${item.added_date.slice(0,10)}</span>` : ''}
       <span class="item-qty">${item.amount % 1 === 0 ? item.amount : item.amount.toFixed(1)}${item.unit ? ' ' + esc(item.unit) : ''}</span>
@@ -285,7 +285,7 @@ function openEditModal(productId) {
   const catSel = document.getElementById('editCategory');
   catSel.value = item.category || '';
   if (!catSel.value && item.category) {
-    // category exists but wasn't in the list — add a temporary option
+    // category exists but wasn't in the list, so add a temporary option
     const opt = new Option(item.category, item.category, true, true);
     catSel.add(opt);
   }
