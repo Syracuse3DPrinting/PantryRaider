@@ -169,7 +169,9 @@ def test_two_menus_with_grouped_pills(client, monkeypatch):
         assert 'id="menu-toggle-p"' in html
         assert 'id="menu-toggle-s"' in html
         assert "showSettingsMenu(" in html
-        assert "localStorage.getItem('settingsMenu') || 'p'" in html
+        # The menu wiring itself lives in the setup JS module.
+        menu_js = client.get("static/js/setup/menu.js").text
+        assert "localStorage.getItem('settingsMenu') || 'p'" in menu_js
 
 
 def test_no_setting_lost_in_reorg(client, monkeypatch):
@@ -189,6 +191,8 @@ def test_no_setting_lost_in_reorg(client, monkeypatch):
 
 def test_old_pane_hashes_have_aliases(client, monkeypatch):
     html = _render(client, monkeypatch, mode="server", is_pi=False)
+    # PANE_HASH_ALIASES lives in the setup menu module, not inline in the page.
+    menu_js = client.get("static/js/setup/menu.js").text
     for old, new in {
         # Original (pre-reorg) anchors.
         "pane-theme": "pane-appearance",
@@ -207,7 +211,7 @@ def test_old_pane_hashes_have_aliases(client, monkeypatch):
         # One-menu iteration anchor whose pane dissolved.
         "pane-recipes": "pane-connections",
     }.items():
-        assert f"'{old}': '{new}'," in html, f"missing alias {old} -> {new}"
+        assert f"'{old}': '{new}'," in menu_js, f"missing alias {old} -> {new}"
     # Every iteration-1 anchor still lands: as a live pane div, or via alias.
     for anchor in ("pane-appearance", "pane-screen", "pane-scanning",
                    "pane-inventory", "pane-connections", "pane-devices",
@@ -215,8 +219,8 @@ def test_old_pane_hashes_have_aliases(client, monkeypatch):
                    "pane-start-page"):
         assert f'id="{anchor}"' in html, f"iteration-1 anchor lost: {anchor}"
     # Revived panes must not shadow themselves in the alias map.
-    assert "'pane-personalization-recipes':" not in html
-    assert "'pane-start-page':" not in html
+    assert "'pane-personalization-recipes':" not in menu_js
+    assert "'pane-start-page':" not in menu_js
     # Dissolved panes leave no dead pane divs behind.
     for gone in ("pane-theme", "pane-navigation", "pane-display", "pane-ai",
                  "pane-hardware", "pane-personalization-storage",

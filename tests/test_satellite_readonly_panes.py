@@ -104,8 +104,10 @@ def test_satellite_updates_card_detects_availability(client, monkeypatch):
     html = _render_setup(client, monkeypatch, satellite=True)
     assert 'onclick="checkSatelliteUpdate(this)"' in html
     assert 'id="update-avail"' in html
-    # The availability check runs on load and the OTA stays on its own button.
-    assert "checkSatelliteUpdate(null)" in html
+    # The availability check runs on load; the page init lives in the setup
+    # menu module, loaded on configured pages and wizard alike.
+    assert "static/js/setup/menu.js" in html
+    assert "checkSatelliteUpdate(null)" in client.get("static/js/setup/menu.js").text
     assert 'onclick="checkForUpdates()"' in html
     assert ">Update now" in html
 
@@ -146,7 +148,9 @@ def test_pi_hosted_gets_the_in_app_ota(client, monkeypatch):
         html = client.get("/setup").text
     assert 'onclick="checkForUpdates()"' in html        # Update now (OTA)
     assert 'onclick="checkSatelliteUpdate(this)"' in html
-    assert "checkSatelliteUpdate(null)" in html         # auto-check on load
+    assert "static/js/setup/menu.js" in html            # page init module
+    assert "checkSatelliteUpdate(null)" in client.get(
+        "static/js/setup/menu.js").text                 # auto-check on load
     # Pi Hosted is not a satellite, so its other panes stay editable.
     assert 'onclick="savePaneAi(this)"' in html
 
@@ -171,7 +175,11 @@ def test_configured_page_defines_update_functions(client, monkeypatch):
     block, so the Updates card buttons called undefined functions and silently
     did nothing (Pantry Raider). Regression guard."""
     html = _render_setup(client, monkeypatch, satellite=False)
+    # The functions live in a module the page loads unconditionally (never
+    # behind the wizard-only block), so a configured page always gets them.
+    assert "static/js/setup/devices-updates.js" in html
+    updates_js = client.get("static/js/setup/devices-updates.js").text
     for fn in ("function checkSatelliteUpdate", "async function updateServerNow",
                "async function checkForUpdates", "function _initSyncTimes",
                "async function saveAutoUpdate"):
-        assert fn in html, f"missing {fn} on the configured settings page"
+        assert fn in updates_js, f"missing {fn} in the setup updates module"

@@ -122,10 +122,12 @@ def test_stand_mixer_attachment_toggle_present(client, monkeypatch):
     """The attachments group is wired to show only when a stand mixer is owned."""
     html = _render(client, monkeypatch, satellite=False)
     assert 'data-group="attachment"' in html
-    assert "function syncStandMixerAttachments" in html
-    # Wired to the stand_mixer checkbox on load and change.
+    assert "function syncStandMixerAttachments" in client.get(
+        "static/js/setup/panes.js").text
+    # Wired to the stand_mixer checkbox on load and change (menu.js page init).
     assert "appliance_stand_mixer" in html
-    assert "syncStandMixerAttachments" in html
+    assert "syncStandMixerAttachments" in client.get(
+        "static/js/setup/menu.js").text
 
 
 def test_settings_search_box_present(client, monkeypatch):
@@ -137,6 +139,7 @@ def test_settings_search_box_present(client, monkeypatch):
     with patch.object(type(settings), "is_configured", lambda self: True):
         html = client.get("/setup").text
     assert 'id="settings-search"' in html
-    assert "function settingsSearch(" in html
-    assert "function showSettingsMenu(" in html
+    menu_js = client.get("static/js/setup/menu.js").text
+    assert "function settingsSearch(" in menu_js
+    assert "function showSettingsMenu(" in menu_js
     assert 'data-mgroup="p"' in html and 'data-mgroup="s"' in html
