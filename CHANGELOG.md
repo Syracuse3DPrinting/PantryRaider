@@ -10,6 +10,8 @@ All notable changes to Pantry Raider are recorded here. The format is based on
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-07-04
+
 ### Added
 - **The device helper now requires an on-device token.** On a Pi appliance, the helper service that performs updates, reboots, and restores now hands the app and the Stream Deck a private token when the device starts, and expects it back on every request that changes anything. It all happens on the device itself, so nothing changes in day-to-day use and no action is needed; this release still accepts requests from software that predates the token, so mixed-version devices update cleanly.
 - **One-click support bundle.** The Diagnostics card in Settings, Advanced now has a Download support bundle button that packs everything useful for a bug report into a single zip: the app version, your settings, the captured log, the current scanner and pantry-audit state, running timers, the last update check, and the Python environment. On a Pi appliance the bundle also includes a device health report gathered on the host: service states, boot settings, display and input probes, disk space, power throttling, and the most recent update log. Attach the zip when reporting a problem; passwords and API keys are removed from every file in it, so it is safe to share.
