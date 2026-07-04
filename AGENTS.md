@@ -113,20 +113,21 @@ commit messages, and UI copy.
 | `mealie.py` | Recipes / meal plan / shopping client, plus the `suggest_recipes` inventory matcher |
 | `barcode.py` | Open Food Facts lookup with LLM enrichment |
 | `defaults.py` | Expiry rules |
-| `current_recipe.py` | In-memory active recipe, plus the Mealie-detail normalizer |
-| `timers.py` | Shared server-side timer registry |
+| `current_recipe.py` | Active recipe (and courses), shared across workers via an mtime-checked state file under data_dir, plus the Mealie-detail normalizer |
+| `timers.py` | Shared server-side timer registry, persisted to a state file under data_dir; countdowns derive from epoch deadlines so every worker and surface agrees |
 | `recipe_timers.py` | Parses step durations into timer suggestions |
 | `recipes_import.py` | Parse a recipe file: generic JSON, schema.org JSON-LD, or Mealie export |
 | `recipes_external.py` | TheMealDB / Spoonacular suggestions and ingredient matching |
 | `cameras.py` | Resolve a configured camera to a fetchable feed; HA cameras need a bearer header (not a token in the URL), so the app proxies them |
 | `camera_scan.py` | IP-camera probe |
 | `scanner_mode.py` | Barcode scanner mode (inventory / consume / shopping / audit), shared across workers via a state file under data_dir |
-| `audit.py` | In-memory, location-scoped, read-only pantry stock count (scans compared to Grocy stock, never written back) |
+| `audit.py` | Location-scoped, read-only pantry stock count (scans compared to Grocy stock, never written back), shared across workers via a state file under data_dir |
 | `nutrition.py` | Food-intake log totals; pairs with the `IntakeLog` model |
 | `weather.py` | Kiosk forecast: Open-Meteo primary, wttr.in fallback; pure parse helpers |
 | `satellite.py` | pi_remote pulls and persists backend config from the main server |
 | `devices.py` | Main-server registry of satellite remotes, with an up-to-date/behind version badge via `version_compare.py` |
-| `ha_events.py` | In-memory ring of on-screen HA events (notification toasts, camera pop-ups), polled by the kiosk |
+| `ha_events.py` | Ring of on-screen HA events (notification toasts, camera pop-ups), polled by the kiosk, shared across workers via a state file under data_dir |
+| `screensaver_state.py` | Kiosk/Stream Deck shared screensaver canvas state; lives in a runtime tmp file (ephemeral, spares the SD card), not data_dir |
 | `diagnostics.py` | Debug logging to a rotating file under `data_dir/logs`, with redacted download |
 | `auto_update.py` | Fleet-wide auto-update decision: a Pi appliance applies via the host-bridge OTA, a server via Watchtower, a satellite follows the server's flag |
 | `utensils.py` | Recipe-equipment match |
@@ -177,9 +178,16 @@ commit messages, and UI copy.
   cast with `| string`.
 - LLM JSON replies may be fenced; always parse with
   `providers.base.parse_json_response`.
-- Current Recipe and timers are **in-memory and process-local** (no disk
-  persistence); a restart clears them. Keep the normalization, scaling, and
-  parse logic pure so it stays testable.
+- Cross-surface state (timers, current recipe, scanner mode, audit session,
+  HA events) is **shared through small atomic JSON state files under
+  data_dir** (temp file + `os.replace` writes, mtime-cached reads, silent
+  in-memory degradation when data_dir is unwritable), so multiple uvicorn
+  workers agree and the state survives a restart. Screensaver state is the
+  exception: it writes several times a second, so it lives in a runtime tmp
+  file (`tempfile.gettempdir()`, `SCREENSAVER_STATE_DIR` overrides) to spare
+  the SD card. `main.py` also heartbeats `data_dir/app-instance.json` and
+  warns loudly at startup when another live process shares the data dir.
+  Keep the normalization, scaling, and parse logic pure so it stays testable.
 - Templates get an `ai_configured` flag from `templating.theme_context`;
   gate AI-only UI on it (`{% if ai_configured %}`) so the app never offers
   actions that cannot work without a provider.

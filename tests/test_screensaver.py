@@ -401,3 +401,61 @@ def test_screensaver_js_gates_idle_on_kiosk_or_all_clients():
     assert "data-all-clients" in js
     # Idle activation: kiosk OR the all-clients setting, still timeout-gated.
     assert "(kiosk || ALL_CLIENTS) && IDLE_MS > 0" in js
+
+
+# -- state-file sharing (FoodAssistant-0fho) ----------------------------------
+
+
+def _forget_saver_memory():
+    """Simulate a different worker process: module state back at its default,
+    only the runtime state file remains."""
+    from app.services import screensaver_state as st
+    st._state = dict(st._DEFAULT_STATE)
+    st._state["pills"] = []
+    st._mtime = None
+
+
+def test_saver_state_is_shared_across_workers(monkeypatch, tmp_path):
+    from app.services import screensaver_state as st
+
+    monkeypatch.setenv("SCREENSAVER_STATE_DIR", str(tmp_path))
+    st.reset()
+    st.update(True, x=0.4, y=0.2, w=0.2, h=0.1, band=0.3, layout="below")
+    assert (tmp_path / "foodassistant-screensaver.json").exists()
+    _forget_saver_memory()
+    # The deck's poll may land on a worker that never saw the kiosk's post.
+    snap = st.snapshot()
+    assert snap["active"] is True and snap["x"] == 0.4
+    # And the dismiss round-trips across workers too: deck key press on one
+    # worker, kiosk's next post handled by another.
+    st.dismiss()
+    _forget_saver_memory()
+    assert st.update(True, band=0.3, layout="below")["dismiss"] is True
+    st.reset()
+
+
+def test_corrupt_saver_file_never_breaks_a_poll(monkeypatch, tmp_path):
+    from app.services import screensaver_state as st
+
+    monkeypatch.setenv("SCREENSAVER_STATE_DIR", str(tmp_path))
+    st.reset()
+    st.update(True, band=0.3, layout="below")
+    (tmp_path / "foodassistant-screensaver.json").write_text("{not json")
+    # The in-memory view is kept; the corrupt file never raises.
+    assert st.snapshot()["active"] is True
+    _forget_saver_memory()
+    assert st.snapshot()["active"] is False
+    st.reset()
+
+
+def test_saver_state_file_lives_in_the_runtime_tmp_dir(monkeypatch, tmp_path):
+    # SD-wear call (FoodAssistant-0fho): the kiosk posts several times a
+    # second, so this state file must default to the system temp dir, never
+    # the SD-backed data_dir.
+    import tempfile
+    from app.services import screensaver_state as st
+
+    monkeypatch.delenv("SCREENSAVER_STATE_DIR", raising=False)
+    assert st._state_file().parent == Path(tempfile.gettempdir())
+    monkeypatch.setenv("SCREENSAVER_STATE_DIR", str(tmp_path))
+    assert st._state_file().parent == tmp_path

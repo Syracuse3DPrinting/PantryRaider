@@ -3,18 +3,28 @@
 Home Assistant pushes events to Pantry Raider (a rest_command in an automation),
 and the kiosk / web UI polls for them and shows them on the display: notification
 toasts and camera pop-ups (for example, pop up the doorbell camera when a person
-is detected). Events live in a small in-memory ring, like the timers and the
-active recipe: they are transient and process-local, which is fine because they
-target the screen of the instance HA posts to, and a restart simply clears any
-unseen events.
+is detected). Events live in a small ring capped by count and age, so a kiosk
+that was off does not get flooded with a backlog when it polls.
 
 Each event has a monotonically increasing ``id`` so a client can poll for "what
 is new since the last id I saw" without missing or replaying events.
+
+Sharing (FoodAssistant-0fho): the ring persists to a small state file under
+data_dir, the same pattern as scanner_mode.py. A server running multiple
+uvicorn workers must share the ring, or an event HA posts through one worker
+never reaches the kiosk polling another worker. Reads check the file's mtime
+and only re-parse when it changed, so a poll costs one stat call; polling
+never writes the file, only adding an event does. If data_dir is not writable
+(tests, a read-only mount) the module quietly degrades to the old
+process-local in-memory behavior.
 """
 from __future__ import annotations
 
+import json
+import os
 import threading
 import time
+from pathlib import Path
 
 # Keep only the most recent events, and drop anything older than the TTL, so a
 # kiosk that was off does not get flooded with a backlog when it polls.
@@ -24,6 +34,50 @@ _TTL_SECONDS = 120
 _lock = threading.Lock()
 _events: list[dict] = []
 _next_id = 1
+# mtime of the state file our in-memory view corresponds to (None = never seen).
+_mtime: int | None = None
+
+
+def _state_file() -> Path:
+    # Resolved per call (not at import) so tests that repoint data_dir work.
+    from ..config import settings
+    return Path(settings.data_dir) / "ha_events.json"
+
+
+def _load_locked() -> None:
+    """Refresh the in-process ring from the state file if it changed on disk.
+    Caller holds the lock."""
+    global _events, _next_id, _mtime
+    try:
+        sf = _state_file()
+        mtime = sf.stat().st_mtime_ns
+    except OSError:
+        return  # no file yet (fresh install, or unwritable data_dir)
+    if mtime == _mtime:
+        return
+    try:
+        data = json.loads(sf.read_text())
+        events = [e for e in data.get("events", []) if isinstance(e, dict) and "id" in e]
+        nxt = int(data.get("next", 1))
+    except (OSError, ValueError, TypeError):
+        return  # a torn or corrupt file never breaks a poll; keep what we have
+    _mtime = mtime
+    _events = events
+    _next_id = max(nxt, _next_id)
+
+
+def _save_locked() -> None:
+    """Write the ring to the state file (atomic replace, best effort). Caller
+    holds the lock."""
+    global _mtime
+    sf = _state_file()
+    try:
+        tmp = sf.with_name(sf.name + ".tmp")
+        tmp.write_text(json.dumps({"next": _next_id, "events": _events}))
+        os.replace(tmp, sf)
+        _mtime = sf.stat().st_mtime_ns
+    except OSError:
+        pass  # data_dir not writable: fall back to process-local behavior
 
 
 def _prune_locked(now: float) -> None:
@@ -36,11 +90,13 @@ def _add(event: dict) -> int:
     global _next_id
     now = time.time()
     with _lock:
+        _load_locked()
         event["id"] = _next_id
         event["ts"] = now
         _next_id += 1
         _events.append(event)
         _prune_locked(now)
+        _save_locked()
         return event["id"]
 
 
@@ -79,10 +135,12 @@ def poll(after_id: int = 0) -> dict:
 
     A fresh client should first read ``last_id`` (with after_id huge, or via the
     returned value) so it only sees events that arrive after it connects, rather
-    than replaying the recent ring on load.
+    than replaying the recent ring on load. Polling never writes the state file
+    (the TTL/size prune is applied in memory and re-applied on the next add).
     """
     now = time.time()
     with _lock:
+        _load_locked()
         _prune_locked(now)
         last = _next_id - 1
         try:
@@ -95,12 +153,18 @@ def poll(after_id: int = 0) -> dict:
 
 def last_id() -> int:
     with _lock:
+        _load_locked()
         return _next_id - 1
 
 
 def reset() -> None:
-    """Clear all events (used by tests)."""
-    global _events, _next_id
+    """Clear all events and drop the state file (used by tests)."""
+    global _events, _next_id, _mtime
     with _lock:
         _events = []
         _next_id = 1
+        _mtime = None
+        try:
+            _state_file().unlink(missing_ok=True)
+        except OSError:
+            pass

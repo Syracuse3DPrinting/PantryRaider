@@ -154,3 +154,54 @@ def test_convert_tab_and_custom_rows(client, monkeypatch):
                         [{"label": "Stick of butter", "value": "113 g"}], raising=False)
     html = client.get("/ui/convert").text
     assert "Stick of butter" in html and "My conversions" in html
+
+
+# -- state-file sharing (FoodAssistant-0fho) ----------------------------------
+
+@pytest.fixture
+def shared_dir(monkeypatch, tmp_path):
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    ha_events.reset()
+    yield tmp_path
+    ha_events.reset()
+
+
+def _forget_in_memory_state():
+    """Simulate a different worker process (or a restart): the module-level
+    ring is back at its import-time default, only the file remains."""
+    ha_events._events = []
+    ha_events._next_id = 1
+    ha_events._mtime = None
+
+
+def test_events_are_shared_across_workers(shared_dir):
+    i1 = ha_events.add_notification("dinner", level="success")
+    assert (shared_dir / "ha_events.json").exists()
+    _forget_in_memory_state()
+    # A kiosk polling a worker that never saw the post still gets the event.
+    out = ha_events.poll(0)
+    assert out["last_id"] == i1
+    assert out["events"][0]["message"] == "dinner"
+    # The since-id contract holds across workers too: an event added through
+    # "another worker" keeps counting from the shared id sequence.
+    i2 = ha_events.add_camera(name="Door", src="ui/camera/0/snapshot")
+    assert i2 == i1 + 1
+    _forget_in_memory_state()
+    assert [e["id"] for e in ha_events.poll(i1)["events"]] == [i2]
+
+
+def test_corrupt_event_file_never_breaks_a_poll(shared_dir):
+    ha_events.add_notification("hi")
+    (shared_dir / "ha_events.json").write_text("{not json")
+    # The in-memory ring is kept; the corrupt file never raises.
+    assert ha_events.poll(0)["events"][0]["message"] == "hi"
+    # A fresh worker facing only the corrupt file degrades to empty, no raise.
+    _forget_in_memory_state()
+    assert ha_events.poll(0) == {"events": [], "last_id": 0}
+
+
+def test_unwritable_data_dir_degrades_to_in_memory(monkeypatch):
+    monkeypatch.setattr(settings, "data_dir", "/nonexistent/nowhere", raising=False)
+    _forget_in_memory_state()
+    i = ha_events.add_notification("local only")
+    assert ha_events.poll(0)["last_id"] == i

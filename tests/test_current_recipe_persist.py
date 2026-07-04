@@ -187,3 +187,42 @@ def test_save_leftover_creates_grocy_item_and_resolves(client, monkeypatch):
     db = SessionLocal()
     assert ai.get(db, item["id"])["status"] == "done"
     db.close()
+
+
+# -- cross-worker visibility (FoodAssistant-0fho) ---------------------------
+
+def test_another_workers_write_is_seen(data_dir):
+    import json, os, time
+    _reset_collection()
+    cr.set_active({"title": "Chili", "ingredients": []})
+    assert cr.get_active()["title"] == "Chili"
+    # Another worker replaces the collection: rewrite the state file directly
+    # (bump mtime explicitly in case the writes land in the same tick).
+    path = data_dir / "current_recipe.json"
+    blob = {"primary": {"title": "Stew", "source": "", "id": None, "servings": 2,
+                        "servings_scale": 1.0, "ingredients": [], "steps": [],
+                        "notes": ""}, "courses": {}, "next": 1}
+    path.write_text(json.dumps(blob))
+    os.utime(path, ns=(time.time_ns(), time.time_ns()))
+    # This worker's cached copy is invalidated by the mtime change.
+    assert cr.get_active()["title"] == "Stew"
+
+
+def test_another_workers_clear_is_seen(data_dir):
+    _reset_collection()
+    cr.set_active({"title": "Chili", "ingredients": []})
+    assert cr.get_active() is not None
+    # Another worker cleared the recipe (the file is gone).
+    (data_dir / "current_recipe.json").unlink()
+    assert cr.get_active() is None
+
+
+def test_corrupt_recipe_file_keeps_the_in_memory_view(data_dir):
+    import os, time
+    _reset_collection()
+    cr.set_active({"title": "Chili", "ingredients": []})
+    path = data_dir / "current_recipe.json"
+    path.write_text("{not json")
+    os.utime(path, ns=(time.time_ns(), time.time_ns()))
+    # A torn/corrupt file never raises and never wipes the loaded recipe.
+    assert cr.get_active()["title"] == "Chili"

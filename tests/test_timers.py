@@ -108,14 +108,13 @@ def test_deadline_epoch_is_satellite_shareable():
 # --- extend (FoodAssistant-xlb3) ------------------------------------------
 
 
-def test_extend_timer_moves_both_deadlines_and_total():
+def test_extend_timer_moves_deadline_and_total():
     t = timers.create_timer("Pasta", 60)
     out = timers.extend_timer(t["id"], 60)
     assert out is not None
     # The shared epoch deadline moved by the extension...
     assert out["deadline_epoch"] == pytest.approx(t["deadline_epoch"] + 60, abs=0.5)
-    # ...and so did our own monotonic countdown (remaining grew past the
-    # original 60s budget), so both clocks agree.
+    # ...and the countdown derived from it grew past the original 60s budget.
     assert out["remaining_seconds"] > 60
     assert out["total_seconds"] == 120
     assert out["running"] is True and out["expired"] is False
@@ -130,9 +129,10 @@ def test_extend_timer_missing_returns_none():
 def test_extend_timer_expired_returns_none():
     import time as _time
     t = timers.create_timer("Eggs", 5)
-    # Force expiry without sleeping: move the monotonic deadline into the past.
+    # Force expiry without sleeping: move the epoch deadline into the past.
     with timers._lock:
-        timers._timers[t["id"]].deadline_monotonic = _time.monotonic() - 1
+        timers._timers[t["id"]].deadline_epoch = _time.time() - 1
+        timers._save_locked()
     assert timers.extend_timer(t["id"], 60) is None
     # An expired timer stays listed (it is an alert), it just cannot grow.
     assert timers.get_timer(t["id"])["expired"] is True
@@ -146,3 +146,66 @@ def test_extend_timer_rejects_non_positive_and_garbage():
         timers.extend_timer(t["id"], -30)
     with pytest.raises(ValueError):
         timers.extend_timer(t["id"], "soon")
+
+
+# --- state-file sharing (FoodAssistant-0fho) --------------------------------
+
+
+@pytest.fixture
+def shared_dir(monkeypatch, tmp_path):
+    from app.config import settings
+    monkeypatch.setattr(settings, "data_dir", str(tmp_path), raising=False)
+    timers.clear_all()
+    yield tmp_path
+    timers.clear_all()
+
+
+def _forget_in_memory_state():
+    """Simulate a different worker process (or a restart): the module-level
+    registry is back at its import-time default, only the file remains."""
+    timers._timers = {}
+    timers._next_id = 0
+    timers._mtime = None
+
+
+def test_timers_are_shared_across_workers(shared_dir):
+    t = timers.create_timer("Pasta", 600)
+    assert (shared_dir / "timers.json").exists()
+    _forget_in_memory_state()
+    # A worker that never saw the create still lists the shared timer.
+    listed = timers.list_timers()
+    assert [x["id"] for x in listed] == [t["id"]]
+    assert listed[0]["label"] == "Pasta"
+    assert listed[0]["deadline_epoch"] == t["deadline_epoch"]
+    assert listed[0]["running"] is True
+    # And can act on it: extend, then cancel, both land in the file.
+    assert timers.extend_timer(t["id"], 60)["total_seconds"] == 660
+    assert timers.cancel_timer(t["id"]) is True
+    _forget_in_memory_state()
+    assert timers.list_timers() == []
+
+
+def test_timer_ids_never_reused_across_workers(shared_dir):
+    a = timers.create_timer("a", 5)
+    _forget_in_memory_state()
+    b = timers.create_timer("b", 5)
+    assert b["id"] == a["id"] + 1
+
+
+def test_corrupt_timer_file_never_breaks_a_poll(shared_dir):
+    timers.create_timer("Rice", 60)
+    (shared_dir / "timers.json").write_text("{not json")
+    # The in-memory view is kept; the corrupt file never raises.
+    assert [t["label"] for t in timers.list_timers()] == ["Rice"]
+    # A fresh worker facing only the corrupt file degrades to empty, no raise.
+    _forget_in_memory_state()
+    assert timers.list_timers() == []
+
+
+def test_unwritable_data_dir_degrades_to_in_memory(monkeypatch):
+    from app.config import settings
+    monkeypatch.setattr(settings, "data_dir", "/nonexistent/nowhere", raising=False)
+    _forget_in_memory_state()
+    t = timers.create_timer("Eggs", 60)
+    assert timers.get_timer(t["id"])["label"] == "Eggs"
+    assert timers.clear_all() == 1

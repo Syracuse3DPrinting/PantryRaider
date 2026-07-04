@@ -25,6 +25,17 @@ async def lifespan(app: FastAPI):
         configure_file_logging(settings.data_dir, settings.debug_logging)
     except Exception:
         pass
+    # Belt-and-braces multi-process detection (FoodAssistant-0fho): warn loudly
+    # if another live app process is already serving this data dir (uvicorn
+    # started with several workers), then keep our own heartbeat fresh.
+    # Best-effort: an unwritable data dir just leaves the guard silent.
+    try:
+        from .services import instance_guard
+        instance_guard.check_on_startup()
+        app.state.instance_guard_task = asyncio.create_task(
+            instance_guard.heartbeat_task())
+    except Exception:
+        pass
     Base.metadata.create_all(bind=engine)
     db = next(get_db())
     try:
@@ -56,7 +67,8 @@ async def lifespan(app: FastAPI):
     # mode; the loop is a no-op until usb_backup_interval_hours is set.
     app.state.usb_backup_task = asyncio.create_task(_periodic_usb_backup())
     yield
-    for attr in ("sync_task", "auto_update_task", "usb_backup_task"):
+    for attr in ("sync_task", "auto_update_task", "usb_backup_task",
+                 "instance_guard_task"):
         task = getattr(app.state, attr, None)
         if task is not None:
             task.cancel()

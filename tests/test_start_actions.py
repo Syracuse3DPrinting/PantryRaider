@@ -290,7 +290,6 @@ def test_expired_timer_key_dismisses(monkeypatch):
     monkeypatch.setattr(settings, "streamdeck_key_overrides", [], raising=False)
     t = timers.create_timer("Eggs", 60)
     row = timers._timers[t["id"]]
-    row.deadline_monotonic -= 120
     row.deadline_epoch -= 120
     res = asyncio.run(sa.fire_key("timer_eggs"))
     assert res["ok"] and "dismissed" in res["detail"]

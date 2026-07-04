@@ -1,19 +1,24 @@
-"""In-memory holder for the single active ("current") recipe.
+"""Holder for the single active ("current") recipe.
 
-The main server keeps ONE active recipe in process memory so that the future
-Current Recipe tab, Stream Deck, and satellites can all read the same thing. A
-recipe is populated from a Mealie/Grocy recipe, an imported recipe, or an AI
-recipe, then normalized into a stable shape (title, source, servings, scaled
-servings, ingredients, steps, notes).
+The main server keeps ONE active recipe so that the Current Recipe tab, Stream
+Deck, and satellites can all read the same thing. A recipe is populated from a
+Mealie/Grocy recipe, an imported recipe, or an AI recipe, then normalized into
+a stable shape (title, source, servings, scaled servings, ingredients, steps,
+notes).
 
-This is deliberately process-local and thread-safe via a module lock. There is
-no disk persistence: the active recipe is ephemeral session state, and the
-later epic beads (Current Recipe tab, satellite wiring) decide how surfaces sync
-it. Keep the I/O out so the core normalization/scaling stays pure and testable.
+The collection persists to a state file under data_dir (FoodAssistant-yurm),
+so it survives a restart, and the in-process copy is mtime-invalidated the
+same way scanner_mode.py's is (FoodAssistant-0fho): a server running multiple
+uvicorn workers must see the same recipe from every worker, so every read
+stats the file and re-parses only when another worker changed it. If data_dir
+is not writable (tests, a read-only mount) the module quietly degrades to
+process-local in-memory behavior. Keep the I/O at the edges so the core
+normalization/scaling stays pure and testable.
 """
 from __future__ import annotations
 
 import json
+import os
 import threading
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
@@ -54,8 +59,11 @@ _next_slot = 1
 PRIMARY_SLOT = 0
 # Whether we have tried to load the persisted recipe yet this process. A loaded
 # recipe stays active until the user clears or cooks it, surviving a restart
-# (FoodAssistant-yurm), so it is read back from disk once on first access.
+# (FoodAssistant-yurm), so it is read back from disk on first access. _mtime is
+# the state file mtime the in-process copy corresponds to, so a later read can
+# spot (and pick up) a write made by another worker with a single stat call.
 _loaded = False
+_mtime: int | None = None
 
 
 def _recipe_path() -> Path:
@@ -82,21 +90,33 @@ def _from_stored(data: dict) -> ActiveRecipe:
 
 
 def _ensure_loaded_locked() -> None:
-    """Load the persisted recipes once, on first access. Caller holds the lock.
+    """Load the persisted recipes on first access, and RELOAD them whenever the
+    state file changed on disk since we last read it, so a write made through
+    another worker is visible here. Caller holds the lock.
 
     Accepts both the new collection format ({primary, courses, next}) and the
     older single-recipe format (a bare recipe dict), so an upgrade keeps a
     recipe that was active before the multi-recipe change."""
-    global _active, _courses, _next_slot, _loaded
-    if _loaded:
+    global _active, _courses, _next_slot, _loaded, _mtime
+    path = _recipe_path()
+    try:
+        mtime = path.stat().st_mtime_ns
+    except OSError:
+        mtime = None
+    if _loaded and mtime == _mtime:
         return
     _loaded = True
+    if mtime is None:
+        # No file. Either nothing was ever persisted (the in-memory state is
+        # authoritative, e.g. an unwritable data_dir) or another worker
+        # cleared the collection since we last saw the file.
+        if _mtime is not None:
+            _active, _courses, _mtime = None, {}, None
+        return
     try:
-        path = _recipe_path()
-        if not path.exists():
-            return
         data = json.loads(path.read_text())
         if not data:
+            _mtime = mtime
             return
         if isinstance(data, dict) and ("primary" in data or "courses" in data):
             primary = data.get("primary")
@@ -110,26 +130,33 @@ def _ensure_loaded_locked() -> None:
         else:
             # Legacy: the file was a single recipe dict.
             _active = _from_stored(data)
-    except Exception:  # noqa: BLE001 - a bad/old file must not crash the app
-        _active, _courses = None, {}
+        _mtime = mtime
+    except Exception:  # noqa: BLE001 - a torn/corrupt file must not crash the
+        pass           # app; keep the in-memory view and retry on the next read
 
 
 def _persist_locked() -> None:
-    """Write the recipe collection (or clear the file) to disk. Caller holds the
-    lock. Best-effort: a write failure leaves the in-memory state authoritative."""
+    """Write the recipe collection (or clear the file) to disk, atomically, and
+    remember the resulting mtime. Caller holds the lock. Best-effort: a write
+    failure leaves the in-memory state authoritative."""
+    global _mtime
     try:
         path = _recipe_path()
         path.parent.mkdir(parents=True, exist_ok=True)
         if _active is None and not _courses:
             if path.exists():
                 path.unlink()
+            _mtime = None
             return
         blob = {
             "primary": asdict(_active) if _active is not None else None,
             "courses": {str(slot): asdict(r) for slot, r in _courses.items()},
             "next": _next_slot,
         }
-        path.write_text(json.dumps(blob))
+        tmp = path.with_name(path.name + ".tmp")
+        tmp.write_text(json.dumps(blob))
+        os.replace(tmp, path)
+        _mtime = path.stat().st_mtime_ns
     except Exception:  # noqa: BLE001 - persistence is best-effort
         pass
 
@@ -211,10 +238,12 @@ def _serialize(recipe: ActiveRecipe) -> dict:
 def set_active(recipe_dict: dict) -> dict:
     """Replace the active recipe with a normalized copy of recipe_dict and
     return the serialized form."""
-    global _active, _loaded
+    global _active
     normalized = _normalize(recipe_dict)
     with _lock:
-        _loaded = True  # an explicit set supersedes anything on disk
+        # Refresh first so persisting does not clobber courses another worker
+        # added; the explicit set then replaces just the primary.
+        _ensure_loaded_locked()
         _active = normalized
         _persist_locked()
         return _serialize(_active)
@@ -231,9 +260,9 @@ def get_active() -> dict | None:
 
 def clear_active() -> None:
     """Forget the active recipe (and remove the persisted copy)."""
-    global _active, _loaded
+    global _active
     with _lock:
-        _loaded = True
+        _ensure_loaded_locked()
         _active = None
         _persist_locked()
 
