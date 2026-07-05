@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from .. import ratelimit, usage
 from ..config import settings
 from ..deps import (ACCOUNT_DISABLED_MESSAGE, current_account,
-                    current_instance, get_db, utc_now_iso)
+                    current_instance, get_db, utc_now_iso, client_ip)
 from ..models import Account, Instance, PairingCode
 from ..security import new_pairing_code, new_token, token_hash
 from .accounts import authenticate
@@ -53,7 +53,7 @@ def provision_instance(payload: ProvisionRequest, request: Request,
     types the email and password they created on the portal. Shares the
     login rate-limit window because it is the same password-guessing
     surface."""
-    client = request.client.host if request.client else "unknown"
+    client = client_ip(request)
     if not ratelimit.allow(f"login:{client}", settings.login_rate_per_minute):
         raise HTTPException(429, detail="Too many login attempts, try again in a minute")
     account = authenticate(db, payload.email, payload.password)

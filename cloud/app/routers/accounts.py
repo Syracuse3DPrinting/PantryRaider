@@ -9,10 +9,11 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import (ACCOUNT_DISABLED_MESSAGE, current_account, get_db,
-                    utc_now_iso)
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, client_ip, current_account,
+                    get_db, utc_now_iso)
 from ..models import Account, AuthSession, Instance
-from ..security import hash_password, new_token, token_hash, verify_password
+from ..security import (hash_password, new_token, password_problem,
+                        token_hash, verify_password)
 
 router = APIRouter(prefix="/v1/accounts", tags=["accounts"])
 
@@ -50,12 +51,13 @@ def _issue_session(db: Session, account_id: int) -> str:
 
 @router.post("/signup")
 def signup(payload: Credentials, request: Request, db: Session = Depends(get_db)):
-    client = request.client.host if request.client else "unknown"
+    client = client_ip(request)
     if not ratelimit.allow(f"signup:{client}", settings.signup_rate_per_minute):
         raise HTTPException(429, detail="Too many signup attempts, try again in a minute")
-    if len(payload.password) < 8:
-        raise HTTPException(400, detail="Password must be at least 8 characters")
     email = payload.email.strip().lower()
+    problem = password_problem(payload.password, email)
+    if problem:
+        raise HTTPException(400, detail=problem)
     if not _valid_email(email):
         raise HTTPException(400, detail="Enter a valid email address")
     if db.query(Account).filter_by(email=email).first():
@@ -72,7 +74,7 @@ def signup(payload: Credentials, request: Request, db: Session = Depends(get_db)
 
 @router.post("/login")
 def login(payload: Credentials, request: Request, db: Session = Depends(get_db)):
-    client = request.client.host if request.client else "unknown"
+    client = client_ip(request)
     if not ratelimit.allow(f"login:{client}", settings.login_rate_per_minute):
         raise HTTPException(429, detail="Too many login attempts, try again in a minute")
     account = authenticate(db, payload.email, payload.password)

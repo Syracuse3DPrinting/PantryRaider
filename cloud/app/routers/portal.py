@@ -21,10 +21,11 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import (ACCOUNT_DISABLED_MESSAGE, SESSION_COOKIE, cookie_account,
-                    get_db, is_admin, utc_now_iso)
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, SESSION_COOKIE, client_ip,
+                    cookie_account, get_db, is_admin, utc_now_iso)
 from ..models import Account, AuthSession, Instance, UsageLedger
-from ..security import hash_password, token_hash, verify_password
+from ..security import (hash_password, password_problem,
+                        token_hash, verify_password)
 from .accounts import _issue_session, _valid_email, authenticate
 from .oauth_google import enabled as google_enabled
 
@@ -64,13 +65,13 @@ _NOTICES = {
 }
 _ACCOUNT_ERRORS = {
     "password-wrong": "Your current password did not match.",
-    "password-short": "Your new password must be at least 8 characters.",
+    "password-weak": "Your new password is too short or too easy to guess.",
     "password-mismatch": "The new passwords did not match.",
 }
 
 
 def _client(request: Request) -> str:
-    return request.client.host if request.client else "unknown"
+    return client_ip(request)
 
 
 def _login_redirect() -> RedirectResponse:
@@ -119,8 +120,9 @@ def signup_submit(request: Request,
     email = email.strip().lower()
     if not _valid_email(email):
         return retry("Enter a valid email address.")
-    if len(password) < 8:
-        return retry("Your password must be at least 8 characters.")
+    problem = password_problem(password, email)
+    if problem:
+        return retry(problem)
     if password != confirm_password:
         return retry("The passwords did not match.")
     if db.query(Account).filter_by(email=email).first():
@@ -231,8 +233,8 @@ def change_password(request: Request,
     if had_password and not verify_password(current_password,
                                             account.password_hash):
         return back("password-wrong")
-    if len(new_password) < 8:
-        return back("password-short")
+    if password_problem(new_password, account.email):
+        return back("password-weak")
     if new_password != confirm_password:
         return back("password-mismatch")
     account.password_hash = hash_password(new_password)

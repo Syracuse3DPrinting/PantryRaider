@@ -44,6 +44,32 @@ def verify_password(password: str, stored: str) -> bool:
         return False
 
 
+# A small blocklist of the passwords that dominate credential-stuffing
+# lists. Not a substitute for a full check, but it stops the worst choices
+# with no dependency. Compared case-insensitively.
+_COMMON_PASSWORDS = frozenset({
+    "password", "password1", "password123", "12345678", "123456789",
+    "1234567890", "qwertyuiop", "qwerty123", "111111111", "letmein",
+    "iloveyou", "welcome1", "admin123", "changeme", "passw0rd",
+    "pantryraider", "forager1", "trustno1", "sunshine1", "football1",
+})
+
+MIN_PASSWORD_LENGTH = 10
+
+
+def password_problem(password: str, email: str = "") -> str | None:
+    """A user-facing reason the password is unacceptable, or None if it is
+    fine. Enforced everywhere a password is set: signup and change."""
+    if len(password) < MIN_PASSWORD_LENGTH:
+        return f"Your password must be at least {MIN_PASSWORD_LENGTH} characters."
+    low = password.strip().lower()
+    if low in _COMMON_PASSWORDS:
+        return "That password is too common. Please choose a less guessable one."
+    if email and low == email.strip().lower():
+        return "Your password cannot be the same as your email address."
+    return None
+
+
 def new_token(prefix: str) -> str:
     """A fresh bearer token: 'prs_' for portal sessions, 'prc_' for instances.
 

@@ -22,6 +22,24 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
+def client_ip(request: Request) -> str:
+    """The real client IP for rate limiting, behind exactly one proxy (Caddy).
+
+    The app is only reachable through Caddy on the internal Docker network,
+    so Caddy is the direct peer and appends the true client to
+    X-Forwarded-For. The trustworthy entry is therefore the LAST one Caddy
+    wrote, not the leftmost (which the client can spoof to dodge the per-IP
+    limiter). Falls back to the direct peer when no header is present, so it
+    still works when the app is hit directly in tests or local runs.
+    """
+    xff = request.headers.get("x-forwarded-for", "")
+    if xff:
+        parts = [p.strip() for p in xff.split(",") if p.strip()]
+        if parts:
+            return parts[-1]
+    return request.client.host if request.client else "unknown"
+
+
 def get_db():
     db = SessionLocal()
     try:
