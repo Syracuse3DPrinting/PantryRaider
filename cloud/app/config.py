@@ -1,4 +1,4 @@
-"""Pantry Raider Cloud settings.
+"""Forager settings (Pantry Raider's hosted cloud service).
 
 Environment-driven (CLOUD_ prefix), no settings.json: the cloud runs on one
 VPS with an env file, not on appliances with a setup wizard. This service
@@ -11,12 +11,16 @@ from pydantic_settings import BaseSettings
 
 CLOUD_VERSION = "0.1.0"
 
-# Placeholder plan table until Dan picks real tiers and prices. The Stripe
-# price id maps a Checkout purchase to a plan; the quota is AI tokens per
-# calendar month, the same unit service/app/services/usage.py meters locally.
+# The plan table. Quotas are AI tokens per calendar month, the same unit
+# service/app/services/usage.py meters locally. Every paired account gets
+# the free trial tier automatically, no subscription needed; "starter"
+# requires an active entitlement. Prices live in Stripe, never in code.
 PLAN_QUOTAS: dict[str, int] = {
+    "free": 100_000,
     "starter": 2_000_000,
 }
+FREE_PLAN = "free"
+# The plan a paid Stripe purchase maps to when the price id is unrecognised.
 DEFAULT_PLAN = "starter"
 
 
@@ -29,8 +33,21 @@ class CloudSettings(BaseSettings):
     # signature check real in tests; the VPS env file supplies the live value.
     stripe_webhook_secret: str = "whsec_placeholder"
 
-    # Maps Stripe price ids to plan names once real products exist.
+    # The Stripe price id for the starter plan (price_...). A Checkout
+    # purchase or subscription carrying this price maps to "starter".
+    stripe_price_starter: str = ""
+
+    # Extra price-id-to-plan mappings, for future tiers.
     stripe_price_to_plan: dict[str, str] = {}
+
+    # Which AIForwarder backs the proxy: "stub" (tests, local dev) or
+    # "gemini" (production).
+    ai_forwarder: str = "stub"
+
+    # Gemini upstream for the AI proxy (used when ai_forwarder is "gemini").
+    gemini_api_key: str = ""
+    gemini_model: str = "gemini-2.5-flash"
+    forward_timeout_seconds: float = 60.0
 
     # Portal session lifetime.
     session_ttl_hours: int = 24 * 14

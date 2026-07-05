@@ -11,6 +11,7 @@ from __future__ import annotations
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from .config import FREE_PLAN, PLAN_QUOTAS
 from .models import Entitlement, UsageLedger
 
 
@@ -44,17 +45,28 @@ def record(db: Session, account_id: int, instance_id: int, tokens: int,
 
 
 def quota_state(db: Session, account_id: int, mk: str) -> dict:
-    """Entitlement + usage snapshot for gates and the status endpoints."""
+    """Entitlement + usage snapshot for gates and the status endpoints.
+
+    Quota resolution: an active entitlement grants its plan quota;
+    everything else (no entitlement, or an expired/canceled one) falls back
+    to the free trial tier, so every paired account can use the proxy up to
+    the free quota. "active" means an active paid entitlement exists.
+    """
     ent = db.query(Entitlement).filter_by(account_id=account_id).first()
     used = month_total(db, account_id, mk)
-    quota = int(ent.monthly_token_quota) if ent else 0
     active = bool(ent and ent.status == "active")
+    if active:
+        plan = ent.plan
+        quota = int(ent.monthly_token_quota)
+    else:
+        plan = FREE_PLAN
+        quota = PLAN_QUOTAS[FREE_PLAN]
     return {
         "active": active,
-        "plan": ent.plan if ent else "",
+        "plan": plan,
         "quota": quota,
         "used": used,
-        "remaining": max(0, quota - used) if quota else 0,
-        "over_quota": active and quota > 0 and used >= quota,
+        "remaining": max(0, quota - used),
+        "over_quota": quota > 0 and used >= quota,
         "month": mk,
     }

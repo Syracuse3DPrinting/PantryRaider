@@ -111,6 +111,31 @@ def test_subscription_updated_past_due_stays_active(client, session_token):
         db.close()
 
 
+def test_starter_price_id_maps_to_starter_plan(client, session_token,
+                                               monkeypatch):
+    # CLOUD_STRIPE_PRICE_STARTER maps the live Stripe price to the starter
+    # plan and its quota.
+    monkeypatch.setattr(settings, "stripe_price_starter", "price_live_starter")
+    account_id = _account_id(client, session_token)
+    _post_event(client, _checkout_event(account_id))
+    resp = _post_event(client, {
+        "id": "evt_price",
+        "type": "customer.subscription.updated",
+        "data": {"object": {
+            "id": "sub_123", "status": "active",
+            "items": {"data": [{"price": {"id": "price_live_starter"}}]},
+        }},
+    })
+    assert resp.status_code == 200
+    db = SessionLocal()
+    try:
+        ent = db.query(Entitlement).filter_by(account_id=account_id).first()
+        assert ent.plan == "starter"
+        assert ent.monthly_token_quota == PLAN_QUOTAS["starter"]
+    finally:
+        db.close()
+
+
 def test_unattributed_events_are_acknowledged(client):
     # A checkout with no matching account, and an unknown event type: both
     # return 200 so Stripe stops retrying, and change nothing.

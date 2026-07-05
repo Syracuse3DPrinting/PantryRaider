@@ -1,7 +1,7 @@
 """The managed AI proxy.
 
-Gate order per request: instance token, rate limit, active entitlement,
-monthly quota, then forward. Over-quota answers 402 with a structured body
+Gate order per request: instance token, rate limit, monthly quota (free
+trial or paid plan), then forward. Over-quota answers 402 with a structured body
 the app can surface exactly like its local token-budget gate
 (service/app/routers/analyze.py). Image bytes pass through in memory only;
 nothing image-shaped is ever persisted here.
@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 from .. import ratelimit, usage
 from ..config import settings
 from ..deps import current_instance, get_db, utc_now_iso
-from ..forwarder import get_forwarder
+from ..forwarder import ForwarderError, get_forwarder
 from ..models import Instance
 
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
@@ -25,17 +25,14 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 
 def _quota_gate(db: Session, account_id: int) -> dict:
     """The account's quota state, raising the 402 the app maps to its
-    budget-gate message when the entitlement is missing or spent."""
+    budget-gate message when the month's quota is spent. Every linked
+    account has a quota: the free trial without a subscription, the paid
+    plan's quota with one (resolved in usage.quota_state)."""
     state = usage.quota_state(db, account_id, usage.month_key())
-    if not state["active"]:
-        raise HTTPException(402, detail={
-            "error": "no_subscription",
-            "message": "This install is linked, but the account has no active "
-                       "subscription.",
-        })
     if state["over_quota"]:
         raise HTTPException(402, detail={
             "error": "quota_exceeded",
+            "plan": state["plan"],
             "used": state["used"],
             "quota": state["quota"],
             "month": state["month"],
@@ -70,8 +67,12 @@ async def analyze(
         image_data = await image.read()
 
     fwd = get_forwarder()
-    result = await fwd.forward(kind, image_data, mime, text)
-    del image_data  # transit only: the bytes never outlive the request
+    try:
+        result = await fwd.forward(kind, image_data, mime, text)
+    except ForwarderError as exc:
+        raise HTTPException(exc.status, detail=exc.detail)
+    finally:
+        del image_data  # transit only: the bytes never outlive the request
 
     usage.record(db, inst.account_id, inst.id, result.tokens, kind,
                  usage.month_key(), utc_now_iso())

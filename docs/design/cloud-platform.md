@@ -12,6 +12,27 @@ scaffold that implements it under `cloud/` in this repo. The app-side
 integration (changes under `service/`) is deliberately deferred to a
 follow-up; the exact changes are listed at the end.
 
+## Decisions (2026-07-05)
+
+Dan resolved the open product decisions:
+
+- **Name and domain.** The service is **Forager**, at
+  `forager.pantryraider.app`. The name shows up in user-facing copy, the
+  FastAPI title, and deploy config. Internal module, package, and table
+  names keep the original generic cloud naming (`cloud/`, the `CLOUD_` env
+  prefix, table names); renaming them buys nothing and churns the scaffold.
+- **Upstream provider.** The AI proxy is backed by **Gemini 2.5 Flash**
+  through the plain REST API (`GeminiForwarder` in `cloud/app/forwarder.py`,
+  key in `CLOUD_GEMINI_API_KEY`). The stub forwarder remains for tests and
+  local dev, selected by `CLOUD_AI_FORWARDER`.
+- **Pricing.** Two tiers: a **free trial** (100,000 tokens/month, granted
+  to every paired account with no subscription) and one paid **starter**
+  plan (2,000,000 tokens/month, requires an active entitlement). The
+  starter price is set in Stripe, never in code;
+  `CLOUD_STRIPE_PRICE_STARTER` maps the live price id to the plan.
+
+Still open: VPS provider and region, and where Postgres backups go.
+
 ## Why these services, and why now
 
 The codebase already anticipates this layer in several places:
@@ -156,12 +177,12 @@ proxy answers **402** with a structured body
 which the app surfaces the same way it surfaces its local budget gate
 today.
 
-In the scaffold the actual LLM forwarding is a stub behind an
-`AIForwarder` interface (`cloud/app/forwarder.py`): entitlement checks,
-ledger writes, and quota errors are real; the forwarder returns a marked
-stub payload with a TODO where the provider call goes. Choosing the
-upstream provider (and whether the proxy is multi-provider) is an open
-decision below.
+LLM forwarding lives behind an `AIForwarder` interface
+(`cloud/app/forwarder.py`). Production uses `GeminiForwarder`, plain httpx
+against the Gemini REST API (Gemini 2.5 Flash) with token counts read from
+the response's `usageMetadata`, so the ledger records what the provider
+actually charged. Tests and local dev use `StubForwarder`;
+`CLOUD_AI_FORWARDER` selects the implementation.
 
 ## Threat model and privacy stance
 
@@ -248,14 +269,10 @@ the design, is:
 
 ## Open decisions for Dan
 
-- **Pricing tiers and quotas.** The scaffold ships one placeholder plan
-  (`starter`, 2,000,000 tokens/month). How many tiers, monthly prices, and
-  whether an unpaid free tier exists at all.
-- **Upstream provider for the proxy.** Gemini, OpenAI, or Anthropic (or
-  routed per task); this drives the real per-token cost behind each tier.
-  `services/ai_pricing.py` already has the comparative numbers.
-- **Domain** for the cloud service (for example `cloud.pantryraider.app`)
-  and where DNS lives; Caddy needs it for automatic TLS.
+The naming, provider, pricing, and domain decisions are recorded in the
+Decisions section above. What remains:
+
 - **VPS provider and region**, plus where Postgres backups go.
-- **Stripe account** setup: products/prices matching the chosen tiers, and
-  the live webhook endpoint secret.
+- **Stripe account** setup: the starter product and its live price id
+  (into `CLOUD_STRIPE_PRICE_STARTER`), and the live webhook endpoint
+  secret.

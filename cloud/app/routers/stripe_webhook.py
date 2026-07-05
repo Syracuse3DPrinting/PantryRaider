@@ -6,9 +6,10 @@ and reads the documented event shapes. Event ids are recorded so Stripe's
 retried deliveries process once.
 
 Wiring expectations for the live Stripe account: the Checkout Session is
-created with client_reference_id set to the cloud account id, and each
-subscription price id appears in CLOUD_STRIPE_PRICE_TO_PLAN. Until then the
-plan falls back to the default placeholder.
+created with client_reference_id set to the cloud account id, and the
+starter plan's live price id is set in CLOUD_STRIPE_PRICE_STARTER (future
+tiers go in CLOUD_STRIPE_PRICE_TO_PLAN). An unrecognised price falls back
+to the default paid plan.
 """
 from __future__ import annotations
 
@@ -44,6 +45,10 @@ def _set_entitlement(db: Session, account_id: int, plan: str, status: str) -> No
 
 
 def _plan_for_price(price_id: str) -> str:
+    """CLOUD_STRIPE_PRICE_STARTER maps the live starter price to its plan;
+    the price_to_plan dict covers any future tiers."""
+    if price_id and price_id == settings.stripe_price_starter:
+        return "starter"
     return settings.stripe_price_to_plan.get(price_id, DEFAULT_PLAN)
 
 

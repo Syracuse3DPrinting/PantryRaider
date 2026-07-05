@@ -1,5 +1,6 @@
-# TLS termination for Pantry Raider Cloud. Caddy fetches and renews the
-# certificate automatically once CLOUD_DOMAIN's DNS points at this VPS.
+# TLS termination for Forager (forager.pantryraider.app). Caddy fetches and
+# renews the certificate automatically once CLOUD_DOMAIN's DNS points at
+# this VPS.
 {$CLOUD_DOMAIN} {
 	reverse_proxy app:8000
 }

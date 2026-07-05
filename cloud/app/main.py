@@ -1,4 +1,4 @@
-"""Pantry Raider Cloud: the hosted subscription service.
+"""Forager: Pantry Raider's hosted subscription service.
 
 A separate FastAPI app from the self-hosted Pantry Raider in service/; the
 two share nothing at import time. Design: docs/design/cloud-platform.md.
@@ -22,8 +22,7 @@ async def lifespan(app: FastAPI):
     yield
 
 
-app = FastAPI(title="Pantry Raider Cloud", version=CLOUD_VERSION,
-              lifespan=lifespan)
+app = FastAPI(title="Forager", version=CLOUD_VERSION, lifespan=lifespan)
 
 app.include_router(accounts.router)
 app.include_router(instances.router)
