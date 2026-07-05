@@ -219,6 +219,8 @@ setTimeout(_revealMenu, 1500);
   if (typeof _loadAiUsage === 'function') _loadAiUsage();
   // Forager link state and quota, when this install is linked.
   if (typeof _loadCloudStatus === 'function') _loadCloudStatus();
+  // Forager remote-access card, when linked on a Pi appliance.
+  if (typeof _loadTunnelStatus === 'function') _loadTunnelStatus();
   // Forager sign-in extras: reveal "Continue with Google" when the cloud
   // offers it, and surface a ?cloud_error= message from a sign-in bounce.
   if (typeof _initCloudMeta === 'function') _initCloudMeta();

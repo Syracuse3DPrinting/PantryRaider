@@ -144,11 +144,46 @@
               </button>
             </div>
             {% endif %}
+            {% if s.is_pi_appliance() %}
+            {# Forager remote access (WireGuard hub tunnel, FoodAssistant-uczr).
+               Only on a Pi appliance, which runs the host bridge that owns the
+               WireGuard endpoint. Buttons only, no form controls, so the
+               settings-control pin test is untouched. Driven by
+               _loadTunnelStatus / tunnelEnable / tunnelDisable. #}
+            <div class="mt-3 pt-3 border-top" id="tunnel-section">
+              <div class="fw-semibold small mb-1"><i class="bi bi-globe2 me-1"></i>Remote access</div>
+              <p class="text-secondary small mb-2">Turn this on and your kitchen gets a web address you can
+                reach from anywhere through Forager, not just on your home network. It is included with a
+                Forager plan. Remote access needs a login password set under Settings, Security, so your
+                kitchen stays private once it is reachable from the internet.</p>
+              <div id="tunnel-status" class="small text-secondary mb-2">Checking remote access…</div>
+              <div id="tunnel-controls" class="d-none">
+                <button type="button" class="btn btn-outline-info btn-sm" id="tunnel-enable-btn"
+                        onclick="tunnelEnable(this)">
+                  <i class="bi bi-globe2 me-1"></i>Turn on remote access
+                </button>
+                <div class="d-none" id="tunnel-on-controls">
+                  <div class="small mb-2"><i class="bi bi-globe2 me-1"></i>Reachable at:
+                    <a href="#" id="tunnel-url-link" target="_blank" rel="noopener"></a>
+                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
+                            onclick="tunnelCopyUrl(this)">copy</button>
+                  </div>
+                  <button type="button" class="btn btn-outline-danger btn-sm" id="tunnel-disable-btn"
+                          onclick="tunnelDisable(this)">
+                    <i class="bi bi-x-circle me-1"></i>Turn off remote access
+                  </button>
+                </div>
+              </div>
+              <div class="test-result mt-2" id="tunnel-result"></div>
+            </div>
+            {% endif %}
+            <div class="mt-3">
             <button type="button" class="btn btn-outline-danger btn-sm" onclick="cloudUnlink(this)">
               <i class="bi bi-cloud-slash me-1"></i>Disconnect
             </button>
             <div class="form-text">Disconnecting signs this device out of the Forager account. You can also
               remove it from your account page on the Forager website.</div>
+            </div>
             {% else %}
             <p class="text-secondary small">Pantry Raider is free and open source: bring your own AI key
               and it works forever, no account needed. Forager is the optional convenience plan: sign in

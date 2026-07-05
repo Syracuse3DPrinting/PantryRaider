@@ -311,6 +311,86 @@ async function _loadCloudStatus() {
   } catch (e) { fail('Forager could not be reached.'); }
 }
 
+// Forager remote access (FoodAssistant-uczr). Fill the card, then let the
+// user turn the WireGuard hub tunnel on or off. The card only exists on a Pi
+// appliance, so every function is a no-op when its section is absent.
+async function _loadTunnelStatus() {
+  const section = document.getElementById('tunnel-section');
+  if (!section) return;
+  const statusEl = document.getElementById('tunnel-status');
+  const controls = document.getElementById('tunnel-controls');
+  const onControls = document.getElementById('tunnel-on-controls');
+  const enableBtn = document.getElementById('tunnel-enable-btn');
+  try {
+    const d = await fetch('setup/tunnel/status').then(r => r.json());
+    controls && controls.classList.remove('d-none');
+    if (d.enabled) {
+      enableBtn && enableBtn.classList.add('d-none');
+      onControls && onControls.classList.remove('d-none');
+      const link = document.getElementById('tunnel-url-link');
+      if (link && d.public_url) { link.href = d.public_url; link.textContent = d.public_url; }
+      if (statusEl) {
+        const hs = (d.last_handshake_seconds != null && d.last_handshake_seconds < 180)
+          ? 'connected' : (d.up ? 'waiting for the device to connect' : 'starting up');
+        statusEl.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Remote access is on (' + hs + ').</span>';
+      }
+    } else {
+      enableBtn && enableBtn.classList.remove('d-none');
+      onControls && onControls.classList.add('d-none');
+      if (statusEl) statusEl.textContent = 'Remote access is off.';
+    }
+  } catch (e) {
+    controls && controls.classList.remove('d-none');
+    if (statusEl) statusEl.textContent = 'Remote access status is unavailable right now.';
+  }
+}
+
+async function tunnelEnable(btn) {
+  const el = document.getElementById('tunnel-result');
+  btn.disabled = true;
+  if (el) el.innerHTML = '<span class="text-secondary">Turning on remote access…</span>';
+  try {
+    const d = await fetch('setup/tunnel/enable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+    if (!d.ok) {
+      if (el) el.innerHTML = '<span class="text-danger">' + (d.error || 'Remote access could not be turned on.') + '</span>';
+      btn.disabled = false;
+      return;
+    }
+    if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Remote access is on.</span>';
+    await _loadTunnelStatus();
+    btn.disabled = false;
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e.message}</span>`;
+    btn.disabled = false;
+  }
+}
+
+async function tunnelDisable(btn) {
+  if (!confirm('Turn off remote access? Your kitchen will only be reachable on your home network again.')) return;
+  const el = document.getElementById('tunnel-result');
+  btn.disabled = true;
+  try {
+    const d = await fetch('setup/tunnel/disable', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' }).then(r => r.json());
+    if (el) el.innerHTML = d.ok
+      ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Remote access is off.</span>'
+      : '<span class="text-danger">' + (d.error || 'Could not turn off remote access.') + '</span>';
+    await _loadTunnelStatus();
+    btn.disabled = false;
+  } catch (e) {
+    if (el) el.innerHTML = `<span class="text-danger">${e.message}</span>`;
+    btn.disabled = false;
+  }
+}
+
+function tunnelCopyUrl(btn) {
+  const link = document.getElementById('tunnel-url-link');
+  if (!link || !link.href) return;
+  if (navigator.clipboard) navigator.clipboard.writeText(link.href);
+  const t = btn.textContent;
+  btn.textContent = 'copied';
+  setTimeout(() => { btn.textContent = t; }, 1200);
+}
+
 // Collect the checked kitchen appliances. Absent container (e.g. on a satellite
 // where Preferences may differ) returns undefined so the field is not posted and
 // the stored selection is left alone; otherwise an explicit (possibly empty) list.

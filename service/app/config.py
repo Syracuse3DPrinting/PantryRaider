@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.8.18"
+APP_VERSION = "0.8.19"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -459,7 +459,7 @@ _SAVEABLE = [
     "secret_key", "auth_password", "viewer_password", "totp_secret", "api_key", "extra_api_keys", "auth_required",
     "rclone_remote", "rclone_schedule_hours",
     "usb_backup_interval_hours", "usb_backup_last",
-    "tunnel_mode", "tunnel_token", "tunnel_url",
+    "tunnel_mode", "tunnel_token", "tunnel_url", "tunnel_enabled",
     "debug_logging", "auto_update", "update_channel", "lan_scan_cidr",
 ]
 
@@ -1402,6 +1402,11 @@ class Settings(BaseSettings):
     tunnel_mode: str = ""
     tunnel_token: str = ""
     tunnel_url: str = ""
+    # Forager remote access (FoodAssistant-uczr). True once the WireGuard hub
+    # tunnel is enabled for this device. Device-local (each appliance runs its
+    # own endpoint), never satellite-synced. No secret lives app-side: the
+    # WireGuard private key stays on the Pi via the host bridge.
+    tunnel_enabled: bool = False
 
     def provider_key(self, provider: str) -> str:
         """Primary API key for a cloud provider; '' for local/unknown providers."""

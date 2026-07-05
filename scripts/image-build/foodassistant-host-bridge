@@ -57,6 +57,10 @@ GET  /usb/status           attached USB flash drive: mounted? free space? last b
 POST /usb/backup           snapshot the data dirs into pantryraider-backups/ on the drive
 GET  /usb/photos           list image files in the drive's pictures/ or photos/ folder
 GET  /usb/photo?path=name  serve one image from that folder (read-only, size-capped)
+POST /tunnel/keygen        generate a WireGuard keypair; return the public key only
+POST /tunnel/up            write+bring up the Forager interface  {address, server_public_key, endpoint, allowed_ips, dns?}
+POST /tunnel/down          take the Forager interface down (best effort)
+GET  /tunnel/status        Forager interface up? + latest handshake age
 """
 import hmac
 import http.server
@@ -1126,6 +1130,83 @@ def _unit_installed(unit, root="/etc/systemd/system"):
     this device (whether or not it is currently running). firstboot writes
     all appliance units under /etc/systemd/system."""
     return os.path.exists(os.path.join(root, unit))
+
+
+# --- Forager remote-access WireGuard tunnel (FoodAssistant-uczr) -----------
+# The app drives remote access from Settings, but the WireGuard endpoint lives
+# on the host, not in the container: only root can create the interface and
+# write /etc/wireguard. The bridge generates the device keypair, keeps the
+# PRIVATE key on the device (never returned to the caller, never logged), and
+# brings a split-tunnel interface up that routes ONLY the server's /32 (a hub
+# route, not a full VPN, so normal traffic is untouched). The cloud side hands
+# back the server public key, endpoint, and this device's tunnel address.
+_WG_INTERFACE = "fa-forager"
+_WG_CONFIG_PATH = "/etc/wireguard/%s.conf" % _WG_INTERFACE
+_WG_PRIVATE_KEY_PATH = "/etc/wireguard/%s.key" % _WG_INTERFACE
+
+
+def _render_wg_config(private_key, address, server_public_key, endpoint,
+                      allowed_ips, dns="", keepalive=25):
+    """Render the wg-quick config text for the Forager interface. Pure.
+
+    AllowedIPs is the server's /32 only (the cloud passes it), so this is a
+    hub route to reach the kitchen through Forager, not a full tunnel that
+    would capture all of the device's traffic. DNS is written only when the
+    cloud provides a resolver, so wg-quick never fails on a device without
+    resolvconf. Kept pure and off the log path so the private key stays put.
+    """
+    addr = str(address or "").strip()
+    if addr and "/" not in addr:
+        addr = addr + "/32"
+    try:
+        keep = int(keepalive)
+    except (TypeError, ValueError):
+        keep = 25
+    lines = [
+        "[Interface]",
+        "PrivateKey = %s" % (private_key or "").strip(),
+        "Address = %s" % addr,
+    ]
+    dns = (dns or "").strip()
+    if dns:
+        lines.append("DNS = %s" % dns)
+    lines += [
+        "",
+        "[Peer]",
+        "PublicKey = %s" % (server_public_key or "").strip(),
+        "Endpoint = %s" % (endpoint or "").strip(),
+        "AllowedIPs = %s" % (allowed_ips or "").strip(),
+        "PersistentKeepalive = %d" % keep,
+        "",
+    ]
+    return "\n".join(lines)
+
+
+def _parse_wg_handshakes(text):
+    r"""Latest handshake epoch (int) from `wg show <iface> latest-handshakes`.
+
+    That command prints one `<pubkey>\t<epoch-seconds>` line per peer; a peer
+    that has never completed a handshake reports 0. Returns the largest epoch
+    seen, or 0 when there is none. Pure, so the status parse is unit-testable
+    against stubbed command output.
+    """
+    best = 0
+    for line in (text or "").splitlines():
+        parts = line.split()
+        if len(parts) < 2:
+            continue
+        try:
+            epoch = int(parts[-1])
+        except ValueError:
+            continue
+        if epoch > best:
+            best = epoch
+    return best
+
+
+def _wg_tools_present(which=shutil.which):
+    """True when both `wg` and `wg-quick` are on PATH. Pure (probe injected)."""
+    return bool(which("wg")) and bool(which("wg-quick"))
 
 
 # Stream Deck / display detection from sysfs
@@ -2500,6 +2581,141 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             resp["wake_on_motion"] = mode
         self._send(200, resp)
 
+    # --- Forager remote-access tunnel (FoodAssistant-uczr) ----------------
+
+    def _tunnel_keygen(self):
+        """Generate a WireGuard keypair; keep the private key on the device.
+
+        Returns only the public key to the caller. The private key is written
+        to a root-only file for the up step and never logged or returned.
+        """
+        if not _wg_tools_present():
+            self._send(500, {"ok": False, "error":
+                "WireGuard is not installed on this device."})
+            return
+        try:
+            priv = subprocess.run(
+                ["wg", "genkey"], capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            if not priv:
+                self._send(500, {"ok": False, "error": "Could not generate a key."})
+                return
+            pub = subprocess.run(
+                ["wg", "pubkey"], input=priv,
+                capture_output=True, text=True, timeout=10,
+            ).stdout.strip()
+            if not pub:
+                self._send(500, {"ok": False, "error": "Could not derive the public key."})
+                return
+            os.makedirs(os.path.dirname(_WG_PRIVATE_KEY_PATH), exist_ok=True)
+            with open(_WG_PRIVATE_KEY_PATH, "w") as f:
+                f.write(priv + "\n")
+            os.chmod(_WG_PRIVATE_KEY_PATH, 0o600)
+            self._send(200, {"ok": True, "public_key": pub})
+        except Exception as e:
+            # Never echo the key material; report only the class of failure.
+            self._send(500, {"ok": False, "error":
+                "Key generation failed: %s" % e.__class__.__name__})
+
+    def _tunnel_up(self):
+        """Write the interface config and bring it up (idempotent).
+
+        Uses the private key from the request when given, otherwise the one
+        stored by the last keygen. Persists the interface with systemd so it
+        survives a reboot. The config text (which holds the private key) is
+        never logged.
+        """
+        if not _wg_tools_present():
+            self._send(500, {"ok": False, "error":
+                "WireGuard is not installed on this device."})
+            return
+        body = self._body()
+        private_key = (body.get("private_key") or "").strip()
+        if not private_key:
+            try:
+                private_key = Path(_WG_PRIVATE_KEY_PATH).read_text().strip()
+            except OSError:
+                private_key = ""
+        address = (body.get("address") or body.get("tunnel_ip") or "").strip()
+        server_public_key = (body.get("server_public_key") or "").strip()
+        endpoint = (body.get("endpoint") or "").strip()
+        allowed_ips = (body.get("allowed_ips") or "").strip()
+        dns = (body.get("dns") or "").strip()
+        keepalive = body.get("keepalive", 25)
+        missing = [name for name, val in (
+            ("private_key", private_key), ("address", address),
+            ("server_public_key", server_public_key), ("endpoint", endpoint),
+            ("allowed_ips", allowed_ips),
+        ) if not val]
+        if missing:
+            self._send(400, {"ok": False, "error":
+                "Missing tunnel parameters: %s" % ", ".join(missing)})
+            return
+        try:
+            config = _render_wg_config(
+                private_key, address, server_public_key, endpoint,
+                allowed_ips, dns=dns, keepalive=keepalive,
+            )
+            os.makedirs(os.path.dirname(_WG_CONFIG_PATH), exist_ok=True)
+            # Idempotent: tear down any existing interface before re-applying,
+            # so a re-enable with new parameters converges instead of erroring.
+            subprocess.run(
+                ["wg-quick", "down", _WG_INTERFACE],
+                capture_output=True, text=True, timeout=30,
+            )
+            with open(_WG_CONFIG_PATH, "w") as f:
+                f.write(config)
+            os.chmod(_WG_CONFIG_PATH, 0o600)
+            r = subprocess.run(
+                ["wg-quick", "up", _WG_INTERFACE],
+                capture_output=True, text=True, timeout=30,
+            )
+            if r.returncode != 0:
+                self._send(500, {"ok": False, "error":
+                    (r.stderr or r.stdout or "wg-quick up failed").strip()})
+                return
+            # Survive a reboot. Best effort: the interface is already up.
+            subprocess.run(
+                ["systemctl", "enable", "wg-quick@%s" % _WG_INTERFACE],
+                capture_output=True, text=True, timeout=15,
+            )
+            self._send(200, {"ok": True, "interface": _WG_INTERFACE})
+        except Exception as e:
+            self._send(500, {"ok": False, "error":
+                "Bringing the tunnel up failed: %s" % e.__class__.__name__})
+
+    def _tunnel_down(self):
+        """Take the interface down and stop persisting it (best effort)."""
+        subprocess.run(
+            ["wg-quick", "down", _WG_INTERFACE],
+            capture_output=True, text=True, timeout=30,
+        )
+        subprocess.run(
+            ["systemctl", "disable", "wg-quick@%s" % _WG_INTERFACE],
+            capture_output=True, text=True, timeout=15,
+        )
+        self._send(200, {"ok": True})
+
+    def _tunnel_status(self):
+        """Whether the interface is up and its latest handshake age."""
+        if not _wg_tools_present():
+            self._send(200, {"ok": True, "up": False, "last_handshake_seconds": None})
+            return
+        try:
+            r = subprocess.run(
+                ["wg", "show", _WG_INTERFACE, "latest-handshakes"],
+                capture_output=True, text=True, timeout=10,
+            )
+        except Exception:
+            self._send(200, {"ok": True, "up": False, "last_handshake_seconds": None})
+            return
+        if r.returncode != 0:
+            self._send(200, {"ok": True, "up": False, "last_handshake_seconds": None})
+            return
+        epoch = _parse_wg_handshakes(r.stdout)
+        seconds = int(time.time() - epoch) if epoch > 0 else None
+        self._send(200, {"ok": True, "up": True, "last_handshake_seconds": seconds})
+
     def do_GET(self):
         if not self._authorized():
             return
@@ -2539,6 +2755,8 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._usb_photo_serve()
         elif self.path == "/stack/status":
             self._stack_status()
+        elif self.path == "/tunnel/status":
+            self._tunnel_status()
         else:
             self._send(404, {"error": "not found"})
 
@@ -2597,6 +2815,12 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._display_wake()
         elif self.path == "/display/idle":
             self._display_idle_set()
+        elif self.path == "/tunnel/keygen":
+            self._tunnel_keygen()
+        elif self.path == "/tunnel/up":
+            self._tunnel_up()
+        elif self.path == "/tunnel/down":
+            self._tunnel_down()
         else:
             self._send(404, {"error": "not found"})
 

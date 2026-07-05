@@ -374,6 +374,12 @@ on save.
 | `tunnel_mode` | | Editable | Editable | Device-local |
 | `tunnel_token` | | Editable | Editable | Device-local |
 | `tunnel_url` | | Editable | Editable | Device-local |
+| `tunnel_enabled` | | Editable | Editable | Device-local |
+
+`tunnel_enabled` tracks Forager remote access (the WireGuard hub tunnel). It is
+offered only on a Pi appliance, which runs the host bridge that owns the
+WireGuard endpoint; the private key stays on the device, so nothing secret is
+kept app-side.
 
 ## Logging and updates
 

@@ -1280,6 +1280,214 @@ async def cloud_status():
             "entitlement": body.get("entitlement", {})}
 
 
+# ---- Forager remote access (WireGuard hub tunnel, FoodAssistant-uczr) ----
+# Remote access gives the kitchen a web address reachable from anywhere through
+# Forager. The WireGuard endpoint lives on the Pi via the host bridge (only
+# root can create the interface); this app orchestrates it: keygen on the
+# bridge, enable on the cloud, then bring the interface up with what the cloud
+# returns. Every failure rolls back and reports honestly, and no key material
+# ever passes through the app (the private key stays on the device).
+
+_TUNNEL_UPGRADE_MSG = (
+    "Remote access is part of a Forager plan. Add it to your account, then turn "
+    "on remote access here.")
+
+
+async def _tunnel_rollback(base: str) -> None:
+    """Undo a half-finished enable: take the interface down and tell the cloud
+    to disable, both best effort so a rollback never raises."""
+    try:
+        async with bridge_client(timeout=30.0) as c:
+            await c.post(f"{_HOST_BRIDGE}/tunnel/down")
+    except httpx.HTTPError:
+        pass
+    try:
+        async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
+            await c.post(f"{base}/v1/tunnel/disable", headers=_cloud_headers())
+    except httpx.HTTPError:
+        pass
+
+
+@router.post("/tunnel/enable")
+async def tunnel_enable():
+    """Turn on Forager remote access for this device.
+
+    Safety gates come first: the device must be connected to Forager, must
+    have a login password set, and must be a Pi appliance (the only shape with
+    the host bridge that owns the WireGuard endpoint). Then keygen on the
+    bridge, enable on the cloud, and bring the interface up; any failure rolls
+    back and returns a plain-language error.
+    """
+    if not settings.cloud_linked():
+        return {"ok": False, "error":
+                "Connect this device to Forager first, then turn on remote access."}
+    if not settings.auth_password:
+        return {"ok": False, "error":
+                "Set a password under Settings, Security first, so your kitchen "
+                "is not open to the internet when you turn on remote access."}
+    if not settings.is_pi_appliance():
+        return {"ok": False, "error":
+                "Remote access needs the Pi appliance for now."}
+
+    base = settings.cloud_base_url.rstrip("/")
+    hostname_hint = device_hostname() or APP_NAME
+
+    # 1. Generate the device keypair on the bridge (private key stays there).
+    try:
+        async with bridge_client(timeout=15.0) as c:
+            kr = await c.post(f"{_HOST_BRIDGE}/tunnel/keygen")
+    except httpx.HTTPError:
+        return {"ok": False, "error":
+                "The device helper could not be reached to set up remote access."}
+    if kr.status_code != 200:
+        return {"ok": False, "error":
+                "The device could not set up remote access. Try again in a moment."}
+    public_key = (kr.json() or {}).get("public_key", "")
+    if not public_key:
+        return {"ok": False, "error":
+                "The device could not set up remote access. Try again in a moment."}
+
+    # 2. Ask the cloud to admit this device (needs a plan that covers it).
+    try:
+        async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
+            cr = await c.post(
+                f"{base}/v1/tunnel/enable", headers=_cloud_headers(),
+                json={"public_key": public_key, "hostname_hint": hostname_hint})
+    except httpx.HTTPError as e:
+        return {"ok": False, "error": _safe_error(
+            f"Forager could not be reached ({e.__class__.__name__}). "
+            "Check the internet connection and try again.",
+            settings.cloud_instance_token)}
+    if cr.status_code == 402:
+        return {"ok": False, "needs_plan": True, "error": _TUNNEL_UPGRADE_MSG}
+    if cr.status_code == 503:
+        return {"ok": False, "error":
+                "Forager remote access is temporarily unavailable. Try again "
+                "in a little while."}
+    if cr.status_code != 200:
+        return {"ok": False, "error":
+                f"Forager answered with status {cr.status_code}."}
+    data = cr.json() or {}
+    public_url = (data.get("public_url") or "").strip().rstrip("/")
+
+    # 3. Bring the interface up with the parameters the cloud handed back.
+    up_body = {
+        "address": data.get("tunnel_ip", ""),
+        "server_public_key": data.get("server_public_key", ""),
+        "endpoint": data.get("server_endpoint", ""),
+        "allowed_ips": data.get("allowed_ips", ""),
+        "dns": data.get("dns", ""),
+        "keepalive": data.get("keepalive", 25),
+    }
+    try:
+        async with bridge_client(timeout=45.0) as c:
+            ur = await c.post(f"{_HOST_BRIDGE}/tunnel/up", json=up_body)
+    except httpx.HTTPError:
+        await _tunnel_rollback(base)
+        return {"ok": False, "error":
+                "The device could not finish turning on remote access. "
+                "It has been switched back off."}
+    if ur.status_code != 200:
+        await _tunnel_rollback(base)
+        return {"ok": False, "error":
+                "The device could not finish turning on remote access. "
+                "It has been switched back off."}
+
+    # 4. Success: adopt the public address so phone links and QR match, and
+    #    record that remote access is on.
+    to_save = {"tunnel_enabled": True}
+    if public_url:
+        to_save["qr_public_url"] = public_url
+    settings.save(to_save)
+    return {"ok": True, "public_url": public_url}
+
+
+@router.post("/tunnel/disable")
+async def tunnel_disable():
+    """Turn Forager remote access back off.
+
+    Takes the interface down on the device and tells the cloud to disable,
+    both best effort. The public web address is cleared from qr_public_url
+    only when it is the tunnel's own address, so a separately configured
+    reverse-proxy URL is left alone.
+    """
+    base = settings.cloud_base_url.rstrip("/")
+
+    # Learn the tunnel's public address before disabling so we know whether the
+    # stored QR address is the tunnel's or a user's own.
+    tunnel_public = ""
+    if settings.cloud_linked():
+        try:
+            async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
+                sr = await c.get(f"{base}/v1/tunnel/status",
+                                 headers=_cloud_headers())
+            if sr.status_code == 200:
+                tunnel_public = (sr.json() or {}).get("public_url", "").strip().rstrip("/")
+        except httpx.HTTPError:
+            tunnel_public = ""
+
+    try:
+        async with bridge_client(timeout=30.0) as c:
+            await c.post(f"{_HOST_BRIDGE}/tunnel/down")
+    except httpx.HTTPError:
+        pass
+    if settings.cloud_linked():
+        try:
+            async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
+                await c.post(f"{base}/v1/tunnel/disable", headers=_cloud_headers())
+        except httpx.HTTPError:
+            pass
+
+    to_save = {"tunnel_enabled": False}
+    stored = (settings.qr_public_url or "").strip().rstrip("/")
+    if stored and tunnel_public and stored == tunnel_public:
+        to_save["qr_public_url"] = ""
+    settings.save(to_save)
+    return {"ok": True}
+
+
+@router.get("/tunnel/status")
+async def tunnel_status():
+    """Remote-access state for the settings card: the device setting merged
+    with the cloud's view and the bridge interface's live handshake."""
+    base = settings.cloud_base_url.rstrip("/")
+    out = {
+        "ok": True,
+        "enabled": bool(settings.tunnel_enabled),
+        "public_url": (settings.qr_public_url or "").rstrip("/") if settings.tunnel_enabled else "",
+        "reachable": False,
+        "up": False,
+        "last_handshake_seconds": None,
+    }
+    if settings.cloud_linked():
+        try:
+            async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
+                sr = await c.get(f"{base}/v1/tunnel/status",
+                                 headers=_cloud_headers())
+            if sr.status_code == 200:
+                body = sr.json() or {}
+                out["reachable"] = True
+                out["enabled"] = bool(body.get("enabled", out["enabled"]))
+                if body.get("public_url"):
+                    out["public_url"] = str(body["public_url"]).rstrip("/")
+                if body.get("last_handshake") is not None:
+                    out["last_handshake_seconds"] = body.get("last_handshake")
+        except httpx.HTTPError:
+            out["reachable"] = False
+    if settings.is_pi_appliance():
+        try:
+            async with bridge_client(timeout=10.0) as c:
+                br = await c.get(f"{_HOST_BRIDGE}/tunnel/status")
+            if br.status_code == 200:
+                bbody = br.json() or {}
+                out["up"] = bool(bbody.get("up"))
+                if bbody.get("last_handshake_seconds") is not None:
+                    out["last_handshake_seconds"] = bbody.get("last_handshake_seconds")
+        except httpx.HTTPError:
+            pass
+    return out
+
+
 class ScalePayload(BaseModel):
     ui_scale: str = _DEFAULT_UI_SCALE
     display_rotation: int = _DEFAULT_DISPLAY_ROTATION
