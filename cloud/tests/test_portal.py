@@ -15,6 +15,11 @@ def test_landing_page(client):
     assert "Forager" in resp.text
     assert "Sign up" in resp.text and "Log in" in resp.text
     assert "pantryraider.app" in resp.text
+    # The free-and-open-source framing and all three pricing tiers show.
+    assert "free and open source" in resp.text
+    assert "Cloud Basic" in resp.text and "Premium" in resp.text
+    assert "$10" in resp.text and "$3" in resp.text and "$30" in resp.text
+    assert "30 days" in resp.text
 
 
 def test_signup_form_logs_in_and_shows_account(client):
