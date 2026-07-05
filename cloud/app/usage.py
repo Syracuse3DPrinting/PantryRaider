@@ -44,6 +44,20 @@ def record(db: Session, account_id: int, instance_id: int, tokens: int,
     db.commit()
 
 
+def entitlement_active(ent, now_iso: str | None = None) -> bool:
+    """Whether an entitlement row counts right now. Status must be active,
+    and a row with a hard expiry (comped plans) must not be past it."""
+    if not ent or ent.status != "active":
+        return False
+    if ent.expires_at:
+        if now_iso is None:
+            from datetime import datetime, timezone
+            now_iso = datetime.now(timezone.utc).isoformat(timespec="seconds")
+        if ent.expires_at < now_iso:
+            return False
+    return True
+
+
 def quota_state(db: Session, account_id: int, mk: str) -> dict:
     """Entitlement + usage snapshot for gates and the status endpoints.
 
@@ -54,7 +68,7 @@ def quota_state(db: Session, account_id: int, mk: str) -> dict:
     """
     ent = db.query(Entitlement).filter_by(account_id=account_id).first()
     used = month_total(db, account_id, mk)
-    active = bool(ent and ent.status == "active")
+    active = entitlement_active(ent)
     if active:
         plan = ent.plan
         quota = int(ent.monthly_token_quota)

@@ -25,6 +25,9 @@ class Account(Base):
     # How the account was created: "password" or "google". Informational;
     # login ability is governed by password_hash above.
     auth_provider: Mapped[str] = mapped_column(String(20), default="password")
+    # Admin kill switch. A disabled account cannot log in, provision, or use
+    # the AI proxy; every seam answers with a clear message.
+    disabled: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -95,6 +98,13 @@ class Entitlement(Base):
     plan: Mapped[str] = mapped_column(String(40), default="")
     status: Mapped[str] = mapped_column(String(20), default="inactive")  # active | inactive
     monthly_token_quota: Mapped[int] = mapped_column(Integer, default=0)
+    # Where the entitlement came from: "stripe" (webhook) or "comp" (granted
+    # from the admin panel). Empty on rows written before this column.
+    source: Mapped[str] = mapped_column(String(20), default="")
+    # Optional hard expiry (ISO timestamp), used by comped entitlements. An
+    # active row past this moment no longer counts; Stripe rows leave it
+    # empty and expire via webhook status changes instead.
+    expires_at: Mapped[str] = mapped_column(String(40), default="")
     updated_at: Mapped[str] = mapped_column(String(40), default="")
 
 
@@ -114,6 +124,19 @@ class UsageLedger(Base):
     month_key: Mapped[str] = mapped_column(String(7), index=True)  # YYYY-MM
     tokens: Mapped[int] = mapped_column(Integer, default=0)
     kind: Mapped[str] = mapped_column(String(20), default="")  # food | receipt | enrich
+    created_at: Mapped[str] = mapped_column(String(40))
+
+
+class AdminAction(Base):
+    """Audit trail for the admin panel: one row per admin mutation."""
+
+    __tablename__ = "admin_actions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    admin_email: Mapped[str] = mapped_column(String(255), default="")
+    action: Mapped[str] = mapped_column(String(40))  # disable, enable, comp, ...
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    detail: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[str] = mapped_column(String(40))
 
 

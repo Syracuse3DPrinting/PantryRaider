@@ -11,7 +11,8 @@ from fastapi import FastAPI
 
 from .config import CLOUD_VERSION
 from .database import init_db
-from .routers import accounts, ai, instances, oauth_google, portal, stripe_webhook
+from .routers import (accounts, admin, ai, instances, oauth_google, portal,
+                      stripe_webhook)
 
 
 @asynccontextmanager
@@ -30,6 +31,7 @@ app.include_router(ai.router)
 app.include_router(stripe_webhook.router)
 app.include_router(portal.router)
 app.include_router(oauth_google.router)
+app.include_router(admin.router)
 
 
 @app.get("/health")

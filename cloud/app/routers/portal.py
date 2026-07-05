@@ -21,7 +21,8 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import SESSION_COOKIE, cookie_account, get_db, utc_now_iso
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, SESSION_COOKIE, cookie_account,
+                    get_db, utc_now_iso)
 from ..models import Account, AuthSession, Instance, UsageLedger
 from ..security import hash_password, token_hash, verify_password
 from .accounts import _issue_session, _valid_email, authenticate
@@ -136,6 +137,8 @@ def login_submit(request: Request,
         # One message for both cases, so login does not confirm which
         # emails have accounts.
         return retry("That email and password did not match.")
+    if account.disabled:
+        return retry(ACCOUNT_DISABLED_MESSAGE, 403)
     return _start_session(db, account.id)
 
 

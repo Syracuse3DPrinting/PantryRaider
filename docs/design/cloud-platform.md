@@ -128,14 +128,15 @@ along.
 
 | Table | Purpose |
 |---|---|
-| `accounts` | One row per subscriber: email (unique), scrypt password hash (empty for Google-created accounts until they set one), auth provider, created timestamp |
+| `accounts` | One row per subscriber: email (unique), scrypt password hash (empty for Google-created accounts until they set one), auth provider, disabled flag (the admin kill switch), created timestamp |
 | `auth_sessions` | Portal login sessions: hashed bearer token, account, expiry |
 | `instances` | Paired installs: hashed instance token, account, name, last-seen metadata (version, deployment mode) |
 | `pairing_codes` | Short-lived one-use codes that redeem into an instance |
 | `subscriptions` | Mirror of the Stripe subscription: customer id, subscription id, status, current period end |
-| `entitlements` | What the account is allowed right now: plan, status, monthly token quota. The single source every request checks |
+| `entitlements` | What the account is allowed right now: plan, status, monthly token quota, source (stripe or comp) and an optional hard expiry for comped grants. The single source every request checks |
 | `usage_ledger` | Append-only token usage: account, instance, month key (`YYYY-MM`), tokens, kind (food / receipt / enrich). Monthly totals are sums over this table |
 | `stripe_events` | Processed Stripe event ids, for webhook idempotency (Stripe retries deliveries) |
+| `admin_actions` | Audit trail for the admin panel: admin email, action, target account, detail, timestamp |
 
 Tokens (session and instance) are random 256-bit values with a readable
 prefix (`prs_` for sessions, `prc_` for instances), stored only as SHA-256
@@ -244,6 +245,42 @@ never mentions tokens or APIs (a test enforces this on the account page).
 Accounts created through Google sign-in have no password until they set
 one on the account page (offered there); password login is simply refused
 for them until then.
+
+### The admin panel
+
+`/admin` is the operator's side of the portal: same session cookie, same
+templates and dark stylesheet, but gated by `CLOUD_ADMIN_EMAILS` (a
+comma-separated email allowlist, checked by `deps.is_admin`). Anyone not
+on the list gets a 404 rather than a 403, so the panel does not reveal its
+own existence; an empty list locks everyone out. The subscriber-copy rule
+is deliberately inverted here: these pages are for the operator and use
+technical words (tokens, instances, Stripe ids) freely.
+
+| Page | What it shows |
+|---|---|
+| `/admin` | Totals (accounts, kitchens, active paid subs, month-to-date tokens and estimated Gemini spend at the blended `CLOUD_GEMINI_COST_PER_MILLION_TOKENS` rate), a searchable account table capped at 500 rows, and the last twenty admin actions |
+| `/admin/accounts/{id}` | Kitchens with Revoke, entitlement and Stripe subscription rows, usage by month (last six), the account's audit trail, and the action buttons |
+
+Admin actions and how they land:
+
+- **Disable / enable**: `accounts.disabled` is enforced at every seam a
+  disabled account could act through: password and portal login, Google
+  callback, one-step provisioning, pairing-code redemption, the AI proxy,
+  and existing portal sessions (the session resolver treats a disabled
+  account as logged out). Each refusal carries a clear "account disabled"
+  message rather than a generic auth failure.
+- **Comp plan**: grants a starter entitlement with `source="comp"` and a
+  chosen expiry date; `usage.entitlement_active` treats an active row past
+  its `expires_at` as inactive, so a lapsed comp falls back to the free
+  tier without a cron job. A Stripe webhook event overwrites comp state
+  (a real purchase wins), and comping an active Stripe subscriber is
+  refused.
+- **Revoke kitchen**: deletes the instance row, killing its credential,
+  the same mechanism as the owner's own Remove button.
+
+Every mutation writes an `admin_actions` row (admin email, action, target
+account, detail, timestamp). The trail is append-only from the panel's
+point of view; there is no admin UI to edit or delete it.
 
 ## Threat model and privacy stance
 

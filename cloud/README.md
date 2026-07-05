@@ -27,6 +27,29 @@ Forager brand appears in user-facing copy, the domain, and deploy config.
 - A Stripe webhook (signature-verified, idempotent) that turns Checkout and
   subscription events into the entitlement each request checks. Plan prices
   live in Stripe, not in code.
+- An operator admin panel at `/admin`: fleet totals, per-account detail,
+  disable/enable, comped plans, kitchen revocation, and an audit trail.
+
+## Admin panel
+
+`/admin` is gated by `CLOUD_ADMIN_EMAILS`, a comma-separated list of account
+emails. Sign up for a normal account with a listed email and the panel opens
+from that session; everyone else, signed in or not, gets a 404, so the
+panel's existence is never advertised. An empty list means nobody gets in.
+
+The overview shows totals (accounts, kitchens, active paid subscriptions,
+month-to-date tokens and estimated Gemini spend at the blended rate in
+`CLOUD_GEMINI_COST_PER_MILLION_TOKENS`) plus a searchable account table. Each
+account's detail page lists its kitchens (with revoke), entitlement and
+Stripe subscription state, six months of usage, and actions: disable or
+enable the account (a disabled account is refused at login, provisioning,
+and the AI proxy with a clear message), comp a starter plan until a chosen
+date, and expire a comp early. Every admin mutation is written to the
+`admin_actions` audit table; the detail page shows the account's trail and
+the overview shows the latest twenty actions.
+
+Unlike the subscriber portal, the admin pages are for the operator and speak
+plainly about tokens, instances, and Stripe ids.
 
 ## Run the tests
 
@@ -92,7 +115,7 @@ secret in `.env`.
 | `app/security.py` | scrypt password hashing, token issue/hash, Stripe signature verification |
 | `app/usage.py` | Per-account monthly token accounting and the quota gate |
 | `app/forwarder.py` | The `AIForwarder` interface: `GeminiForwarder` (production) and `StubForwarder` (tests) |
-| `app/routers/` | `accounts`, `instances` (provisioning and pairing), `portal` (the web pages), `oauth_google` (Google sign-in), `ai` (the proxy), `stripe_webhook` |
+| `app/routers/` | `accounts`, `instances` (provisioning and pairing), `portal` (the web pages), `oauth_google` (Google sign-in), `ai` (the proxy), `stripe_webhook`, `admin` (the operator panel) |
 | `app/templates/` | The portal's server-rendered pages |
 | `tests/` | Standalone pytest suite (SQLite, no Docker or network) |
 

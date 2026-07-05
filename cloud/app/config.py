@@ -56,6 +56,17 @@ class CloudSettings(BaseSettings):
     # redirect URI registered with the OAuth client.
     public_base_url: str = "https://forager.pantryraider.app"
 
+    # Admin panel access: comma-separated account emails allowed into
+    # /admin. Empty means nobody. Anyone not on the list gets a 404 there,
+    # the same answer as a route that does not exist.
+    admin_emails: str = ""
+
+    # Blended Gemini 2.5 Flash cost per million tokens, used only for the
+    # admin panel's month-to-date spend estimate. A rough weighting of the
+    # $0.30/M input and $2.50/M output list prices for the proxy's
+    # image-heavy, short-answer workload; tune it as real bills arrive.
+    gemini_cost_per_million_tokens: float = 0.60
+
     # Which AIForwarder backs the proxy: "stub" (tests, local dev) or
     # "gemini" (production).
     ai_forwarder: str = "stub"

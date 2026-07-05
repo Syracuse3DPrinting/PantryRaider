@@ -40,6 +40,11 @@ def _set_entitlement(db: Session, account_id: int, plan: str, status: str) -> No
     ent.plan = plan
     ent.status = status
     ent.monthly_token_quota = PLAN_QUOTAS.get(plan, 0)
+    # A Stripe event owns the entitlement from here on: a real purchase
+    # replaces any admin-comped grant, and Stripe rows never carry the
+    # comp-style hard expiry (their lifecycle arrives as webhook events).
+    ent.source = "stripe"
+    ent.expires_at = ""
     ent.updated_at = utc_now_iso()
     db.commit()
 

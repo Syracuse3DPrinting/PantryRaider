@@ -6,9 +6,16 @@ from datetime import datetime, timezone
 from fastapi import Depends, HTTPException, Request
 from sqlalchemy.orm import Session
 
+from .config import settings
 from .database import SessionLocal
 from .models import Account, AuthSession, Instance
 from .security import token_hash
+
+# The one message every seam gives a disabled account: login, provisioning,
+# and the AI proxy all refuse with it, so the owner knows what happened
+# instead of guessing at a generic auth failure.
+ACCOUNT_DISABLED_MESSAGE = ("This account has been disabled. "
+                            "Contact support to restore access.")
 
 
 def utc_now_iso() -> str:
@@ -42,7 +49,24 @@ def account_for_session(db: Session, token: str) -> Account | None:
     sess = db.query(AuthSession).filter_by(token_hash=token_hash(token)).first()
     if not sess or sess.expires_at < utc_now_iso():
         return None
-    return db.get(Account, sess.account_id)
+    account = db.get(Account, sess.account_id)
+    # Disabling an account kills its existing sessions too, not just new
+    # logins: the next page load or API call behaves like a logout.
+    if account and account.disabled:
+        return None
+    return account
+
+
+def is_admin(account: Account | None) -> bool:
+    """Whether this account's email is on the CLOUD_ADMIN_EMAILS allowlist.
+
+    Parsed per call so tests (and a restarted env) take effect immediately;
+    an empty setting means nobody is an admin."""
+    if not account:
+        return False
+    allowed = {e.strip().lower() for e in settings.admin_emails.split(",")
+               if e.strip()}
+    return account.email in allowed
 
 
 def current_account(request: Request, db: Session = Depends(get_db)) -> Account:

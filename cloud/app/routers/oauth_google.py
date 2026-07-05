@@ -38,7 +38,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
 from ..config import settings
-from ..deps import get_db, utc_now_iso
+from ..deps import ACCOUNT_DISABLED_MESSAGE, get_db, utc_now_iso
 from ..models import Account, PairingCode
 from ..security import new_pairing_code, token_hash
 
@@ -176,6 +176,8 @@ def google_callback(request: Request, code: str = "", state: str = "",
         raise HTTPException(400, detail="Sign-in session did not match, start again")
     email = fetch_verified_email(code)
     account = _account_for_email(db, email)
+    if account.disabled:
+        raise HTTPException(403, detail=ACCOUNT_DISABLED_MESSAGE)
 
     if stashed.get("flow") == "app":
         return_url = stashed.get("return_url", "")

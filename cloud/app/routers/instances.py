@@ -18,7 +18,8 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import current_account, current_instance, get_db, utc_now_iso
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, current_account,
+                    current_instance, get_db, utc_now_iso)
 from ..models import Account, Instance, PairingCode
 from ..security import new_pairing_code, new_token, token_hash
 from .accounts import authenticate
@@ -58,6 +59,8 @@ def provision_instance(payload: ProvisionRequest, request: Request,
     account = authenticate(db, payload.email, payload.password)
     if not account:
         raise HTTPException(401, detail="Invalid email or password")
+    if account.disabled:
+        raise HTTPException(403, detail=ACCOUNT_DISABLED_MESSAGE)
     inst, token = _create_instance(db, account.id, payload.device_name)
     state = usage.quota_state(db, account.id, usage.month_key())
     return {
@@ -99,6 +102,9 @@ def redeem_pairing_code(payload: RedeemRequest, db: Session = Depends(get_db)):
     if not row or row.redeemed or row.expires_at < utc_now_iso():
         # One message for unknown, used, and expired: a probe learns nothing.
         raise HTTPException(400, detail="Invalid or expired pairing code")
+    owner = db.get(Account, row.account_id)
+    if owner and owner.disabled:
+        raise HTTPException(403, detail=ACCOUNT_DISABLED_MESSAGE)
     row.redeemed = 1
     inst, token = _create_instance(db, row.account_id, payload.name)
     # The only time the token crosses the wire; the database keeps its hash.

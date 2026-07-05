@@ -13,9 +13,10 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import current_instance, get_db, utc_now_iso
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, current_instance, get_db,
+                    utc_now_iso)
 from ..forwarder import ForwarderError, get_forwarder
-from ..models import Instance
+from ..models import Account, Instance
 
 router = APIRouter(prefix="/v1/ai", tags=["ai"])
 
@@ -54,6 +55,14 @@ async def analyze(
         raise HTTPException(400, detail=f"Unknown task kind: {kind}")
     if not ratelimit.allow(f"proxy:{inst.id}", settings.proxy_rate_per_minute):
         raise HTTPException(429, detail="Too many requests, slow down")
+    owner = db.get(Account, inst.account_id)
+    if owner and owner.disabled:
+        # Same admin kill switch as login and provisioning: a disabled
+        # account's paired installs cannot spend either.
+        raise HTTPException(403, detail={
+            "error": "account_disabled",
+            "message": ACCOUNT_DISABLED_MESSAGE,
+        })
     _quota_gate(db, inst.account_id)
 
     image_data: bytes | None = None

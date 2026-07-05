@@ -9,7 +9,8 @@ from sqlalchemy.orm import Session
 
 from .. import ratelimit, usage
 from ..config import settings
-from ..deps import current_account, get_db, utc_now_iso
+from ..deps import (ACCOUNT_DISABLED_MESSAGE, current_account, get_db,
+                    utc_now_iso)
 from ..models import Account, AuthSession, Instance
 from ..security import hash_password, new_token, token_hash, verify_password
 
@@ -75,6 +76,8 @@ def login(payload: Credentials, request: Request, db: Session = Depends(get_db))
     if not account:
         # One message for both cases, so login does not confirm which emails exist.
         raise HTTPException(401, detail="Invalid email or password")
+    if account.disabled:
+        raise HTTPException(403, detail=ACCOUNT_DISABLED_MESSAGE)
     return {"session_token": _issue_session(db, account.id)}
 
 
