@@ -89,21 +89,24 @@ class Subscription(Base):
 
 
 class Entitlement(Base):
-    """What the account is allowed right now: one row per account."""
+    """What the account is allowed right now: at most one row per source
+    (trial, stripe, comp). usage.resolve_entitlement picks the governing
+    row, so a paid plan can sit alongside the signup trial."""
 
     __tablename__ = "entitlements"
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), unique=True, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
     plan: Mapped[str] = mapped_column(String(40), default="")
     status: Mapped[str] = mapped_column(String(20), default="inactive")  # active | inactive
     monthly_token_quota: Mapped[int] = mapped_column(Integer, default=0)
-    # Where the entitlement came from: "stripe" (webhook) or "comp" (granted
-    # from the admin panel). Empty on rows written before this column.
+    # Where the entitlement came from: "trial" (granted at signup),
+    # "stripe" (webhook), or "comp" (granted from the admin panel). Empty
+    # on rows written before this column existed (treated as Stripe).
     source: Mapped[str] = mapped_column(String(20), default="")
-    # Optional hard expiry (ISO timestamp), used by comped entitlements. An
-    # active row past this moment no longer counts; Stripe rows leave it
-    # empty and expire via webhook status changes instead.
+    # Optional hard expiry (ISO timestamp), used by trials and comped
+    # plans. An active row past this moment no longer counts; Stripe rows
+    # leave it empty and expire via webhook status changes instead.
     expires_at: Mapped[str] = mapped_column(String(40), default="")
     updated_at: Mapped[str] = mapped_column(String(40), default="")
 

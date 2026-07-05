@@ -1,7 +1,7 @@
 """The managed AI proxy.
 
-Gate order per request: instance token, rate limit, monthly quota (free
-trial or paid plan), then forward. Over-quota answers 402 with a structured body
+Gate order per request: instance token, rate limit, entitlement and
+monthly quota (the 30-day trial or a paid plan), then forward. Over-quota answers 402 with a structured body
 the app can surface exactly like its local token-budget gate
 (service/app/routers/analyze.py). Image bytes pass through in memory only;
 nothing image-shaped is ever persisted here.
@@ -26,10 +26,22 @@ _ALLOWED_MIME = {"image/jpeg", "image/png", "image/webp", "image/heic"}
 
 def _quota_gate(db: Session, account_id: int) -> dict:
     """The account's quota state, raising the 402 the app maps to its
-    budget-gate message when the month's quota is spent. Every linked
-    account has a quota: the free trial without a subscription, the paid
-    plan's quota with one (resolved in usage.quota_state)."""
+    budget-gate message. Two ways to be refused: no active entitlement at
+    all (the trial ran out and nothing paid replaced it), or the active
+    plan's monthly quota is spent (resolved in usage.quota_state)."""
     state = usage.quota_state(db, account_id, usage.month_key())
+    if not state["entitled"]:
+        raise HTTPException(402, detail={
+            "error": "no_subscription",
+            "plan": state["plan"],
+            "used": state["used"],
+            "quota": state["quota"],
+            "month": state["month"],
+            "message": "Your free trial has ended. Subscribe on the Forager "
+                       "website to keep scanning, or switch to your own AI "
+                       "key in Settings; scanning with your own key is "
+                       "always free.",
+        })
     if state["over_quota"]:
         raise HTTPException(402, detail={
             "error": "quota_exceeded",
@@ -90,5 +102,6 @@ async def analyze(
         "result": result.result,
         "tokens": result.tokens,
         "quota": {"used": state["used"], "quota": state["quota"],
-                  "remaining": state["remaining"], "month": state["month"]},
+                  "remaining": state["remaining"], "month": state["month"],
+                  "plan": state["plan"], "trial_days_left": state["trial_days_left"]},
     }

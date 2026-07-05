@@ -23,18 +23,21 @@
   {% endif %}
   <p class="muted small">Scans this month: {{ scans }}</p>
   {% if plan_active %}
-    {% if checkout_url %}
-    <a class="btn btn-outline" href="{{ checkout_url }}">Manage subscription</a>
+    {% if manage_url %}
+    <a class="btn btn-outline" href="{{ manage_url }}">Manage subscription</a>
     {% endif %}
+  {% elif checkout_options %}
+    <div class="plan-buttons">
+      {% for opt in checkout_options %}
+      <a class="btn" href="{{ opt.url }}">{{ opt.label }}</a>
+      {% endfor %}
+    </div>
+    <p class="muted small">A subscription keeps your kitchen reachable from
+    anywhere and refills your scanning allowance. Cancel anytime. Pantry
+    Raider itself is always free with your own AI key.</p>
   {% else %}
-    {% if checkout_url %}
-    <a class="btn" href="{{ checkout_url }}">Subscribe</a>
-    <p class="muted small">Subscribing raises your monthly scanning
-    allowance. Cancel anytime.</p>
-    {% else %}
     <p class="muted small">Billing is not live yet. Everyone is on the free
     trial for now, on us.</p>
-    {% endif %}
   {% endif %}
 </div>
 

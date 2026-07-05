@@ -37,6 +37,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
+from .. import usage
 from ..config import settings
 from ..deps import ACCOUNT_DISABLED_MESSAGE, get_db, utc_now_iso
 from ..models import Account, PairingCode
@@ -122,6 +123,8 @@ def _account_for_email(db: Session, email: str) -> Account:
                           auth_provider="google", created_at=utc_now_iso())
         db.add(account)
         db.commit()
+        # Google-created accounts start the same 30-day trial as everyone.
+        usage.grant_trial(db, account.id, account.created_at)
     return account
 
 

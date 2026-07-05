@@ -95,9 +95,9 @@ def test_totals_math(admin_client, user_setup, monkeypatch):
     assert "1,500,000" in page  # month-to-date tokens
     assert "$0.90" in page  # 1.5M * $0.60/M
     assert "Eve Pi" not in page  # overview lists accounts, not kitchens
-    # eve: 1 kitchen, starter plan, month tokens on her row
+    # eve: 1 kitchen, premium plan, month tokens on her row
     assert "eve@example.com" in page
-    assert "starter" in page
+    assert "premium" in page
 
 
 def test_comp_is_not_a_paid_sub_in_totals(admin_client, user_setup):
@@ -106,7 +106,9 @@ def test_comp_is_not_a_paid_sub_in_totals(admin_client, user_setup):
                       data={"expires_on": "2099-01-01"})
     page = admin_client.get("/admin").text
     # The stat tile for active paid subs stays at 0.
-    assert '<div class="label">Active paid subs</div>\n    <div class="value">0</div>' in page
+    import re
+    m = re.search(r'Active paid subs</div>\s*<div class="value">(\d+)</div>', page)
+    assert m and m.group(1) == "0"
 
 
 def test_search_filters_by_email_substring(admin_client, user_setup):
@@ -169,7 +171,7 @@ def test_comp_grant_and_expire(admin_client, user_setup):
     me = admin_client.get("/v1/instance/me",
                           headers={"Authorization": f"Bearer {instance_token}"})
     ent = me.json()["entitlement"]
-    assert ent["plan"] == "starter" and ent["active"] is True
+    assert ent["plan"] == "premium" and ent["entitled"] is True and ent["active"] is False
     assert ent["quota"] == 2_000_000
 
     detail = admin_client.get(f"/admin/accounts/{account_id}").text
@@ -180,17 +182,17 @@ def test_comp_grant_and_expire(admin_client, user_setup):
     me = admin_client.get("/v1/instance/me",
                           headers={"Authorization": f"Bearer {instance_token}"})
     ent = me.json()["entitlement"]
-    assert ent["plan"] == "free" and ent["active"] is False
+    assert ent["plan"] == "expired" and ent["active"] is False
 
 
-def test_comp_past_its_expiry_falls_back_to_free(admin_client, user_setup):
+def test_comp_past_its_expiry_falls_back_to_expired(admin_client, user_setup):
     account_id, instance_token = user_setup
     admin_client.post(f"/admin/accounts/{account_id}/comp",
                       data={"expires_on": "2020-01-01"})
     me = admin_client.get("/v1/instance/me",
                           headers={"Authorization": f"Bearer {instance_token}"})
     ent = me.json()["entitlement"]
-    assert ent["plan"] == "free" and ent["active"] is False
+    assert ent["plan"] == "expired" and ent["active"] is False
 
 
 def test_comp_rejects_bad_dates_and_stripe_subscribers(admin_client, user_setup):
@@ -255,7 +257,7 @@ def test_every_admin_mutation_writes_an_audit_row(admin_client, user_setup):
         "disable", "enable", "comp", "expire-comp", "revoke-kitchen"]
     assert all(r.admin_email == "dan@example.com" for r in rows)
     assert all(r.account_id == account_id for r in rows)
-    assert "starter until 2099-01-01" in rows[2].detail
+    assert "premium until 2099-01-01" in rows[2].detail
     assert "Eve Pi" in rows[4].detail
 
     # The detail page shows the target's trail; the overview shows them all.

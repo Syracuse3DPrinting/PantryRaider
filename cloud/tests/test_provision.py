@@ -14,8 +14,8 @@ def test_provision_returns_the_full_contract(client, session_token):
     body = resp.json()
     assert body["instance_token"].startswith("prc_")
     assert body["account_email"] == "dan@example.com"
-    assert body["plan"] == "free"
-    assert body["quota"] == 100_000
+    assert body["plan"] == "trial"
+    assert body["quota"] == 2_000_000
     assert body["month_used"] == 0
     assert body["suggested_public_url"] is None
 

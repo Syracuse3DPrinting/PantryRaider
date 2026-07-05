@@ -67,7 +67,10 @@ def provision_instance(payload: ProvisionRequest, request: Request,
         "instance_token": token,
         "instance_id": inst.id,
         "account_email": account.email,
+        # trial / basic / premium / expired; days remaining rides along
+        # while the plan is the trial (null otherwise).
         "plan": state["plan"],
+        "trial_days_left": state["trial_days_left"],
         "quota": state["quota"],
         "month_used": state["used"],
         # Reserved for the hosted-tunnel follow-up: once WireGuard tunnels

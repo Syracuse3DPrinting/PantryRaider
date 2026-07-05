@@ -64,6 +64,9 @@ def signup(payload: Credentials, request: Request, db: Session = Depends(get_db)
                       created_at=utc_now_iso())
     db.add(account)
     db.commit()
+    # Every new account starts its 30-day trial immediately; the expiry is
+    # written now, so it lapses on its own with no cron job.
+    usage.grant_trial(db, account.id, account.created_at)
     return {"session_token": _issue_session(db, account.id)}
 
 

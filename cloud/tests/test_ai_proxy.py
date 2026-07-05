@@ -1,10 +1,10 @@
-"""The AI proxy's gates: free trial, paid quota, ledger, and rate limit."""
+"""The AI proxy's gates: signup trial, paid quota, expired trial, ledger, rate limit."""
 import io
 
 from app.database import SessionLocal
 from app.forwarder import StubForwarder
 from app.models import UsageLedger
-from tests.conftest import activate_entitlement
+from tests.conftest import activate_entitlement, expire_trial
 
 
 def _auth(token):
@@ -24,23 +24,26 @@ def test_requires_instance_token(client):
     assert resp.status_code == 401
 
 
-def test_free_tier_without_subscription(client, instance_token):
-    # A paired account with no entitlement gets the free trial quota.
+def test_trial_account_gets_premium_quota(client, instance_token):
+    # A fresh account is on the 30-day trial, which is the full premium quota.
     from app.config import PLAN_QUOTAS
     resp = _analyze(client, instance_token)
     assert resp.status_code == 200
-    assert resp.json()["quota"]["quota"] == PLAN_QUOTAS["free"]
+    q = resp.json()["quota"]
+    assert q["quota"] == PLAN_QUOTAS["trial"]
+    assert q["plan"] == "trial"
+    assert q["trial_days_left"] >= 29
 
 
-def test_free_tier_quota_exceeded_is_402(client, instance_token):
-    # Past 100K tokens in a month, a free-tier account gets the 402 gate.
+def test_trial_quota_exceeded_is_402(client, instance_token):
+    # Past the trial quota in a month, the account gets the 402 gate.
     from app import usage
     from app.config import PLAN_QUOTAS
     from app.models import Account
     db = SessionLocal()
     try:
         account_id = db.query(Account).first().id
-        usage.record(db, account_id, 1, PLAN_QUOTAS["free"], "food",
+        usage.record(db, account_id, 1, PLAN_QUOTAS["trial"], "food",
                      usage.month_key(), "2026-01-01T00:00:00+00:00")
     finally:
         db.close()
@@ -48,42 +51,42 @@ def test_free_tier_quota_exceeded_is_402(client, instance_token):
     assert resp.status_code == 402
     detail = resp.json()["detail"]
     assert detail["error"] == "quota_exceeded"
-    assert detail["plan"] == "free"
-    assert detail["quota"] == PLAN_QUOTAS["free"]
+    assert detail["plan"] == "trial"
+    assert detail["quota"] == PLAN_QUOTAS["trial"]
 
 
-def test_entitled_account_gets_starter_quota(client, instance_token):
-    # Usage that exhausts the free tier stays under the starter quota.
-    from app import usage
+def test_expired_trial_with_no_plan_is_402(client, instance_token):
+    # After the trial lapses with nothing paid, the quota is zero and the
+    # proxy answers 402 with the expired plan (Forager is trial-then-paid).
+    expire_trial()
+    resp = _analyze(client, instance_token)
+    assert resp.status_code == 402
+    detail = resp.json()["detail"]
+    # No active entitlement is a distinct signal from a spent quota.
+    assert detail["error"] == "no_subscription"
+    assert detail["plan"] == "expired"
+    assert detail["quota"] == 0
+
+
+def test_paid_account_gets_premium_quota(client, instance_token):
+    # A paid entitlement outranks the trial and grants the premium quota.
     from app.config import PLAN_QUOTAS
-    account_id = activate_entitlement()
-    db = SessionLocal()
-    try:
-        usage.record(db, account_id, 1, PLAN_QUOTAS["free"], "food",
-                     usage.month_key(), "2026-01-01T00:00:00+00:00")
-    finally:
-        db.close()
+    activate_entitlement(plan="premium")
     resp = _analyze(client, instance_token)
     assert resp.status_code == 200
-    assert resp.json()["quota"]["quota"] == PLAN_QUOTAS["starter"]
+    assert resp.json()["quota"]["quota"] == PLAN_QUOTAS["premium"]
+    assert resp.json()["quota"]["plan"] == "premium"
 
 
-def test_expired_entitlement_drops_back_to_free(client, instance_token):
-    # An inactive entitlement no longer grants the paid quota; the account
-    # keeps the free trial tier.
+def test_basic_plan_gets_the_small_quota(client, instance_token):
+    # Cloud Basic keeps the smaller AI allowance even past the trial.
     from app.config import PLAN_QUOTAS
-    from app.models import Entitlement
-    activate_entitlement()
-    db = SessionLocal()
-    try:
-        ent = db.query(Entitlement).first()
-        ent.status = "inactive"
-        db.commit()
-    finally:
-        db.close()
+    expire_trial()
+    activate_entitlement(plan="basic")
     resp = _analyze(client, instance_token)
     assert resp.status_code == 200
-    assert resp.json()["quota"]["quota"] == PLAN_QUOTAS["free"]
+    assert resp.json()["quota"]["quota"] == PLAN_QUOTAS["basic"]
+    assert resp.json()["quota"]["plan"] == "basic"
 
 
 def test_analyze_records_usage(client, instance_token):
@@ -121,7 +124,7 @@ def test_quota_exceeded_is_402(client, instance_token):
     from app.config import PLAN_QUOTAS
     db = SessionLocal()
     try:
-        usage.record(db, account_id, 1, PLAN_QUOTAS["starter"], "food",
+        usage.record(db, account_id, 1, PLAN_QUOTAS["premium"], "food",
                      usage.month_key(), "2026-01-01T00:00:00+00:00")
     finally:
         db.close()

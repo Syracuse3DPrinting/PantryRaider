@@ -282,9 +282,19 @@ async function _loadCloudStatus() {
     let html = '<i class="bi bi-cloud-check me-1"></i>' + (d.account_email
       ? 'Signed in as <strong>' + esc(d.account_email) + '</strong> (this device: ' + esc(d.name || 'unnamed') + ')'
       : 'Connected as <strong>' + esc(d.name || 'this device') + '</strong>');
-    html += ent.active
-      ? ' · ' + (ent.plan ? String(ent.plan).replace(/[<>&"]/g, '') + ' plan, ' : '') + 'subscription active'
-      : ' · <span class="text-warning">no active subscription</span>';
+    // Plan-aware: a paid plan reads as active, a trial shows days left, an
+    // expired trial nudges to upgrade. A working plan is never a warning.
+    const plan = String(ent.plan || '').replace(/[<>&"]/g, '');
+    if (ent.active) {
+      html += ' · ' + (plan ? plan + ' plan, ' : '') + 'subscription active';
+    } else if (plan === 'trial') {
+      const d = ent.trial_days_left;
+      html += ' · free trial' + (d != null ? ', ' + d + ' day' + (d === 1 ? '' : 's') + ' left' : '');
+    } else if (ent.entitled) {
+      html += ' · ' + (plan ? plan + ' plan' : 'plan active');
+    } else {
+      html += ' · <span class="text-warning">trial ended, subscribe to keep cloud scanning</span>';
+    }
     statusEl && (statusEl.innerHTML = html);
     if (usageEl) {
       if (ent.quota) {

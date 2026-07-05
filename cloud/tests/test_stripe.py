@@ -52,9 +52,9 @@ def test_checkout_completed_activates_entitlement(client, session_token):
 
     db = SessionLocal()
     try:
-        ent = db.query(Entitlement).filter_by(account_id=account_id).first()
+        ent = db.query(Entitlement).filter_by(account_id=account_id, source="stripe").first()
         assert ent.status == "active"
-        assert ent.monthly_token_quota == PLAN_QUOTAS["starter"]
+        assert ent.monthly_token_quota == PLAN_QUOTAS["premium"]
         sub = db.query(Subscription).first()
         assert sub.stripe_subscription_id == "sub_123"
         assert sub.stripe_customer_id == "cus_123"
@@ -86,7 +86,7 @@ def test_subscription_deleted_deactivates(client, session_token):
     assert resp.status_code == 200
     db = SessionLocal()
     try:
-        ent = db.query(Entitlement).filter_by(account_id=account_id).first()
+        ent = db.query(Entitlement).filter_by(account_id=account_id, source="stripe").first()
         assert ent.status == "inactive"
         assert db.query(Subscription).first().status == "canceled"
     finally:
@@ -105,16 +105,16 @@ def test_subscription_updated_past_due_stays_active(client, session_token):
     assert resp.status_code == 200
     db = SessionLocal()
     try:
-        ent = db.query(Entitlement).filter_by(account_id=account_id).first()
+        ent = db.query(Entitlement).filter_by(account_id=account_id, source="stripe").first()
         assert ent.status == "active"
     finally:
         db.close()
 
 
-def test_starter_price_id_maps_to_starter_plan(client, session_token,
+def test_starter_price_id_maps_to_premium_alias(client, session_token,
                                                monkeypatch):
-    # CLOUD_STRIPE_PRICE_STARTER maps the live Stripe price to the starter
-    # plan and its quota.
+    # CLOUD_STRIPE_PRICE_STARTER is a deprecated alias that still maps the live
+    # Stripe price to a working premium plan.
     monkeypatch.setattr(settings, "stripe_price_starter", "price_live_starter")
     account_id = _account_id(client, session_token)
     _post_event(client, _checkout_event(account_id))
@@ -129,9 +129,9 @@ def test_starter_price_id_maps_to_starter_plan(client, session_token,
     assert resp.status_code == 200
     db = SessionLocal()
     try:
-        ent = db.query(Entitlement).filter_by(account_id=account_id).first()
-        assert ent.plan == "starter"
-        assert ent.monthly_token_quota == PLAN_QUOTAS["starter"]
+        ent = db.query(Entitlement).filter_by(account_id=account_id, source="stripe").first()
+        assert ent.plan == "premium"
+        assert ent.monthly_token_quota == PLAN_QUOTAS["premium"]
     finally:
         db.close()
 

@@ -32,8 +32,28 @@ router = APIRouter(include_in_schema=False)
 
 templates = Jinja2Templates(directory=str(Path(__file__).parent.parent / "templates"))
 
-# Plans as people see them. Keys are the internal plan names in config.
-PLAN_LABELS = {"free": "Free trial", "starter": "Starter"}
+# Plans as people see them. Keys are the internal plan names in config,
+# plus the "expired" state quota_state reports when nothing is active.
+PLAN_LABELS = {"trial": "Free trial", "basic": "Cloud Basic",
+               "premium": "Premium", "expired": "Trial ended"}
+
+
+def checkout_options() -> list[dict]:
+    """The plan buttons the account page can honestly offer: one per
+    configured Stripe Checkout link, or a single Subscribe button when only
+    the plain link is set. Empty means billing is not live yet."""
+    per_price = [
+        {"label": "Cloud Basic, $10 a year",
+         "url": settings.stripe_checkout_url_basic_year},
+        {"label": "Premium, $3 a month",
+         "url": settings.stripe_checkout_url_premium_month},
+        {"label": "Premium, $30 a year",
+         "url": settings.stripe_checkout_url_premium_year},
+    ]
+    options = [o for o in per_price if o["url"]]
+    if not options and settings.stripe_checkout_url:
+        options = [{"label": "Subscribe", "url": settings.stripe_checkout_url}]
+    return options
 
 # Post/redirect/get notices for the account page, keyed by the ?m= code so
 # a refresh never re-submits a form.
@@ -109,6 +129,8 @@ def signup_submit(request: Request,
                       created_at=utc_now_iso())
     db.add(account)
     db.commit()
+    # The 30-day trial starts the moment the account exists.
+    usage.grant_trial(db, account.id, account.created_at)
     return _start_session(db, account.id)
 
 
@@ -171,13 +193,17 @@ def account_page(request: Request,
     return templates.TemplateResponse(request, "account.html", {
         "signed_in": True,
         "email": account.email,
+        "plan": state["plan"],
         "plan_label": PLAN_LABELS.get(state["plan"], state["plan"].title()),
         "plan_active": state["active"],
+        "entitled": state["entitled"],
+        "trial_days_left": state["trial_days_left"],
         "percent": percent,
         "over_quota": state["over_quota"],
         "scans": scans,
         "kitchens": kitchens,
-        "checkout_url": settings.stripe_checkout_url,
+        "checkout_options": checkout_options(),
+        "manage_url": settings.stripe_checkout_url,
         "has_password": bool(account.password_hash),
         "notice": _NOTICES.get(request.query_params.get("m", "")),
         "error": _ACCOUNT_ERRORS.get(request.query_params.get("e", "")),

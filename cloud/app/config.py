@@ -12,16 +12,27 @@ from pydantic_settings import BaseSettings
 CLOUD_VERSION = "0.1.0"
 
 # The plan table. Quotas are AI tokens per calendar month, the same unit
-# service/app/services/usage.py meters locally. Every paired account gets
-# the free trial tier automatically, no subscription needed; "starter"
-# requires an active entitlement. Prices live in Stripe, never in code.
+# service/app/services/usage.py meters locally. Every new account gets a
+# 30-day trial entitlement at signup (the full premium quota, so the trial
+# is the real experience); after it expires the account needs a paid plan.
+# Prices live in Stripe, never in code.
 PLAN_QUOTAS: dict[str, int] = {
-    "free": 100_000,
-    "starter": 2_000_000,
+    # 30 days of the full premium experience, granted automatically at signup.
+    "trial": 2_000_000,
+    # Cloud Basic ($10/year): remote access plus a small AI allowance, for
+    # people who bring their own AI key or scan lightly.
+    "basic": 100_000,
+    # Premium ($3/month or $30/year): remote access plus the full AI allowance.
+    "premium": 2_000_000,
 }
-FREE_PLAN = "free"
+TRIAL_PLAN = "trial"
+TRIAL_DAYS = 30
+# What quota_state reports when no entitlement is active: the trial ran out
+# and nothing paid replaced it. Not a plan with a quota of its own; the AI
+# proxy answers 402 until the account subscribes.
+EXPIRED_PLAN = "expired"
 # The plan a paid Stripe purchase maps to when the price id is unrecognised.
-DEFAULT_PLAN = "starter"
+DEFAULT_PLAN = "premium"
 
 
 class CloudSettings(BaseSettings):
@@ -33,14 +44,27 @@ class CloudSettings(BaseSettings):
     # signature check real in tests; the VPS env file supplies the live value.
     stripe_webhook_secret: str = "whsec_placeholder"
 
-    # The Stripe price id for the starter plan (price_...). A Checkout
-    # purchase or subscription carrying this price maps to "starter".
+    # The Stripe price ids (price_...) that map purchases to plans. One
+    # per way to pay: Cloud Basic is yearly only, Premium comes monthly
+    # or yearly. Set each from the Stripe dashboard when billing goes live.
+    stripe_price_basic_year: str = ""
+    stripe_price_premium_month: str = ""
+    stripe_price_premium_year: str = ""
+
+    # Deprecated: the pre-pricing-rework starter price id. Kept working as
+    # a premium alias so an env file that still sets it maps purchases
+    # correctly; use CLOUD_STRIPE_PRICE_PREMIUM_* for new setups.
     stripe_price_starter: str = ""
 
-    # The Stripe Checkout link the portal's Subscribe button points at.
-    # Empty until billing goes live; the account page says so honestly
-    # instead of showing a dead button.
+    # The Stripe Checkout links the portal's plan buttons point at, one per
+    # price. Empty links hide their button; if only the plain
+    # CLOUD_STRIPE_CHECKOUT_URL is set it becomes a single Subscribe
+    # button; when none are set the account page says billing is not live
+    # yet instead of showing dead buttons.
     stripe_checkout_url: str = ""
+    stripe_checkout_url_basic_year: str = ""
+    stripe_checkout_url_premium_month: str = ""
+    stripe_checkout_url_premium_year: str = ""
 
     # Extra price-id-to-plan mappings, for future tiers.
     stripe_price_to_plan: dict[str, str] = {}

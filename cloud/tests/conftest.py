@@ -60,8 +60,9 @@ def instance_token(client, session_token):
     return resp.json()["instance_token"]
 
 
-def activate_entitlement(account_email="dan@example.com", plan="starter"):
-    """Grant an active entitlement directly, standing in for the Stripe flow."""
+def activate_entitlement(account_email="dan@example.com", plan="premium"):
+    """Grant an active paid entitlement directly, standing in for the Stripe
+    flow (source "stripe" so it outranks the signup trial)."""
     from app.config import PLAN_QUOTAS
     from app.database import SessionLocal
     from app.models import Account, Entitlement
@@ -71,7 +72,26 @@ def activate_entitlement(account_email="dan@example.com", plan="starter"):
         account = db.query(Account).filter_by(email=account_email).first()
         db.add(Entitlement(account_id=account.id, plan=plan, status="active",
                            monthly_token_quota=PLAN_QUOTAS[plan],
+                           source="stripe",
                            updated_at="2026-01-01T00:00:00+00:00"))
+        db.commit()
+        return account.id
+    finally:
+        db.close()
+
+
+def expire_trial(account_email="dan@example.com"):
+    """Push the signup trial's expiry into the past so an account with no
+    paid plan resolves to the expired (zero-quota) state."""
+    from app.database import SessionLocal
+    from app.models import Account, Entitlement
+
+    db = SessionLocal()
+    try:
+        account = db.query(Account).filter_by(email=account_email).first()
+        ent = (db.query(Entitlement)
+               .filter_by(account_id=account.id, source="trial").first())
+        ent.expires_at = "2000-01-01T00:00:00+00:00"
         db.commit()
         return account.id
     finally:

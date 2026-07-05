@@ -77,10 +77,12 @@ def admin_overview(request: Request, q: str = "",
 
     total_accounts = db.query(func.count(Account.id)).scalar() or 0
     total_kitchens = db.query(func.count(Instance.id)).scalar() or 0
-    # Paid subscriptions only: comped grants are not revenue.
+    # Paid subscriptions only: neither comped grants nor signup trials are
+    # revenue, so count only the paid sources (Stripe, or a legacy blank
+    # source that predates the column).
     active_subs = (db.query(Entitlement)
                    .filter(Entitlement.status == "active",
-                           Entitlement.source != "comp")
+                           Entitlement.source.in_(("stripe", "")))
                    .count())
     month_tokens = int(db.query(func.coalesce(func.sum(UsageLedger.tokens), 0))
                        .filter(UsageLedger.month_key == mk).scalar() or 0)
@@ -122,7 +124,7 @@ def admin_overview(request: Request, q: str = "",
     rows = []
     for a in accounts:
         ent = ents.get(a.id)
-        plan = ent.plan if usage.entitlement_active(ent) else "free"
+        plan = ent.plan if usage.entitlement_active(ent) else "expired"
         # Last seen: the freshest signal we track, a portal login or a
         # paired install checking in; a brand-new account falls back to
         # its creation time.
@@ -230,7 +232,7 @@ def comp_account(account_id: int,
                  expires_on: str = Form(...),
                  admin: Account = Depends(require_admin),
                  db: Session = Depends(get_db)):
-    """Grant a starter entitlement on the house, until the chosen date.
+    """Grant a premium entitlement on the house, until the chosen date.
 
     Never overwrites a Stripe-sourced entitlement: a paying subscriber has
     nothing to comp, and the webhook owns that row."""
@@ -244,15 +246,15 @@ def comp_account(account_id: int,
     if not ent:
         ent = Entitlement(account_id=account.id)
         db.add(ent)
-    ent.plan = "starter"
+    ent.plan = "premium"
     ent.status = "active"
-    ent.monthly_token_quota = PLAN_QUOTAS["starter"]
+    ent.monthly_token_quota = PLAN_QUOTAS["premium"]
     ent.source = "comp"
     # Comps run through the end of the chosen day (UTC).
     ent.expires_at = f"{expires_on.strip()}T23:59:59+00:00"
     ent.updated_at = utc_now_iso()
     db.commit()
-    _log(db, admin, "comp", account.id, f"starter until {expires_on.strip()}")
+    _log(db, admin, "comp", account.id, f"premium until {expires_on.strip()}")
     return _back(account.id)
 
 
