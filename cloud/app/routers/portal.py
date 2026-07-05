@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from .. import ratelimit, usage
 from ..config import settings
 from ..deps import (ACCOUNT_DISABLED_MESSAGE, SESSION_COOKIE, cookie_account,
-                    get_db, utc_now_iso)
+                    get_db, is_admin, utc_now_iso)
 from ..models import Account, AuthSession, Instance, UsageLedger
 from ..security import hash_password, token_hash, verify_password
 from .accounts import _issue_session, _valid_email, authenticate
@@ -91,7 +91,8 @@ def _start_session(db: Session, account_id: int) -> RedirectResponse:
 @router.get("/")
 def landing(request: Request, account: Account | None = Depends(cookie_account)):
     return templates.TemplateResponse(request, "landing.html",
-                                      {"signed_in": account is not None})
+                                      {"signed_in": account is not None,
+                                       "is_admin": is_admin(account)})
 
 
 @router.get("/signup")
@@ -192,6 +193,7 @@ def account_page(request: Request,
         percent = min(100, round(state["used"] * 100 / state["quota"]))
     return templates.TemplateResponse(request, "account.html", {
         "signed_in": True,
+        "is_admin": is_admin(account),
         "email": account.email,
         "plan": state["plan"],
         "plan_label": PLAN_LABELS.get(state["plan"], state["plan"].title()),

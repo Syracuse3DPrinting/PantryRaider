@@ -103,6 +103,7 @@
     <a class="brand" href="/">Forager<span class="dot">.</span></a>
     <nav class="nav-links">
       {% if signed_in %}
+        {% if is_admin %}<a class="btn btn-outline" href="/admin">Admin</a>{% endif %}
         <a class="btn btn-outline" href="/account">My account</a>
         <form method="post" action="/logout" style="margin:0">
           <button class="btn btn-quiet" type="submit">Sign out</button>
