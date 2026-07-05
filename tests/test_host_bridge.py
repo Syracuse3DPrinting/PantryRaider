@@ -1823,3 +1823,64 @@ def test_write_update_channel_rejects_unknown_values(tmp_path):
         ok, err = bridge._write_update_channel(bad, path=str(f))
         assert ok is False and "stable" in err
     assert not f.exists()
+
+
+# --- USB photo mount fixes (FoodAssistant-l3op) ---
+
+def test_usb_photo_candidates_keep_read_only_mounts():
+    # Photos only read, so a ro-mounted stick (which backups must skip) counts.
+    mounts = [
+        ("/dev/sda1", "/media/pi/PHOTOS", "vfat", "ro,noatime"),
+        ("/dev/sdb1", "/media/pi/BACKUP", "vfat", "rw,noatime"),
+    ]
+    got = bridge._usb_photo_mount_candidates(["sda", "sdb"], mounts)
+    assert ("/dev/sda1", "/media/pi/PHOTOS") in got   # ro kept, unlike backups
+    assert ("/dev/sdb1", "/media/pi/BACKUP") in got
+    # The backup candidate list still drops the ro one.
+    assert bridge._usb_mount_candidates(["sda", "sdb"], mounts) == [
+        ("/dev/sdb1", "/media/pi/BACKUP")]
+
+
+def test_usb_photo_candidates_skip_system_disks():
+    mounts = [("/dev/sda1", "/", "ext4", "rw"),
+              ("/dev/sda2", "/boot/firmware", "vfat", "rw")]
+    assert bridge._usb_photo_mount_candidates(["sda"], mounts) == []
+
+
+def test_usb_partitions_for_lists_partitions(tmp_path):
+    disk = tmp_path / "sda"
+    for p in ("sda1", "sda2", "queue", "sdaX"):
+        (disk / p).mkdir(parents=True)
+    assert bridge._usb_partitions_for("sda", str(tmp_path)) == [
+        "/dev/sda1", "/dev/sda2"]
+
+
+def test_usb_partitions_for_whole_disk_when_no_partition_table(tmp_path):
+    (tmp_path / "sdb" / "queue").mkdir(parents=True)
+    assert bridge._usb_partitions_for("sdb", str(tmp_path)) == ["/dev/sdb"]
+
+
+def test_usb_unmounted_partitions_finds_the_unmounted_stick(tmp_path):
+    for p in ("sda1",):
+        (tmp_path / "sda" / p).mkdir(parents=True)
+    (tmp_path / "sdb" / "sdb1").mkdir(parents=True)
+    mounts = [("/dev/sda1", "/media/x", "vfat", "rw")]   # sda mounted, sdb not
+    assert bridge._usb_unmounted_partitions(
+        ["sda", "sdb"], mounts, str(tmp_path)) == ["/dev/sdb1"]
+
+
+def test_usb_photos_status_mounts_on_demand_when_nothing_mounted(monkeypatch, tmp_path):
+    # No removable drive is mounted; the bridge should mount an unmounted
+    # partition read-only and find the photos folder there.
+    photos = tmp_path / "mnt" / "photos"
+    photos.mkdir(parents=True)
+    (photos / "a.jpg").write_bytes(b"x")
+    monkeypatch.setattr(bridge, "_usb_removable_disks", lambda *a, **k: ["sda"])
+    monkeypatch.setattr(bridge, "_usb_unmounted_partitions",
+                        lambda *a, **k: ["/dev/sda1"])
+    monkeypatch.setattr(bridge, "_usb_try_mount_ro",
+                        lambda dev, mountpoint=None: str(tmp_path / "mnt"))
+    monkeypatch.setattr("builtins.open",
+                        lambda *a, **k: __import__("io").StringIO(""))
+    pdir, reason = bridge._usb_photos_status()
+    assert pdir == str(photos) and reason == ""

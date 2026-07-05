@@ -1546,18 +1546,92 @@ def _usb_photo_safe_path(pdir, name):
     return full
 
 
+# Photos are read-only, so unlike backups they can use a drive mounted
+# read-only (many automounters, and every headless mount below, mount FAT and
+# exFAT sticks that way). This mirrors _usb_mount_candidates but keeps the ro
+# mounts the backup target must skip.
+def _usb_photo_mount_candidates(removable, mounts):
+    """Pure: mounted removable filesystems, read-only ones included."""
+    out = []
+    for dev, mnt, _fstype, opts in mounts:
+        if not dev.startswith("/dev/"):
+            continue
+        if _usb_disk_for(os.path.basename(dev), removable) is None:
+            continue
+        if mnt == "/" or mnt == "/boot" or mnt.startswith("/boot/"):
+            continue
+        out.append((dev, mnt))
+    return out
+
+
+def _usb_partitions_for(disk, sys_block="/sys/block"):
+    """Pure: partition device paths on a removable disk (sda -> [/dev/sda1..]).
+    A disk with no partition table (whole-disk filesystem) yields the disk."""
+    try:
+        entries = sorted(os.listdir(os.path.join(sys_block, disk)))
+    except OSError:
+        return []
+    parts = [os.path.join("/dev", e) for e in entries
+             if e.startswith(disk) and re.fullmatch(r"p?\d+", e[len(disk):])]
+    return parts or [os.path.join("/dev", disk)]
+
+
+def _usb_unmounted_partitions(removable, mounts, sys_block="/sys/block"):
+    """Pure: removable partitions with no entry in the mount table. These are
+    the ones a headless Pi never automounts, so the bridge mounts one itself."""
+    mounted = {dev for dev, _mnt, _fs, _opts in mounts}
+    out = []
+    for disk in removable:
+        for part in _usb_partitions_for(disk, sys_block):
+            if part not in mounted:
+                out.append(part)
+    return out
+
+
+# Where the bridge mounts a drive that nothing else did. Read-only, so a photo
+# slideshow never risks a write or an fsck on the user's stick.
+_USB_PHOTO_MOUNT = "/run/foodassistant-usb"
+
+
+def _usb_try_mount_ro(device, mountpoint=_USB_PHOTO_MOUNT):
+    """Mount a removable partition read-only for reading photos. Best-effort:
+    returns the mountpoint on success, None otherwise. Read-only with the
+    hardening flags means the worst a bad stick can do is fail to mount."""
+    try:
+        os.makedirs(mountpoint, exist_ok=True)
+        subprocess.run(
+            ["mount", "-o", "ro,noatime,nosuid,nodev,noexec", device, mountpoint],
+            check=True, capture_output=True, timeout=20)
+        return mountpoint
+    except (OSError, subprocess.SubprocessError):
+        return None
+
+
 def _usb_photos_status():
-    """The mounted drive's photos directory, or (None, reason)."""
+    """The drive's photos directory, or (None, reason). Uses an already-mounted
+    removable drive (read-only included); if none is mounted, mounts an
+    unmounted removable partition read-only and looks there, so the feature
+    works on a headless Pi that has no automounter (FoodAssistant-l3op)."""
     removable = _usb_removable_disks()
     with open("/proc/mounts") as f:
         mounts = _usb_parse_mounts(f.read())
-    pick = _usb_pick_mount(_usb_mount_candidates(removable, mounts))
-    if not pick:
-        return None, "no drive"
-    pdir = _usb_photos_dir(pick[1])
-    if not pdir:
-        return None, "no photos folder"
-    return pdir, ""
+    # Already mounted (by an automounter or a previous call): read it in place.
+    pick = _usb_pick_mount(_usb_photo_mount_candidates(removable, mounts))
+    if pick:
+        pdir = _usb_photos_dir(pick[1])
+        return (pdir, "") if pdir else (None, "no photos folder")
+    # Nothing mounted the drive. Mount an unmounted removable partition
+    # read-only ourselves and look for the photos folder.
+    for device in _usb_unmounted_partitions(removable, mounts):
+        mnt = _usb_try_mount_ro(device)
+        if not mnt:
+            continue
+        pdir = _usb_photos_dir(mnt)
+        if pdir:
+            return pdir, ""
+        # Wrong partition (no photos folder): unmount and try the next.
+        subprocess.run(["umount", mnt], capture_output=True, timeout=20)
+    return None, "no drive"
 
 
 # Meaning of each bit in the "throttled" word reported by `vcgencmd
