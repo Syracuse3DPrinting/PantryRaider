@@ -1,25 +1,77 @@
-"""Instance pairing and the instance status endpoint.
+"""Instance provisioning, pairing, and the instance status endpoints.
 
-The flow mirrors the app's satellite pairing pattern: the portal mints a
-short-lived code, the install redeems it (the code is the credential) and
-receives a long-lived instance token, shown once and stored hashed. From
-then on the install dials out with the token; the cloud never reaches in.
+The primary path is one-step provisioning: the app signs in with the
+account's email and password and gets an instance token back in a single
+call, so a non-technical user never handles a code. Pairing codes remain
+as the advanced path (a code minted in the portal, typed into the app).
+Either way the install ends up with a long-lived instance token, shown
+once and stored hashed; from then on the install dials out with the
+token and the cloud never reaches in.
 """
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from .. import usage
+from .. import ratelimit, usage
 from ..config import settings
 from ..deps import current_account, current_instance, get_db, utc_now_iso
 from ..models import Account, Instance, PairingCode
 from ..security import new_pairing_code, new_token, token_hash
+from .accounts import authenticate
 
 router = APIRouter(prefix="/v1", tags=["instances"])
+
+
+def _create_instance(db: Session, account_id: int, name: str) -> tuple[Instance, str]:
+    """Mint an instance and its token. The returned token is the only copy;
+    the database keeps its hash."""
+    token = new_token("prc")
+    inst = Instance(token_hash=token_hash(token), account_id=account_id,
+                    name=name.strip()[:120], created_at=utc_now_iso())
+    db.add(inst)
+    db.commit()
+    return inst, token
+
+
+class ProvisionRequest(BaseModel):
+    email: str
+    password: str
+    device_name: str = ""
+
+
+@router.post("/instances/provision")
+def provision_instance(payload: ProvisionRequest, request: Request,
+                       db: Session = Depends(get_db)):
+    """One-step linking: account credentials in, instance token out.
+
+    This is what the app's "sign in" flow calls, so the user only ever
+    types the email and password they created on the portal. Shares the
+    login rate-limit window because it is the same password-guessing
+    surface."""
+    client = request.client.host if request.client else "unknown"
+    if not ratelimit.allow(f"login:{client}", settings.login_rate_per_minute):
+        raise HTTPException(429, detail="Too many login attempts, try again in a minute")
+    account = authenticate(db, payload.email, payload.password)
+    if not account:
+        raise HTTPException(401, detail="Invalid email or password")
+    inst, token = _create_instance(db, account.id, payload.device_name)
+    state = usage.quota_state(db, account.id, usage.month_key())
+    return {
+        "instance_token": token,
+        "instance_id": inst.id,
+        "account_email": account.email,
+        "plan": state["plan"],
+        "quota": state["quota"],
+        "month_used": state["used"],
+        # Reserved for the hosted-tunnel follow-up: once WireGuard tunnels
+        # exist, provisioning will suggest the install's public URL here.
+        # Shaped now so the app-side contract does not change later.
+        "suggested_public_url": None,
+    }
 
 
 @router.post("/pairing/code")
@@ -48,11 +100,7 @@ def redeem_pairing_code(payload: RedeemRequest, db: Session = Depends(get_db)):
         # One message for unknown, used, and expired: a probe learns nothing.
         raise HTTPException(400, detail="Invalid or expired pairing code")
     row.redeemed = 1
-    token = new_token("prc")
-    inst = Instance(token_hash=token_hash(token), account_id=row.account_id,
-                    name=payload.name.strip()[:120], created_at=utc_now_iso())
-    db.add(inst)
-    db.commit()
+    inst, token = _create_instance(db, row.account_id, payload.name)
     # The only time the token crosses the wire; the database keeps its hash.
     return {"instance_token": token, "instance_id": inst.id}
 
@@ -60,6 +108,22 @@ def redeem_pairing_code(payload: RedeemRequest, db: Session = Depends(get_db)):
 @router.get("/instance/me")
 def instance_me(inst: Instance = Depends(current_instance),
                 db: Session = Depends(get_db)):
-    """Entitlement status and quota remaining, for the app's settings page."""
+    """Entitlement status and quota remaining, for the app's settings page.
+
+    account_email lets the app show which account the install is linked to,
+    not just the instance's own name."""
     state = usage.quota_state(db, inst.account_id, usage.month_key())
-    return {"instance_id": inst.id, "name": inst.name, "entitlement": state}
+    account = db.get(Account, inst.account_id)
+    return {"instance_id": inst.id, "name": inst.name,
+            "account_email": account.email if account else "",
+            "entitlement": state}
+
+
+@router.delete("/instance")
+def revoke_instance(inst: Instance = Depends(current_instance),
+                    db: Session = Depends(get_db)):
+    """Self-revoke: the app's Unlink calls this with its own token before
+    forgetting it, so the credential dies on the server too."""
+    db.delete(inst)
+    db.commit()
+    return {"revoked": True}

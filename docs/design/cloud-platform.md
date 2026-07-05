@@ -63,13 +63,14 @@ The codebase already anticipates this layer in several places:
    response reports against the account's monthly quota, and returns the
    result. Subscribers get photo analysis, receipt parsing, and barcode
    enrichment with zero API-key setup.
-2. **Accounts and instance linking.** An account is created on the cloud
-   portal (email + password). An install pairs to the account with a
-   short-lived pairing code generated in the portal and typed into the
-   app's settings; redeeming the code issues the instance a long-lived
-   bearer token, shown once and stored hashed. This mirrors the satellite
-   pairing pattern: the install dials out, authenticates with its token,
-   and appears in the account's instance list.
+2. **Accounts and instance linking.** An account is created on the
+   Forager web portal (email + password, or Google sign-in). An install
+   links to the account by signing in from the app with the same
+   credentials (one-step provisioning), which issues the instance a
+   long-lived bearer token, shown once and stored hashed. This mirrors
+   the satellite pairing pattern: the install dials out, authenticates
+   with its token, and appears in the account's kitchen list. Pairing
+   codes remain as an advanced alternative.
 3. **Subscriptions and billing via Stripe.** Stripe Checkout collects
    payment; a webhook (signature-verified) turns Stripe subscription events
    into an entitlement row (plan, status, monthly token quota). The cloud
@@ -127,7 +128,7 @@ along.
 
 | Table | Purpose |
 |---|---|
-| `accounts` | One row per subscriber: email (unique), scrypt password hash, created timestamp |
+| `accounts` | One row per subscriber: email (unique), scrypt password hash (empty for Google-created accounts until they set one), auth provider, created timestamp |
 | `auth_sessions` | Portal login sessions: hashed bearer token, account, expiry |
 | `instances` | Paired installs: hashed instance token, account, name, last-seen metadata (version, deployment mode) |
 | `pairing_codes` | Short-lived one-use codes that redeem into an instance |
@@ -145,13 +146,21 @@ parameters are stored alongside the hash so they can be raised later).
 ### Auth model
 
 - **Portal (human):** email + password, returning a session bearer token
-  with a server-side expiry. Password hashing via scrypt as above.
-  Magic-link login is a later addition, not a v1 blocker.
-- **Instance (machine):** the pairing flow. Portal issues a pairing code
-  (short, 15-minute TTL, single use); the install redeems it unauthenticated
-  (the code is the credential) and receives its instance token. The token
-  is shown exactly once; the cloud keeps only the hash. Revocation is
-  deleting the instance row from the portal.
+  with a server-side expiry (the web portal carries the same token in an
+  HttpOnly cookie). Password hashing via scrypt as above. Google sign-in
+  (a hand-rolled OpenID Connect code flow, gated on
+  `CLOUD_GOOGLE_CLIENT_ID`/`CLOUD_GOOGLE_CLIENT_SECRET`) is an optional
+  alternative; magic-link login is a later addition, not a v1 blocker.
+- **Instance (machine):** one-step provisioning is the primary flow: the
+  app posts the account's email and password (rate-limited like login)
+  and receives its instance token directly. The advanced alternative is
+  the pairing flow: the portal issues a pairing code (short, 15-minute
+  TTL, single use) and the install redeems it unauthenticated (the code
+  is the credential). Either way the token is shown exactly once; the
+  cloud keeps only the hash. Revocation is removing the kitchen in the
+  portal, or the app self-revoking via `DELETE /v1/instance` when the
+  user unlinks; the month's usage ledger survives revocation so
+  unlink-and-relink cannot reset a quota.
 - The AI proxy and usage endpoints authenticate with the instance token as
   a standard `Authorization: Bearer` header.
 
@@ -160,12 +169,16 @@ parameters are stored alongside the hash so they can be raised later).
 | Route | Auth | What it does |
 |---|---|---|
 | `GET /health` | none | Liveness, version |
+| `GET /v1/meta` | none | Capability discovery for the app (currently `{"oauth_google": bool}`) |
 | `POST /v1/accounts/signup` | none | Create account, return session token |
-| `POST /v1/accounts/login` | none | Password login, return session token |
+| `POST /v1/accounts/login` | none | Password login, return session token (rate-limited) |
 | `GET /v1/accounts/me` | session | Account, entitlement, instances, this month's usage |
-| `POST /v1/pairing/code` | session | Mint a pairing code |
-| `POST /v1/pairing/redeem` | pairing code | Exchange the code for an instance token |
-| `GET /v1/instance/me` | instance | Entitlement status and quota remaining, for the app's settings page |
+| `POST /v1/instances/provision` | account credentials | One-step linking: verify email + password, create the instance, return its token plus plan/quota/usage and a `suggested_public_url` field (null until hosted tunnels exist) |
+| `POST /v1/pairing/code` | session | Mint a pairing code (advanced path) |
+| `POST /v1/pairing/redeem` | pairing code | Exchange the code for an instance token (also redeems Google app-flow codes) |
+| `GET /v1/instance/me` | instance | Entitlement status, quota remaining, and the linked account's email, for the app's settings page |
+| `DELETE /v1/instance` | instance | Self-revoke: the app's Unlink kills its own credential server-side |
+| `GET /auth/google/start`, `/auth/google/callback` | Google OAuth | Portal Google sign-in, and the `flow=app` variant that returns a provision code to the app's `return_url`. Only mounted when Google credentials are configured |
 | `POST /v1/ai/analyze` | instance | The AI proxy: entitlement + quota gate, forward, record usage |
 | `POST /v1/stripe/webhook` | Stripe signature | Entitlement updates from Checkout / subscription events |
 
@@ -183,6 +196,54 @@ against the Gemini REST API (Gemini 2.5 Flash) with token counts read from
 the response's `usageMetadata`, so the ledger records what the provider
 actually charged. Tests and local dev use `StubForwarder`;
 `CLOUD_AI_FORWARDER` selects the implementation.
+
+## Onboarding: how a person actually joins
+
+The Forager user is not assumed to be technical, so the whole journey is
+two sign-ins with the same credentials and no codes, keys, or copying:
+
+1. **Sign up on the web.** forager.pantryraider.app has a landing page
+   explaining the service, and signup takes an email and password (or
+   "Continue with Google"). Signup logs the browser straight into the
+   account page.
+2. **Sign in from the app.** In Pantry Raider's settings, the user enters
+   the same email and password. Behind the scenes the app calls
+   `POST /v1/instances/provision`, which verifies the credentials, creates
+   the instance and its token in one step, and returns the plan and quota;
+   the app stores the token and scanning works immediately. Deployments
+   with Google sign-in enabled can offer "Continue with Google" here too:
+   the app opens `GET /auth/google/start?flow=app&return_url=...` in a
+   browser, and after the Google login the browser is redirected back to
+   the app's `return_url` with a short-lived single-use code the app
+   redeems at the existing `POST /v1/pairing/redeem`.
+3. **Everything else auto-completes.** The install appears in the portal's
+   kitchen list by the name the app chose; quota, plan, and usage show up
+   in both the app and the portal with no further setup.
+
+The **pairing-code path is the advanced alternative**: mint a code in the
+portal, type it into the app's settings, and the app redeems it for its
+token. It stays for people who prefer never typing their account password
+into a device, and as the redemption half of the Google app flow, but it
+is no longer the path the UI leads with.
+
+### The web portal
+
+Server-rendered pages (Jinja2, a small hand-written dark stylesheet that
+echoes the app's Bootstrap look; nothing imported from `service/`). The
+portal reuses the same session tokens as the JSON login endpoint, carried
+in an HttpOnly SameSite=Lax cookie. Portal copy is written for a
+non-technical person: it says "kitchen" where the API says instance, and
+never mentions tokens or APIs (a test enforces this on the account page).
+
+| Page | What it shows |
+|---|---|
+| `/` | What Forager is, Sign up / Log in, links to pantryraider.app |
+| `/signup`, `/login`, `/logout` | Email + password forms (rate-limited), optional "Continue with Google" |
+| `/account` | Plan with a usage meter, this month's scans, linked kitchens with Remove buttons (removal revokes the device's credential), Subscribe/Manage (honest "Billing is not live yet" while `CLOUD_STRIPE_CHECKOUT_URL` is unset), and change password |
+
+Accounts created through Google sign-in have no password until they set
+one on the account page (offered there); password login is simply refused
+for them until then.
 
 ## Threat model and privacy stance
 

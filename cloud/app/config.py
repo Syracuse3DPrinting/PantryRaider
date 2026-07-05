@@ -37,8 +37,24 @@ class CloudSettings(BaseSettings):
     # purchase or subscription carrying this price maps to "starter".
     stripe_price_starter: str = ""
 
+    # The Stripe Checkout link the portal's Subscribe button points at.
+    # Empty until billing goes live; the account page says so honestly
+    # instead of showing a dead button.
+    stripe_checkout_url: str = ""
+
     # Extra price-id-to-plan mappings, for future tiers.
     stripe_price_to_plan: dict[str, str] = {}
+
+    # Google sign-in ("Continue with Google"). Fully gated: the portal
+    # buttons and the /auth/google routes only exist when both values are
+    # set. Credentials come from a Google Cloud OAuth client.
+    google_client_id: str = ""
+    google_client_secret: str = ""
+
+    # The public origin this service is reached at. Google redirects back
+    # to {public_base_url}/auth/google/callback, which must match the
+    # redirect URI registered with the OAuth client.
+    public_base_url: str = "https://forager.pantryraider.app"
 
     # Which AIForwarder backs the proxy: "stub" (tests, local dev) or
     # "gemini" (production).
@@ -52,6 +68,11 @@ class CloudSettings(BaseSettings):
     # Portal session lifetime.
     session_ttl_hours: int = 24 * 14
 
+    # The portal session cookie is HttpOnly and SameSite=Lax always; Secure
+    # is on by default (production sits behind Caddy TLS) and switched off
+    # only for tests and plain-HTTP local dev.
+    cookie_secure: bool = True
+
     # Pairing codes are a short-lived credential typed by hand; keep the
     # window tight.
     pairing_code_ttl_minutes: int = 15
@@ -59,6 +80,7 @@ class CloudSettings(BaseSettings):
     # Fixed-window rate limits (requests per minute) for the abuse-prone
     # unauthenticated/spendy endpoints. 0 disables (used by most tests).
     signup_rate_per_minute: int = 10
+    login_rate_per_minute: int = 10
     proxy_rate_per_minute: int = 30
 
     model_config = {"env_prefix": "CLOUD_"}

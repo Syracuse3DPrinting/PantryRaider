@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+{% block title %}My account: Forager{% endblock %}
+{% block content %}
+<h1>My account</h1>
+<p class="muted">{{ email }}</p>
+
+{% if notice %}<div class="alert alert-notice">{{ notice }}</div>{% endif %}
+{% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+
+<div class="card">
+  <h2>Your plan: {{ plan_label }}</h2>
+  <div class="meter" role="progressbar" aria-valuenow="{{ percent }}"
+       aria-valuemin="0" aria-valuemax="100"
+       aria-label="Monthly scanning allowance used">
+    <span {% if over_quota %}class="full" {% endif %}style="width: {{ percent }}%"></span>
+  </div>
+  {% if over_quota %}
+  <p>You have used all of this month's scanning allowance. It refills at the
+  start of next month{% if not plan_active %}, or right away if you
+  subscribe{% endif %}.</p>
+  {% else %}
+  <p>You have used {{ percent }}% of this month's scanning allowance.</p>
+  {% endif %}
+  <p class="muted small">Scans this month: {{ scans }}</p>
+  {% if plan_active %}
+    {% if checkout_url %}
+    <a class="btn btn-outline" href="{{ checkout_url }}">Manage subscription</a>
+    {% endif %}
+  {% else %}
+    {% if checkout_url %}
+    <a class="btn" href="{{ checkout_url }}">Subscribe</a>
+    <p class="muted small">Subscribing raises your monthly scanning
+    allowance. Cancel anytime.</p>
+    {% else %}
+    <p class="muted small">Billing is not live yet. Everyone is on the free
+    trial for now, on us.</p>
+    {% endif %}
+  {% endif %}
+</div>
+
+<div class="card">
+  <h2>Your kitchens</h2>
+  {% if kitchens %}
+  <ul class="plain">
+    {% for k in kitchens %}
+    <li>
+      <div>
+        <strong>{{ k.name or "Unnamed kitchen" }}</strong><br>
+        <span class="muted small">
+          Added {{ k.created_at[:10] }}{% if k.last_seen_at %}, last active
+          {{ k.last_seen_at[:10] }}{% endif %}
+        </span>
+      </div>
+      <form method="post" action="/account/kitchens/{{ k.id }}/remove"
+            onsubmit="return confirm('Remove this kitchen? It will no longer be able to scan with your account.')"
+            style="margin:0">
+        <button class="btn btn-quiet" type="submit">Remove</button>
+      </form>
+    </li>
+    {% endfor %}
+  </ul>
+  <p class="muted small">Removing a kitchen signs that device out of your
+  account. You can always sign it back in from the app.</p>
+  {% else %}
+  <p class="muted">No kitchens linked yet. Open the Pantry Raider app in
+  your kitchen, go to Settings, and sign in with this email and password.
+  It will show up here.</p>
+  {% endif %}
+</div>
+
+<div class="card">
+  {% if has_password %}
+  <h2>Change password</h2>
+  {% else %}
+  <h2>Set a password</h2>
+  <p class="muted small">You signed up with Google. Add a password if you
+  also want to log in with your email address.</p>
+  {% endif %}
+  <form method="post" action="/account/password">
+    {% if has_password %}
+    <label for="current_password">Current password</label>
+    <input type="password" id="current_password" name="current_password"
+           autocomplete="current-password" required>
+    {% endif %}
+    <label for="new_password">New password</label>
+    <input type="password" id="new_password" name="new_password"
+           autocomplete="new-password" minlength="8" required>
+    <label for="confirm_password">Confirm new password</label>
+    <input type="password" id="confirm_password" name="confirm_password"
+           autocomplete="new-password" minlength="8" required>
+    <button class="btn btn-outline" type="submit">
+      {% if has_password %}Update password{% else %}Set password{% endif %}
+    </button>
+  </form>
+</div>
+{% endblock %}

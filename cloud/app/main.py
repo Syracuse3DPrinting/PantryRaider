@@ -11,7 +11,7 @@ from fastapi import FastAPI
 
 from .config import CLOUD_VERSION
 from .database import init_db
-from .routers import accounts, ai, instances, stripe_webhook
+from .routers import accounts, ai, instances, oauth_google, portal, stripe_webhook
 
 
 @asynccontextmanager
@@ -28,8 +28,17 @@ app.include_router(accounts.router)
 app.include_router(instances.router)
 app.include_router(ai.router)
 app.include_router(stripe_webhook.router)
+app.include_router(portal.router)
+app.include_router(oauth_google.router)
 
 
 @app.get("/health")
 def health():
     return {"status": "ok", "app": "pantryraider-cloud", "version": CLOUD_VERSION}
+
+
+@app.get("/v1/meta")
+def meta():
+    """Capability discovery for the app: which optional sign-in paths this
+    deployment offers, so the app only shows buttons that will work."""
+    return {"oauth_google": oauth_google.enabled()}

@@ -23,6 +23,11 @@ def get_db():
         db.close()
 
 
+# The portal login cookie. Holds the same session token the JSON login
+# endpoint returns as a bearer; only the transport differs.
+SESSION_COOKIE = "forager_session"
+
+
 def _bearer(request: Request) -> str:
     auth = request.headers.get("Authorization", "")
     if not auth.startswith("Bearer "):
@@ -30,16 +35,31 @@ def _bearer(request: Request) -> str:
     return auth[len("Bearer "):].strip()
 
 
-def current_account(request: Request, db: Session = Depends(get_db)) -> Account:
-    """Resolve a portal session token to its account, enforcing expiry."""
-    token = _bearer(request)
+def account_for_session(db: Session, token: str) -> Account | None:
+    """The account behind a session token, or None if unknown or expired."""
+    if not token:
+        return None
     sess = db.query(AuthSession).filter_by(token_hash=token_hash(token)).first()
     if not sess or sess.expires_at < utc_now_iso():
-        raise HTTPException(401, detail="Invalid or expired session")
-    account = db.get(Account, sess.account_id)
+        return None
+    return db.get(Account, sess.account_id)
+
+
+def current_account(request: Request, db: Session = Depends(get_db)) -> Account:
+    """Resolve a portal session token to its account, enforcing expiry."""
+    account = account_for_session(db, _bearer(request))
     if not account:
         raise HTTPException(401, detail="Invalid or expired session")
     return account
+
+
+def cookie_account(request: Request,
+                   db: Session = Depends(get_db)) -> Account | None:
+    """The web portal's session: same tokens as the bearer flow, carried in
+    an HttpOnly cookie so a browser can hold one. Returns None rather than
+    raising, so page routes can redirect to the login page instead of
+    showing a bare 401."""
+    return account_for_session(db, request.cookies.get(SESSION_COOKIE, ""))
 
 
 def current_instance(request: Request, db: Session = Depends(get_db)) -> Instance:

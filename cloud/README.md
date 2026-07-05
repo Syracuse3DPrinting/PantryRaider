@@ -12,10 +12,13 @@ Forager brand appears in user-facing copy, the domain, and deploy config.
 
 ## What it does
 
-- Accounts with password login and a portal session token.
-- Instance pairing: the portal mints a short-lived code, an install redeems
-  it for its own bearer token, and from then on the install appears in the
-  account's instance list.
+- Accounts with password login (optional Google sign-in) and a web portal:
+  landing page, signup, and an account page with plan, usage, linked
+  kitchens, and billing.
+- One-step linking: an install signs in with the account's email and
+  password and gets its own bearer token in a single call, then appears in
+  the account's kitchen list. Pairing codes remain as the advanced path,
+  and removal (portal) or unlink (app) revokes the credential.
 - An AI proxy backed by Gemini 2.5 Flash. Every linked account gets a free
   trial of 100,000 AI tokens per month; the starter subscription raises
   that to 2,000,000. The proxy records real token counts from each response
@@ -89,7 +92,8 @@ secret in `.env`.
 | `app/security.py` | scrypt password hashing, token issue/hash, Stripe signature verification |
 | `app/usage.py` | Per-account monthly token accounting and the quota gate |
 | `app/forwarder.py` | The `AIForwarder` interface: `GeminiForwarder` (production) and `StubForwarder` (tests) |
-| `app/routers/` | `accounts`, `instances` (pairing), `ai` (the proxy), `stripe_webhook` |
+| `app/routers/` | `accounts`, `instances` (provisioning and pairing), `portal` (the web pages), `oauth_google` (Google sign-in), `ai` (the proxy), `stripe_webhook` |
+| `app/templates/` | The portal's server-rendered pages |
 | `tests/` | Standalone pytest suite (SQLite, no Docker or network) |
 
 Schema is created with `create_all` at startup; the switch to Alembic before

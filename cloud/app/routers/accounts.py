@@ -28,6 +28,15 @@ def _valid_email(email: str) -> bool:
     return bool(local) and "." in domain and " " not in email
 
 
+def authenticate(db: Session, email: str, password: str) -> Account | None:
+    """The account matching these credentials, or None. Shared by login,
+    the portal forms, and one-step provisioning."""
+    account = db.query(Account).filter_by(email=email.strip().lower()).first()
+    if not account or not verify_password(password, account.password_hash):
+        return None
+    return account
+
+
 def _issue_session(db: Session, account_id: int) -> str:
     token = new_token("prs")
     expires = datetime.now(timezone.utc) + timedelta(hours=settings.session_ttl_hours)
@@ -58,9 +67,12 @@ def signup(payload: Credentials, request: Request, db: Session = Depends(get_db)
 
 
 @router.post("/login")
-def login(payload: Credentials, db: Session = Depends(get_db)):
-    account = db.query(Account).filter_by(email=payload.email.strip().lower()).first()
-    if not account or not verify_password(payload.password, account.password_hash):
+def login(payload: Credentials, request: Request, db: Session = Depends(get_db)):
+    client = request.client.host if request.client else "unknown"
+    if not ratelimit.allow(f"login:{client}", settings.login_rate_per_minute):
+        raise HTTPException(429, detail="Too many login attempts, try again in a minute")
+    account = authenticate(db, payload.email, payload.password)
+    if not account:
         # One message for both cases, so login does not confirm which emails exist.
         raise HTTPException(401, detail="Invalid email or password")
     return {"session_token": _issue_session(db, account.id)}

@@ -18,7 +18,13 @@ class Account(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     email: Mapped[str] = mapped_column(String(255), unique=True, index=True)
+    # Empty for accounts created via Google sign-in until the owner sets a
+    # password on the account page; verify_password rejects an empty hash,
+    # so password login simply fails for them.
     password_hash: Mapped[str] = mapped_column(String(512))
+    # How the account was created: "password" or "google". Informational;
+    # login ability is governed by password_hash above.
+    auth_provider: Mapped[str] = mapped_column(String(20), default="password")
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -100,7 +106,11 @@ class UsageLedger(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
-    instance_id: Mapped[int] = mapped_column(ForeignKey("instances.id"), index=True)
+    # Nullable with SET NULL: revoking an instance deletes its row but must
+    # not erase the month's usage (otherwise unlink-and-relink would reset
+    # the quota). Account totals sum by account_id and are unaffected.
+    instance_id: Mapped[int | None] = mapped_column(
+        ForeignKey("instances.id", ondelete="SET NULL"), nullable=True, index=True)
     month_key: Mapped[str] = mapped_column(String(7), index=True)  # YYYY-MM
     tokens: Mapped[int] = mapped_column(Integer, default=0)
     kind: Mapped[str] = mapped_column(String(20), default="")  # food | receipt | enrich

@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#212529">
+  <title>{% block title %}Forager{% endblock %}</title>
+  {# A small hand-written stylesheet that echoes the Pantry Raider app's
+     Bootstrap dark look (same background, surface, and pink accent) without
+     importing anything from service/. Kept inline: one page-weight, no
+     static mount, no CDN. #}
+  <style>
+    :root {
+      --bg: #212529; --surface: #2b3035; --border: #495057;
+      --text: #dee2e6; --muted: #adb5bd;
+      --primary: #F2006E; --primary-hover: #d1005f;
+      --danger: #dc3545; --success: #75b798;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+      line-height: 1.5;
+    }
+    a { color: var(--primary); }
+    header.nav {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 0.75rem 1.25rem; border-bottom: 1px solid var(--border);
+      background: var(--surface);
+    }
+    .brand { font-weight: 700; font-size: 1.15rem; color: var(--text); text-decoration: none; }
+    .brand .dot { color: var(--primary); }
+    .nav-links { display: flex; gap: 0.5rem; align-items: center; }
+    main { max-width: 640px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 0.5rem; padding: 1.25rem; margin-bottom: 1.25rem;
+    }
+    h1 { font-size: 1.6rem; margin: 0.5rem 0 1rem; }
+    h2 { font-size: 1.15rem; margin: 0 0 0.75rem; }
+    p.muted, .muted { color: var(--muted); }
+    .small { font-size: 0.875rem; }
+    label { display: block; margin-bottom: 0.25rem; font-size: 0.9rem; color: var(--muted); }
+    input[type=email], input[type=password], input[type=text] {
+      width: 100%; padding: 0.5rem 0.75rem; margin-bottom: 0.9rem;
+      background: var(--bg); color: var(--text);
+      border: 1px solid var(--border); border-radius: 0.375rem; font-size: 1rem;
+    }
+    input:focus { outline: 2px solid var(--primary); border-color: var(--primary); }
+    .btn {
+      display: inline-block; padding: 0.45rem 1rem; border-radius: 0.375rem;
+      border: 1px solid transparent; font-size: 0.95rem; cursor: pointer;
+      text-decoration: none; text-align: center;
+      background: var(--primary); color: #fff;
+    }
+    .btn:hover { background: var(--primary-hover); }
+    .btn-outline { background: transparent; border-color: var(--primary); color: var(--primary); }
+    .btn-outline:hover { background: var(--primary); color: #fff; }
+    .btn-quiet { background: transparent; border-color: var(--border); color: var(--muted); }
+    .btn-quiet:hover { border-color: var(--danger); color: var(--danger); background: transparent; }
+    .btn-block { display: block; width: 100%; }
+    .alert {
+      padding: 0.6rem 0.9rem; border-radius: 0.375rem; margin-bottom: 1rem;
+      border: 1px solid transparent; font-size: 0.95rem;
+    }
+    .alert-error { background: #2c0b0e; border-color: #842029; color: #ea868f; }
+    .alert-notice { background: #051b11; border-color: #0f5132; color: var(--success); }
+    .meter {
+      height: 0.75rem; border-radius: 0.5rem; background: var(--bg);
+      border: 1px solid var(--border); overflow: hidden; margin: 0.5rem 0;
+    }
+    .meter > span { display: block; height: 100%; background: var(--primary); }
+    .meter > span.full { background: var(--danger); }
+    ul.plain { list-style: none; margin: 0; padding: 0; }
+    ul.plain li {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 1rem; padding: 0.75rem 0; border-top: 1px solid var(--border);
+    }
+    ul.plain li:first-child { border-top: none; }
+    .or-divider {
+      display: flex; align-items: center; gap: 0.75rem; margin: 1rem 0;
+      color: var(--muted); font-size: 0.85rem;
+    }
+    .or-divider::before, .or-divider::after {
+      content: ""; flex: 1; border-top: 1px solid var(--border);
+    }
+    footer {
+      text-align: center; color: var(--muted); font-size: 0.85rem;
+      padding: 1rem; border-top: 1px solid var(--border);
+    }
+  </style>
+</head>
+<body>
+  <header class="nav">
+    <a class="brand" href="/">Forager<span class="dot">.</span></a>
+    <nav class="nav-links">
+      {% if signed_in %}
+        <a class="btn btn-outline" href="/account">My account</a>
+        <form method="post" action="/logout" style="margin:0">
+          <button class="btn btn-quiet" type="submit">Sign out</button>
+        </form>
+      {% else %}
+        <a class="btn btn-outline" href="/login">Log in</a>
+        <a class="btn" href="/signup">Sign up</a>
+      {% endif %}
+    </nav>
+  </header>
+  <main>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    Forager is the companion service for
+    <a href="https://pantryraider.app">Pantry Raider</a>, the free
+    self-hosted kitchen app.
+  </footer>
+</body>
+</html>

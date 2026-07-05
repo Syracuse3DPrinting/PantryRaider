@@ -12,7 +12,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 os.environ.setdefault("CLOUD_DATABASE_URL", "sqlite://")
 # Rate limits off by default; the rate-limit tests re-enable them explicitly.
 os.environ.setdefault("CLOUD_SIGNUP_RATE_PER_MINUTE", "0")
+os.environ.setdefault("CLOUD_LOGIN_RATE_PER_MINUTE", "0")
 os.environ.setdefault("CLOUD_PROXY_RATE_PER_MINUTE", "0")
+# TestClient speaks plain HTTP, so a Secure cookie would never come back.
+os.environ.setdefault("CLOUD_COOKIE_SECURE", "0")
 
 from fastapi.testclient import TestClient  # noqa: E402
 

@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Forager: photo scanning for Pantry Raider{% endblock %}
+{% block content %}
+<h1>Point your camera at the groceries. Forager does the rest.</h1>
+<p class="muted">
+  Forager is the companion service for Pantry Raider. Snap a photo of your
+  groceries or a receipt and Forager reads it for you: no accounts with AI
+  companies, no keys to paste in, nothing to configure.
+</p>
+
+<div class="card">
+  <h2>How it works</h2>
+  <p>Create a Forager account here, then open the Pantry Raider app in your
+  kitchen and sign in with the same email and password. That is the whole
+  setup: scanning starts working right away.</p>
+  <p class="muted small">Every account starts on a free trial. Your
+  inventory, recipes, and shopping lists stay in your own kitchen; photos
+  pass through Forager only long enough to be read, and are never stored.</p>
+  {% if signed_in %}
+  <a class="btn" href="/account">Go to my account</a>
+  {% else %}
+  <a class="btn" href="/signup">Sign up free</a>
+  <a class="btn btn-outline" href="/login">Log in</a>
+  {% endif %}
+</div>
+
+<p class="muted small">
+  New to Pantry Raider? It is a free app you run at home that tracks what is
+  in your pantry and when it expires. Learn more and get it at
+  <a href="https://pantryraider.app">pantryraider.app</a>.
+</p>
+{% endblock %}

@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Log in: Forager{% endblock %}
+{% block content %}
+<h1>Welcome back</h1>
+<div class="card">
+  {% if error %}<div class="alert alert-error">{{ error }}</div>{% endif %}
+  <form method="post" action="/login">
+    <label for="email">Email</label>
+    <input type="email" id="email" name="email" value="{{ email or '' }}"
+           autocomplete="email" required autofocus>
+    <label for="password">Password</label>
+    <input type="password" id="password" name="password"
+           autocomplete="current-password" required>
+    <button class="btn btn-block" type="submit">Log in</button>
+  </form>
+  {% if google %}
+  <div class="or-divider"><span>or</span></div>
+  <a class="btn btn-outline btn-block" href="/auth/google/start">Continue with Google</a>
+  {% endif %}
+</div>
+<p class="muted small">No account yet? <a href="/signup">Sign up free</a>.</p>
+{% endblock %}
