@@ -13,7 +13,10 @@ Restart=on-failure
 RestartSec=3
 # Hardening: the agent only ever touches its own state, the Caddy include,
 # and the wg/caddy tools, so keep the rest of the filesystem read-only.
+# The two paths it must write: the WireGuard config (wg-quick save persists
+# peers) and the Caddy per-kitchen include it regenerates.
 ProtectSystem=full
+ReadWritePaths=/etc/wireguard /etc/caddy
 NoNewPrivileges=false
 
 [Install]
