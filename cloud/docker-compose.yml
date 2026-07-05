@@ -5,12 +5,14 @@ services:
   app:
     build: .
     restart: unless-stopped
+    # Every CLOUD_* setting in .env flows through here, so adding a new one
+    # (an admin email, a Stripe price id, the Google OAuth client) needs no
+    # compose edit. Only the database URL is computed, since it interpolates
+    # the Postgres password.
+    env_file: .env
     environment:
       CLOUD_DATABASE_URL: postgresql+psycopg2://pantry:${POSTGRES_PASSWORD:?set in .env}@db:5432/pantrycloud
-      CLOUD_STRIPE_WEBHOOK_SECRET: ${CLOUD_STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
-      CLOUD_STRIPE_PRICE_STARTER: ${CLOUD_STRIPE_PRICE_STARTER:-}
       CLOUD_AI_FORWARDER: ${CLOUD_AI_FORWARDER:-gemini}
-      CLOUD_GEMINI_API_KEY: ${CLOUD_GEMINI_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
