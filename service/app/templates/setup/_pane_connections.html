@@ -1,8 +1,8 @@
 {% from "setup/_macros.html" import info, secret_input, extra_keys, ai_model_field, satellite_keys, upstream_cards, recipe_connection_cards, ds_toggle with context %}
 <!-- Connections: Mealie and recipe sources, Home Assistant, cameras,
-             remote access, and the phone QR code -->
+             and the phone QR code. Remote access moved to the Forager pane. -->
         <div class="tab-pane fade" id="pane-connections">
-          <p class="pane-intro">Links to the world around the app: Mealie and the recipe sources, Home Assistant, camera feeds, remote access from outside your network, and the "add from your phone" QR code.</p>
+          <p class="pane-intro">Links to the world around the app: Mealie and the recipe sources, Home Assistant, camera feeds, and the "add from your phone" QR code. Remote access lives under Settings, Forager.</p>
 
           {{ recipe_connection_cards() }}
 
@@ -251,83 +251,6 @@
             <div class="test-result mt-2" id="cameras-result"></div>
             {% endif %}
           </div>
-
-          {% if not is_satellite %}
-          {# Remote access: expose Pantry Raider over the internet without
-             port-forwarding your router. #}
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-globe text-info"></i> Remote Access Mode</div>
-            <p class="text-secondary small">
-              <strong>Cloudflare Tunnel</strong> (free, DIY): runs a cloudflared container on your host.
-              <strong>Pantry Raider Cloud</strong>: managed subscription with a stable URL (coming soon).
-              Both modes require Docker to be available on the host.
-            </p>
-
-            <div class="mb-3">
-              <label class="form-label">Mode</label>
-              <div class="d-flex flex-column gap-2" id="tunnel-mode-group">
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="tunnel_mode" id="tunnel_mode_off"
-                         value="" {% if not s.tunnel_mode %}checked{% endif %} onchange="tunnelModeChanged()">
-                  <label class="form-check-label" for="tunnel_mode_off">Off</label>
-                </div>
-                <div class="form-check">
-                  <input class="form-check-input" type="radio" name="tunnel_mode" id="tunnel_mode_cloudflare"
-                         value="cloudflare" {% if s.tunnel_mode == 'cloudflare' %}checked{% endif %} onchange="tunnelModeChanged()">
-                  <label class="form-check-label" for="tunnel_mode_cloudflare">
-                    <i class="bi bi-cloud me-1 text-warning"></i>Cloudflare Tunnel
-                    <span class="badge bg-success ms-1">Free</span>
-                  </label>
-                </div>
-                <div class="form-check" style="opacity:.55">
-                  <input class="form-check-input" type="radio" name="tunnel_mode" id="tunnel_mode_subscription"
-                         value="subscription" disabled {% if s.tunnel_mode == 'subscription' %}checked{% endif %}>
-                  <label class="form-check-label" for="tunnel_mode_subscription">
-                    <i class="bi bi-stars me-1 text-primary"></i>Pantry Raider Cloud
-                    <span class="badge bg-secondary ms-1">Coming soon</span>
-                  </label>
-                </div>
-              </div>
-            </div>
-
-            <div id="tunnel-token-section" style="display:none">
-              <div class="mb-3">
-                <label class="form-label" id="tunnel-token-label">Token</label>
-                <input type="password" class="form-control font-monospace" id="tunnel_token"
-                       autocomplete="new-password"
-                       placeholder="{{ '•••• saved, leave blank to keep' if s.tunnel_token else 'Paste your tunnel token here' }}"
-                       value="">
-                <div class="form-text" id="tunnel-token-help">
-                  <span id="tunnel-help-cloudflare">
-                    Get your token from the
-                    <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/get-started/" target="_blank">
-                      Cloudflare Zero Trust dashboard</a>: create a tunnel, copy the token.
-                  </span>
-                  <span id="tunnel-help-subscription" style="display:none">
-                    Enter the subscription token from your Pantry Raider Cloud account.
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <div class="d-flex flex-wrap gap-2 align-items-center mb-3" id="tunnel-buttons" style="display:none!important">
-              <button class="btn btn-outline-success btn-sm" id="tunnel-connect-btn" onclick="tunnelConnect()">
-                <i class="bi bi-plug me-1"></i>Connect
-              </button>
-              <button class="btn btn-outline-danger btn-sm" id="tunnel-disconnect-btn" onclick="tunnelDisconnect()">
-                <i class="bi bi-plug-fill me-1"></i>Disconnect
-              </button>
-            </div>
-
-            <div class="d-flex align-items-center gap-2 mb-2" id="tunnel-status-row">
-              <span class="text-secondary small">Status:</span>
-              <span id="tunnel-status-badge" class="badge bg-secondary">Not connected</span>
-              <span id="tunnel-url-display" class="small"></span>
-            </div>
-
-            <div class="test-result" id="tunnel-result"></div>
-          </div>
-          {% endif %}
 
           <div class="section-card">
             <div class="section-title"><i class="bi bi-qr-code text-info"></i> Phone QR code</div>

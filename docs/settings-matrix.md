@@ -55,11 +55,14 @@ enrichment, and cook suggestions. All are pulled by a satellite from the server.
 Note: `ai_extra_keys` is device-local. It is in `_SAVEABLE` and is a secret, but
 it is not in `SATELLITE_PULL_FIELDS`, so each device keeps its own spare keys.
 
-Note: the Forager link is per-device on purpose, satellites
-included: each install signs in with the account email and password (or a
-pairing code under the card's Advanced toggle, or Continue with Google when
-Forager offers it) in Settings, AI and holds its own instance token, so it
-shows up as its own instance on the cloud account. The password is forwarded
+Note: the Forager link is per-device on purpose, and is a main-install
+feature (server and pi_hosted): a satellite forwards AI from its main server
+and has no local app of its own to sign in or expose, so it shows no Forager
+page. On a main install each device signs in with the account email and
+password (or a pairing code under the card's Advanced toggle, or Continue
+with Google when Forager offers it) on the Forager page in Settings and holds
+its own instance token, so it shows up as its own instance on the cloud
+account. The password is forwarded
 to the cloud during sign-in and never stored. A sign-in on a fresh install
 also sets `vision_provider` and `enrich_provider` to `cloud` (an install with
 a working provider keeps it), and `qr_public_url` follows the kitchen's
@@ -376,10 +379,14 @@ on save.
 | `tunnel_url` | | Editable | Editable | Device-local |
 | `tunnel_enabled` | | Editable | Editable | Device-local |
 
-`tunnel_enabled` tracks Forager remote access (the WireGuard hub tunnel). It is
-offered only on a Pi appliance, which runs the host bridge that owns the
-WireGuard endpoint; the private key stays on the device, so nothing secret is
-kept app-side.
+`tunnel_mode` is the single source of truth for remote access, chosen on the
+Forager page in Settings (a main-install feature): `""` (off), `"cloudflare"`
+(the cloudflared container, keyed by `tunnel_token`), or `"forager"` (the
+WireGuard hub tunnel). A legacy stored `"subscription"` reads as `"forager"`.
+`tunnel_enabled` tracks the Forager (WireGuard) tunnel and moves in step with
+`tunnel_mode == "forager"`. That tunnel is offered only on a Pi appliance,
+which runs the host bridge that owns the WireGuard endpoint; the private key
+stays on the device, so nothing secret is kept app-side.
 
 ## Logging and updates
 

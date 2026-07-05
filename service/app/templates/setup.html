@@ -295,6 +295,15 @@
             <i class="bi bi-{{ 'check-circle-fill text-success' if ai_ok else 'dash-circle text-secondary' }} ms-auto" title="{{ 'AI configured' if ai_ok else 'AI optional' }}"></i>
           </button>
           {% if not features.satellite %}
+          {# Forager: the account (sign-in, plan and usage) and remote access.
+             Main-install only; a satellite forwards AI and has no local app to
+             sign in or expose. Opening it refreshes the account and tunnel
+             status the same way the page init does. #}
+          <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-forager" type="button" onclick="_initCloudMeta(); _loadCloudStatus(); _loadTunnelStatus()">
+            <i class="bi bi-cloud me-2"></i>Forager
+          </button>
+          {% endif %}
+          {% if not features.satellite %}
           <button class="nav-link d-flex align-items-center" data-mgroup="s" data-bs-toggle="pill" data-bs-target="#pane-inventory" type="button">
             <i class="bi bi-fridge me-2"></i>Inventory &amp; Storage
             <i class="bi bi-{{ 'check-circle-fill text-success' if inv_ok else 'exclamation-circle-fill text-warning' }} ms-auto" title="{{ 'Configured' if inv_ok else 'Not configured' }}"></i>
@@ -329,6 +338,11 @@
 
 
         {% include "setup/_pane_scanning.html" %}
+
+
+        {% if not features.satellite %}
+        {% include "setup/_pane_forager.html" %}
+        {% endif %}
 
 
         {% include "setup/_pane_personalization_recipes.html" %}

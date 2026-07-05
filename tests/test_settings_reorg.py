@@ -67,6 +67,8 @@ MENU_PILLS = {
     # Settings: set-and-forget server administration.
     "pane-connections": ("s", {"server", "pi_hosted", "pi_remote"}),
     "pane-scanning": ("s", {"server", "pi_hosted", "pi_remote"}),
+    # Forager (account sign-in + remote access) is main-install only.
+    "pane-forager": ("s", {"server", "pi_hosted"}),
     "pane-inventory": ("s", {"server", "pi_hosted"}),
     "pane-devices": ("s", {"server", "pi_hosted", "pi_remote"}),
     "pane-security": ("s", {"server", "pi_hosted", "pi_remote"}),
@@ -130,7 +132,7 @@ EXPECTED_IDS = {
         "cam-ip-port", "cam-ip-preset", "cam-ip-user", "cam-scan-cidr",
         "scan_cidr", "timezone",
         "tunnel_mode_cloudflare", "tunnel_mode_off",
-        "tunnel_mode_subscription", "tunnel_token",
+        "tunnel_mode_forager", "tunnel_token",
     ],
     "pi_hosted": _COMMON + _PI_COMMON + [
         "ai_token_budget",
@@ -138,7 +140,7 @@ EXPECTED_IDS = {
         "cam-ip-port", "cam-ip-preset", "cam-ip-user", "cam-scan-cidr",
         "scan_cidr", "timezone",
         "tunnel_mode_cloudflare", "tunnel_mode_off",
-        "tunnel_mode_subscription", "tunnel_token",
+        "tunnel_mode_forager", "tunnel_token",
         "switch_server_url", "switch_upstream_api_key",
     ],
     "pi_remote": _COMMON + _PI_COMMON + [
@@ -203,7 +205,7 @@ def test_old_pane_hashes_have_aliases(client, monkeypatch):
         "pane-personalization-storage": "pane-inventory",
         "pane-homeassistant": "pane-connections",
         "pane-cameras": "pane-connections",
-        "pane-tunnel": "pane-connections",
+        "pane-tunnel": "pane-forager",
         "pane-network": "pane-devices",
         "pane-upstream": "pane-devices",
         "pane-data": "pane-backups",

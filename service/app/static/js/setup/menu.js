@@ -20,7 +20,11 @@ const PANE_HASH_ALIASES = {
   'pane-personalization-storage': 'pane-inventory',
   'pane-homeassistant': 'pane-connections',
   'pane-cameras': 'pane-connections',
-  'pane-tunnel': 'pane-connections',
+  // Forager sign-in and remote access now live in their own pane, so the old
+  // tunnel and cloud anchors land there (on a main install; a satellite has no
+  // Forager pane and falls back to the default menu).
+  'pane-tunnel': 'pane-forager',
+  'pane-cloud': 'pane-forager',
   'pane-network': 'pane-devices',
   'pane-upstream': 'pane-devices',
   'pane-data': 'pane-backups',

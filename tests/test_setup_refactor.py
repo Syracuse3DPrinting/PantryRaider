@@ -93,8 +93,12 @@ PINNED = {
             # Date & time card (FoodAssistant-v3ui).
             'clock_format',
             'timezone', 'totp-code', 'tunnel_mode_cloudflare', 'tunnel_mode_off',
-            'tunnel_mode_subscription', 'tunnel_token', 'ui_theme', 'usb_backup_interval_hours',
+            'tunnel_token', 'ui_theme', 'usb_backup_interval_hours',
             'vision_provider',
+            # Renamed after the pin: the remote-access radios now offer a
+            # Forager mode in place of the disabled "Pantry Raider Cloud"
+            # (subscription) placeholder, moved to the Forager pane.
+            'tunnel_mode_forager',
         ],
         "targets": [
             '#pane-advanced', '#pane-appearance', '#pane-backups',
@@ -104,6 +108,9 @@ PINNED = {
             # Added after the pin: the Forager card's Advanced (pairing code)
             # toggle (FoodAssistant-t6ab).
             '#cloud-advanced-collapse',
+            # Added after the pin: the dedicated Forager pane (sign-in + remote
+            # access), main-install only.
+            '#pane-forager',
         ],
     },
     "pi_hosted": {
@@ -168,9 +175,13 @@ PINNED = {
             # Date & time card (FoodAssistant-v3ui).
             'clock_format',
             'themealdb_api_key', 'timer_chips', 'timezone', 'totp-code', 'tunnel_mode_cloudflare',
-            'tunnel_mode_off', 'tunnel_mode_subscription', 'tunnel_token', 'ui_scale',
+            'tunnel_mode_off', 'tunnel_token', 'ui_scale',
             'ui_theme', 'usb_backup_interval_hours', 'vision_provider', 'wake_on_motion',
             'wifi_password', 'wifi_ssid',
+            # Renamed after the pin: the remote-access Forager radio replaces the
+            # disabled "Pantry Raider Cloud" (subscription) placeholder, moved to
+            # the Forager pane.
+            'tunnel_mode_forager',
         ],
         "targets": [
             '#pane-advanced', '#pane-appearance', '#pane-backups',
@@ -180,6 +191,9 @@ PINNED = {
             # Added after the pin: the Forager card's Advanced (pairing code)
             # toggle (FoodAssistant-t6ab).
             '#cloud-advanced-collapse',
+            # Added after the pin: the dedicated Forager pane (sign-in + remote
+            # access), main-install only.
+            '#pane-forager',
         ],
     },
     "pi_remote": {
@@ -204,16 +218,11 @@ PINNED = {
             'auth_required', 'auto_update', 'update_channel', 'background_file', 'background_image_url',
             'background_opacity', 'backup_include_secrets', 'barcode_autocheck_shopping', 'barcode_enrichment',
             'barcode_global_capture', 'barcode_llm_fallback',
-            # Added after the pin: the Pantry Raider Cloud pairing input. Shown
-            # on a satellite too, since every install pairs itself
-            # (FoodAssistant-2nd1).
-            'cloud_pairing_code',
-            # Added after the pin: the Forager account sign-in fields, on a
-            # satellite too since every device signs in on its own
-            # (FoodAssistant-t6ab).
-            'cloud_email',
-            'cloud_kitchen_name',
-            'cloud_password',
+            # The Forager sign-in fields (cloud_email/password/kitchen_name) and
+            # the pairing input (cloud_pairing_code) moved to the dedicated
+            # Forager pane, which is main-install only: a satellite forwards AI
+            # from the main server and has no local app of its own to sign in or
+            # expose, so none of them render here now.
             'cook_ai_context', 'custom-heading-icon',
             'custom-heading-label', 'custom-tab-icon', 'custom-tab-label', 'custom-tab-url',
             'custom_theme_accent', 'custom_theme_base', 'custom_theme_bg', 'custom_theme_name',
@@ -250,9 +259,8 @@ PINNED = {
             '#pane-connections', '#pane-devices', '#pane-personalization-recipes',
             '#pane-scanning', '#pane-screen', '#pane-security',
             '#pane-start-page',
-            # Added after the pin: the Forager card's Advanced (pairing code)
-            # toggle (FoodAssistant-t6ab).
-            '#cloud-advanced-collapse',
+            # The Forager pane (and its #cloud-advanced-collapse toggle) is
+            # main-install only, so a satellite renders neither.
         ],
     },
     "wizard": {

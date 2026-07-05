@@ -357,6 +357,8 @@ async function tunnelEnable(btn) {
       return;
     }
     if (el) el.innerHTML = '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Remote access is on.</span>';
+    // Keep tunnel_mode (the single source of truth) in step with the WireGuard tunnel.
+    try { await fetch('setup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tunnel_mode: 'forager' }) }); } catch (_) { }
     await _loadTunnelStatus();
     btn.disabled = false;
   } catch (e) {
@@ -374,6 +376,10 @@ async function tunnelDisable(btn) {
     if (el) el.innerHTML = d.ok
       ? '<span class="text-success"><i class="bi bi-check-circle me-1"></i>Remote access is off.</span>'
       : '<span class="text-danger">' + (d.error || 'Could not turn off remote access.') + '</span>';
+    if (d.ok) {
+      // Clear tunnel_mode so the single source of truth matches the tunnel being off.
+      try { await fetch('setup/save', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tunnel_mode: '' }) }); } catch (_) { }
+    }
     await _loadTunnelStatus();
     btn.disabled = false;
   } catch (e) {
@@ -607,9 +613,10 @@ function savePaneSecurity(btn) {
   }, btn, 'security-save-result');
 }
 
-// The Remote Access (tunnel) pane has no standalone Save: its persisted fields
-// (tunnel_mode, tunnel_token) are written by Connect/Disconnect via tunnel/start
-// and tunnel/stop, which also start or stop the tunnel container.
+// The Remote Access section (Forager pane) has no standalone Save. Cloudflare
+// writes tunnel_mode + tunnel_token through Connect/Disconnect (tunnel/start,
+// tunnel/stop, which run the container); Forager writes tunnel_mode alongside
+// the WireGuard turn on/off (setup/tunnel/enable, setup/tunnel/disable).
 
 function savePaneData(btn) {
   return savePane({
@@ -890,32 +897,18 @@ async function fullRestore(btn) {
 // Remote Access / Tunnel
 let _tunnelPollTimer = null;
 
+// One remote-access section, two modes. The radio picks the view: Cloudflare
+// shows its token + Connect/Disconnect; Forager shows the WireGuard turn
+// on/off controls (no token, it uses the account link). The action buttons in
+// each mode persist tunnel_mode, so the radio is only a selector here.
 function tunnelModeChanged() {
   const mode = document.querySelector('input[name="tunnel_mode"]:checked')?.value || '';
-  const tokenSection = document.getElementById('tunnel-token-section');
-  const buttons = document.getElementById('tunnel-buttons');
-  const helpCF = document.getElementById('tunnel-help-cloudflare');
-  const helpSub = document.getElementById('tunnel-help-subscription');
-  const label = document.getElementById('tunnel-token-label');
-
-  if (!tokenSection) return;
-
-  if (mode === '') {
-    tokenSection.style.display = 'none';
-    if (buttons) buttons.style.setProperty('display', 'none', 'important');
-  } else {
-    tokenSection.style.display = '';
-    if (buttons) buttons.style.removeProperty('display');
-    if (mode === 'cloudflare') {
-      if (label) label.textContent = 'Cloudflare Tunnel Token';
-      if (helpCF) helpCF.style.display = '';
-      if (helpSub) helpSub.style.display = 'none';
-    } else {
-      if (label) label.textContent = 'Subscription Token';
-      if (helpCF) helpCF.style.display = 'none';
-      if (helpSub) helpSub.style.display = '';
-    }
-  }
+  const cf = document.getElementById('tunnel-cf-controls');
+  const forager = document.getElementById('tunnel-section');
+  if (cf) cf.style.display = (mode === 'cloudflare') ? '' : 'none';
+  if (forager) forager.style.display = (mode === 'forager') ? '' : 'none';
+  // The Forager sub-controls fill from live status; refresh when it is shown.
+  if (mode === 'forager' && typeof _loadTunnelStatus === 'function') _loadTunnelStatus();
 }
 
 function _setTunnelBadge(state, url) {

@@ -50,16 +50,26 @@
             <div class="mb-3">
               <label class="form-label">Provider</label>
               <select class="form-select" id="vision_provider" onchange="showProvider()" {% if features.satellite %}disabled{% endif %}>
+                {% if s.vision_provider == 'cloud' %}
+                {# Forager is chosen and managed under Settings, Forager, not offered
+                   here as a pick. This reflect-only entry keeps the stored value
+                   intact so saving this pane never quietly switches away from it. #}
+                <option value="cloud" selected hidden>Forager (managed under Settings, Forager)</option>
+                {% endif %}
                 <option value="gemini" {{ 'selected' if s.vision_provider == 'gemini' else '' }}>Google Gemini (cloud)</option>
                 <option value="openai" {{ 'selected' if s.vision_provider == 'openai' else '' }}>OpenAI (cloud)</option>
                 <option value="anthropic" {{ 'selected' if s.vision_provider == 'anthropic' else '' }}>Anthropic Claude (cloud)</option>
                 <option value="ollama" {{ 'selected' if s.vision_provider == 'ollama' else '' }}>Ollama (local)</option>
-                <option value="cloud" {{ 'selected' if s.vision_provider == 'cloud' else '' }}>Forager (cloud subscription)</option>
                 <option value="none" {{ 'selected' if s.vision_provider == 'none' else '' }}>None (skip AI)</option>
               </select>
               <div class="form-text">With None, photo import, receipt scanning, barcode enrichment, and
                 recipe suggestions are off. Inventory, expiry tracking, manual entry, and barcode lookup
                 via Open Food Facts keep working. You can add a provider any time.</div>
+              {% if s.vision_provider == 'cloud' %}
+              <div class="alert alert-secondary py-2 small mt-2 mb-0" style="max-width:520px">
+                <i class="bi bi-info-circle me-1"></i>Scanning runs through Forager. Manage it under Settings, Forager.
+              </div>
+              {% endif %}
             </div>
 
             <div class="provider-fields" id="fields-gemini">
@@ -95,11 +105,6 @@
               </div>
               {{ extra_keys('anthropic') }}
             </div>
-            <div class="provider-fields" id="fields-cloud">
-              <p class="text-secondary small mb-2">Photos, receipts, and barcode enrichment run through your
-                Forager subscription: no API key needed, and the model choice is handled for you.
-                {% if not s.cloud_instance_token %}Sign in with your Forager account in the card below first.{% endif %}</p>
-            </div>
             <div class="provider-fields" id="fields-ollama">
               <div class="mb-3">
                 <label class="form-label">Ollama URL</label>
@@ -117,133 +122,6 @@
               <i class="bi bi-plug me-1"></i>Test Connection
             </button>
             <div class="test-result" id="vision-result"></div>
-          </div>
-
-          {# Forager sign-in (docs/design/cloud-platform.md, FoodAssistant-t6ab).
-             Shown on every mode, satellites included: the link is per-install,
-             each device signs in on its own and appears as its own kitchen on
-             the account, so it is never synced from the main server. The
-             pairing-code path stays under Advanced for portal-first setups. #}
-          <div class="section-card">
-            <div class="section-title"><i class="bi bi-cloud-check text-info"></i> Forager</div>
-            {% if s.cloud_instance_token %}
-            <p class="text-secondary small">This device is connected to a Forager account. Photo
-              analysis, receipt reading, and barcode enrichment can run through your subscription.</p>
-            <div id="cloud-status" class="mb-3 small text-secondary">Checking the Forager connection…</div>
-            {% if s.qr_public_url %}
-            <div class="mb-3 small text-secondary"><i class="bi bi-globe2 me-1"></i>Your kitchen's web address:
-              <a href="{{ s.qr_public_url }}" target="_blank" rel="noopener">{{ s.qr_public_url }}</a>.
-              Phone links and QR codes use this address, so it works at home and away.</div>
-            {% endif %}
-            {% if s.vision_provider != 'cloud' %}
-            <div class="alert alert-secondary py-2 small mb-3" style="max-width:520px">
-              <i class="bi bi-info-circle me-1"></i>Scanning still uses the provider you set up yourself;
-              connecting Forager changed nothing there.
-              <button type="button" class="btn btn-outline-info btn-sm ms-2" onclick="cloudUseForager(this)">
-                Use Forager for scanning
-              </button>
-            </div>
-            {% endif %}
-            {% if s.is_pi_appliance() %}
-            {# Forager remote access (WireGuard hub tunnel, FoodAssistant-uczr).
-               Only on a Pi appliance, which runs the host bridge that owns the
-               WireGuard endpoint. Buttons only, no form controls, so the
-               settings-control pin test is untouched. Driven by
-               _loadTunnelStatus / tunnelEnable / tunnelDisable. #}
-            <div class="mt-3 pt-3 border-top" id="tunnel-section">
-              <div class="fw-semibold small mb-1"><i class="bi bi-globe2 me-1"></i>Remote access</div>
-              <p class="text-secondary small mb-2">Turn this on and your kitchen gets a web address you can
-                reach from anywhere through Forager, not just on your home network. It is included with a
-                Forager plan. Remote access needs a login password set under Settings, Security, so your
-                kitchen stays private once it is reachable from the internet.</p>
-              <div id="tunnel-status" class="small text-secondary mb-2">Checking remote access…</div>
-              <div id="tunnel-controls" class="d-none">
-                <button type="button" class="btn btn-outline-info btn-sm" id="tunnel-enable-btn"
-                        onclick="tunnelEnable(this)">
-                  <i class="bi bi-globe2 me-1"></i>Turn on remote access
-                </button>
-                <div class="d-none" id="tunnel-on-controls">
-                  <div class="small mb-2"><i class="bi bi-globe2 me-1"></i>Reachable at:
-                    <a href="#" id="tunnel-url-link" target="_blank" rel="noopener"></a>
-                    <button type="button" class="btn btn-link btn-sm p-0 ms-1 align-baseline"
-                            onclick="tunnelCopyUrl(this)">copy</button>
-                  </div>
-                  <button type="button" class="btn btn-outline-danger btn-sm" id="tunnel-disable-btn"
-                          onclick="tunnelDisable(this)">
-                    <i class="bi bi-x-circle me-1"></i>Turn off remote access
-                  </button>
-                </div>
-              </div>
-              <div class="test-result mt-2" id="tunnel-result"></div>
-            </div>
-            {% endif %}
-            <div class="mt-3">
-            <button type="button" class="btn btn-outline-danger btn-sm" onclick="cloudUnlink(this)">
-              <i class="bi bi-cloud-slash me-1"></i>Disconnect
-            </button>
-            <div class="form-text">Disconnecting signs this device out of the Forager account. You can also
-              remove it from your account page on the Forager website.</div>
-            </div>
-            {% else %}
-            <p class="text-secondary small">Pantry Raider is free and open source: bring your own AI key
-              and it works forever, no account needed. Forager is the optional convenience plan: sign in
-              and photo analysis, receipt reading, and barcode enrichment are handled for you, with
-              nothing else to set up. Every account starts with a 30 day free trial.</p>
-            <div style="max-width:420px">
-              <div class="mb-2">
-                <label class="form-label small mb-1" for="cloud_email">Email</label>
-                <input type="email" class="form-control form-control-sm" id="cloud_email"
-                       placeholder="you@example.com" autocomplete="email" spellcheck="false">
-              </div>
-              <div class="mb-2">
-                <label class="form-label small mb-1" for="cloud_password">Password</label>
-                <input type="password" class="form-control form-control-sm" id="cloud_password"
-                       placeholder="Your Forager password" autocomplete="current-password">
-              </div>
-              <div class="mb-2">
-                <label class="form-label small mb-1" for="cloud_kitchen_name">Kitchen name <span class="text-secondary">(optional)</span></label>
-                <input type="text" class="form-control form-control-sm" id="cloud_kitchen_name"
-                       value="{{ suggested_kitchen_name }}" placeholder="e.g. Home kitchen"
-                       autocomplete="off" spellcheck="false">
-                <div class="form-text">How this device appears on your Forager account.</div>
-              </div>
-              <button type="button" class="btn btn-info btn-sm" onclick="cloudSignin(this)">
-                <i class="bi bi-box-arrow-in-right me-1"></i>Sign in and connect
-              </button>
-              {# Revealed by _initCloudMeta() only when Forager is reachable and
-                 offers Google sign-in; otherwise it stays hidden, no error. #}
-              <button type="button" class="btn btn-outline-light btn-sm ms-1 d-none" id="cloud-google-btn"
-                      onclick="cloudGoogleStart('')">
-                <i class="bi bi-google me-1"></i>Continue with Google
-              </button>
-              <div class="form-text">Your password goes to Forager only, to sign you in. It is never
-                saved on this device.</div>
-            </div>
-            <div class="mt-3">
-              <button class="btn btn-link btn-sm p-0 text-secondary text-decoration-none" type="button"
-                      data-bs-toggle="collapse" data-bs-target="#cloud-advanced-collapse" aria-expanded="false">
-                <i class="bi bi-chevron-down me-1"></i>Advanced: connect with a pairing code
-              </button>
-              <div class="collapse mt-2" id="cloud-advanced-collapse">
-                <p class="text-secondary small mb-2">Already signed in on the Forager website? Generate a
-                  pairing code there and enter it here instead.</p>
-                <div class="row g-2 align-items-end mb-2" style="max-width:420px">
-                  <div class="col">
-                    <label class="form-label small mb-1" for="cloud_pairing_code">Pairing code</label>
-                    <input type="text" class="form-control form-control-sm font-monospace" id="cloud_pairing_code"
-                           placeholder="from the Forager website" autocomplete="off" spellcheck="false">
-                  </div>
-                  <div class="col-auto">
-                    <button type="button" class="btn btn-outline-info btn-sm" onclick="cloudLink(this)">
-                      <i class="bi bi-link-45deg me-1"></i>Link
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-            {% endif %}
-            <div class="test-result mt-2" id="cloud-signin-result"></div>
-            <div class="test-result mt-2" id="cloud-link-result"></div>
           </div>
 
           <div class="section-card">
@@ -323,10 +201,6 @@
             <div class="section-title"><i class="bi bi-speedometer2 text-warning"></i> AI token usage &amp; budget</div>
             <p class="text-secondary small">Tokens your AI provider has used through this app. For your own API key you can set a monthly token budget; when it is reached, AI photo import and barcode enrichment are declined until the next month or you raise it. 0 = no budget.</p>
             <div id="ai-usage-display" class="mb-3 small text-secondary">Loading usage…</div>
-            {% if s.cloud_instance_token %}
-            {# Cloud quota alongside the local numbers, filled by _loadCloudStatus(). #}
-            <div id="cloud-usage-display" class="mb-3 small text-secondary">Loading Forager quota…</div>
-            {% endif %}
             {% if not features.satellite %}
             <div class="row g-2 align-items-end mb-2" style="max-width:420px">
               <div class="col">

@@ -12,7 +12,7 @@ from .hardware import is_raspberry_pi
 
 # Single source of truth for the app version (shown in the UI, used by the
 # update checker, and reported by FastAPI). Bump on each tagged release.
-APP_VERSION = "0.8.23"
+APP_VERSION = "0.8.22"
 
 # Single source of truth for the product's display name. The runtime identifiers
 # (systemd units, install paths, the foodassistant_streamdeck package, the
@@ -1398,7 +1398,8 @@ class Settings(BaseSettings):
     # scanned or a satellite checks in (Pantry Raider).
     lan_scan_cidr: str = ""
 
-    # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "subscription"
+    # Remote access tunnel. tunnel_mode: "" | "cloudflare" | "forager"
+    # (a legacy stored "subscription" reads as "forager" in the UI).
     tunnel_mode: str = ""
     tunnel_token: str = ""
     tunnel_url: str = ""
