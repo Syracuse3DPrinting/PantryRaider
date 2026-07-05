@@ -14,7 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import CLOUD_VERSION
 from .database import init_db
 from .routers import (accounts, admin, ai, instances, oauth_google, portal,
-                      stripe_webhook)
+                      stripe_webhook, tunnel)
 
 
 @asynccontextmanager
@@ -35,6 +35,7 @@ app.mount("/static", StaticFiles(directory=str(Path(__file__).parent / "static")
 
 app.include_router(accounts.router)
 app.include_router(instances.router)
+app.include_router(tunnel.router)
 app.include_router(ai.router)
 app.include_router(stripe_webhook.router)
 app.include_router(portal.router)

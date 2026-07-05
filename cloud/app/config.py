@@ -126,6 +126,26 @@ class CloudSettings(BaseSettings):
     account_lockout_threshold: int = 8
     account_lockout_minutes: int = 15
 
+    # --- Remote-access tunnel (WireGuard + Caddy on the VPS) ---
+    # The public WireGuard endpoint kitchens dial out to (host:port). The
+    # app hands this to WireGuard as the peer Endpoint.
+    tunnel_endpoint: str = "forager.pantryraider.app:51820"
+    # The VPS WireGuard server's public key (base64). Filled into the VPS
+    # .env after generating the server keypair; the app pins its peer to it.
+    tunnel_server_public_key: str = ""
+    # The tunnel network kitchens are allocated from. Kept in sync with
+    # tunnel.TUNNEL_CIDR; env-overridable for a future re-addressing.
+    tunnel_cidr: str = "10.99.0.0/16"
+    # The local tunnel agent that programs wg0 and Caddy on the VPS. In the
+    # compose stack it is a sidecar (http://tunnel-agent:9300); on a single
+    # host it is http://127.0.0.1:9300.
+    tunnel_agent_url: str = "http://tunnel-agent:9300"
+    # Shared secret the cloud app presents to the agent (X-Tunnel-Token).
+    # The agent reads the same value from /etc/forager/tunnel-token.
+    tunnel_agent_token: str = ""
+    # How long the app waits on an agent call before treating it as down.
+    tunnel_agent_timeout_seconds: float = 10.0
+
     model_config = {"env_prefix": "CLOUD_"}
 
 

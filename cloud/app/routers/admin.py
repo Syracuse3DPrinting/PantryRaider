@@ -212,6 +212,10 @@ def disable_account(account_id: int,
     account = _target(db, account_id)
     account.disabled = 1
     db.commit()
+    # A disabled account loses remote access too: tear down any live tunnels
+    # so a kill-switched kitchen stops being reachable from the internet.
+    from .tunnel import disable_tunnel_for_account
+    disable_tunnel_for_account(db, account.id)
     _log(db, admin, "disable", account.id)
     return _back(account.id)
 

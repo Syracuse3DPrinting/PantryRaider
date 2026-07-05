@@ -115,6 +115,13 @@ def _handle_subscription_event(db: Session, obj: dict, deleted: bool) -> None:
             plan = _plan_for_price(price_id)
     active = not deleted and status in _ACTIVE_STATUSES
     _set_entitlement(db, sub.account_id, plan, "active" if active else "inactive")
+    if not active:
+        # The paid plan lapsed. Remote access is a paid or trial feature, so
+        # tear down any tunnel this account holds. If the account still has an
+        # active trial the app can re-enable on its next check; a periodic
+        # sweep for trials that expire on their own is a follow-up.
+        from .tunnel import disable_tunnel_for_account
+        disable_tunnel_for_account(db, sub.account_id)
 
 
 @router.post("/webhook")

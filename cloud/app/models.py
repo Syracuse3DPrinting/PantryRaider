@@ -62,6 +62,11 @@ class Instance(Base):
     app_version: Mapped[str] = mapped_column(String(40), default="")
     deployment_mode: Mapped[str] = mapped_column(String(40), default="")
     last_seen_at: Mapped[str] = mapped_column(String(40), default="")
+    # The install's suggested public URL, set when a remote-access tunnel is
+    # enabled and cleared when it is disabled. Surfaced by /v1/instance/me and
+    # provision so the app can show and link its own remote address. Empty
+    # means no tunnel; the app then falls back to its LAN address.
+    public_url: Mapped[str] = mapped_column(String(255), default="")
     created_at: Mapped[str] = mapped_column(String(40))
 
 
@@ -158,3 +163,34 @@ class StripeEvent(Base):
     event_id: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     event_type: Mapped[str] = mapped_column(String(80), default="")
     processed_at: Mapped[str] = mapped_column(String(40))
+
+
+class TunnelPeer(Base):
+    """One WireGuard remote-access tunnel per kitchen.
+
+    The kitchen dials out to the VPS as a WireGuard peer and Caddy
+    reverse-proxies its subdomain to the tunnel IP. The database holds only
+    the kitchen's public key (the private key never leaves the device), the
+    allocated tunnel IP, and the subdomain. One row per instance (a kitchen
+    has at most one tunnel); disabling remote access deletes the row.
+    """
+
+    __tablename__ = "tunnel_peers"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    # One tunnel per kitchen: the instance id is unique.
+    instance_id: Mapped[int] = mapped_column(
+        ForeignKey("instances.id", ondelete="CASCADE"), unique=True, index=True)
+    account_id: Mapped[int] = mapped_column(ForeignKey("accounts.id"), index=True)
+    # The kitchen's WireGuard public key (base64). The private key stays on
+    # the device; the VPS only ever sees this public half.
+    public_key: Mapped[str] = mapped_column(String(64), default="")
+    # The stable /32 assigned inside 10.99.0.0/16, e.g. "10.99.4.7".
+    tunnel_ip: Mapped[str] = mapped_column(String(40), index=True)
+    # The public subdomain, sanitized from the hostname hint and made unique,
+    # e.g. "kitchen-pi" for kitchen-pi.forager.pantryraider.app.
+    subdomain: Mapped[str] = mapped_column(String(63), unique=True, index=True)
+    # Last WireGuard handshake seen for this peer (ISO-8601), updated
+    # best-effort. Empty until the tunnel first connects.
+    last_handshake: Mapped[str] = mapped_column(String(40), default="")
+    created_at: Mapped[str] = mapped_column(String(40))

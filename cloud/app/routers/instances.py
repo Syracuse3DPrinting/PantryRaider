@@ -75,10 +75,10 @@ def provision_instance(payload: ProvisionRequest, request: Request,
         "trial_days_left": state["trial_days_left"],
         "quota": state["quota"],
         "month_used": state["used"],
-        # Reserved for the hosted-tunnel follow-up: once WireGuard tunnels
-        # exist, provisioning will suggest the install's public URL here.
-        # Shaped now so the app-side contract does not change later.
-        "suggested_public_url": None,
+        # The install's remote-access URL once a tunnel is enabled, else null.
+        # A freshly provisioned instance has none; it appears after the app
+        # calls /v1/tunnel/enable.
+        "suggested_public_url": inst.public_url or None,
     }
 
 
@@ -127,6 +127,9 @@ def instance_me(inst: Instance = Depends(current_instance),
     account = db.get(Account, inst.account_id)
     return {"instance_id": inst.id, "name": inst.name,
             "account_email": account.email if account else "",
+            # The install's remote-access URL once a tunnel is enabled, else
+            # null; the app reads it to show and link its own public address.
+            "public_url": inst.public_url or None,
             "entitlement": state}
 
 
