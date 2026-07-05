@@ -11,6 +11,7 @@ All notable changes to Pantry Raider are recorded here. The format is based on
 ## [Unreleased]
 
 ### Added
+- **Screensaver timer pills come in three sizes.** A new Timer pill size choice (Normal, Large, Extra large) under Screen & Sleep makes the floating countdowns readable from across the kitchen on smaller panels.
 - **Pick a 12-hour or 24-hour clock.** Settings, Advanced, Date & time now has a Clock format choice next to the timezone: Auto keeps the familiar reading each surface has always used, 12-hour shows 3:42 with a small PM, and 24-hour shows 15:42. It applies everywhere a time of day appears: the screensaver clock, the weather page's hourly strip and sunrise and sunset, and timestamps like the last update check. Like the timezone, it is set once on the main server and every Pi Remote follows along, so all the clocks in one kitchen agree.
 - **A small way to say thanks.** The About & Credits page now has a Support the project button alongside the donation links for Grocy, Mealie, and the other projects Pantry Raider is built on. Pantry Raider stays free for home use; the button simply buys the developer a coffee if the app has earned it.
 - **A second password for the rest of the household.** Settings, Security now has an optional Viewer Password next to the main UI password. Anyone who logs in with it can use the whole kitchen: browse the pantry, run timers, scan barcodes, and cook from recipes, while Settings, backups, and updates stay behind the main password. Leave it blank and nothing changes; only the main password logs in.

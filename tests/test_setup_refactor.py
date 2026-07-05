@@ -78,7 +78,9 @@ PINNED = {
             'perishable_days', 'qr_public_url', 'qr_url_mode', 'quiet_mode',
             'rclone_remote', 'rclone_schedule_hours', 'recipe_source', 'restore-file',
             'scan_cidr', 'scanner-test-input', 'scanner_type', 'screensaver_all_clients',
-            'screensaver_minutes', 'screensaver_mode', 'screensaver_speed', 'settings-search',
+            'screensaver_minutes', 'screensaver_mode', 'screensaver_speed',
+            'screensaver_pill_scale',  # post-pin addition (pill size setting)
+            'settings-search',
             'spoonacular_api_key', 'staple_items', 'start_icon_color', 'start_key_style',
             'start_page_enabled', 'start_page_keys', 'streamdeck_ha_base_url', 'streamdeck_ha_token',
             'streamdeck_weather_location', 'streamdeck_weather_units', 'suggest_per_tier', 'themealdb_api_key', 'timer_chips',
@@ -141,7 +143,9 @@ PINNED = {
             'rclone_schedule_hours', 'recipe_source', 'restore-file', 'scan_cidr',
             'scanner-test-input', 'scanner_type', 'scheduled_reboot_day', 'scheduled_reboot_frequency',
             'scheduled_reboot_time', 'screensaver_all_clients', 'screensaver_minutes', 'screensaver_mode',
-            'screensaver_speed', 'sd-profile-name-input', 'sd-profile-select', 'settings-search',
+            'screensaver_speed',
+            'screensaver_pill_scale',  # post-pin addition (pill size setting)
+            'sd-profile-name-input', 'sd-profile-select', 'settings-search',
             'spoonacular_api_key', 'staple_items', 'start_icon_color', 'start_key_style',
             'start_page_enabled', 'start_page_keys', 'streamdeck_brightness', 'streamdeck_ha_base_url',
             'streamdeck_ha_token', 'streamdeck_icon_color', 'streamdeck_idle_timeout', 'streamdeck_key_count',
@@ -205,7 +209,9 @@ PINNED = {
             'rclone_remote', 'rclone_schedule_hours', 'recipe_source', 'remote_server_url',
             'restore-file', 'scanner-test-input', 'scanner_type', 'scheduled_reboot_day',
             'scheduled_reboot_frequency', 'scheduled_reboot_time', 'screensaver_all_clients', 'screensaver_minutes',
-            'screensaver_mode', 'screensaver_speed', 'sd-profile-name-input', 'sd-profile-select',
+            'screensaver_mode', 'screensaver_speed',
+            'screensaver_pill_scale',  # post-pin addition (pill size setting)
+            'sd-profile-name-input', 'sd-profile-select',
             'settings-search', 'spoonacular_api_key', 'staple_items', 'start_icon_color',
             'start_key_style', 'start_page_enabled', 'start_page_keys', 'streamdeck_brightness',
             'streamdeck_ha_base_url', 'streamdeck_ha_token', 'streamdeck_icon_color', 'streamdeck_idle_timeout',

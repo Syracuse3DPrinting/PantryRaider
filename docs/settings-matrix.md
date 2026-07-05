@@ -174,6 +174,7 @@ and are device-local. They do not apply to a server install.
 | `wake_on_motion` | | Not applicable | Editable | Device-local |
 | `screensaver_minutes` | | Editable | Editable | Device-local |
 | `screensaver_speed` | | Editable | Editable | Device-local |
+| `screensaver_pill_scale` | | Editable | Editable | Device-local |
 | `screensaver_mode` | | Editable | Editable | Device-local |
 | `screensaver_all_clients` | | Editable | Editable | Device-local |
 | `osk_enabled` | | Editable | Editable | Device-local |

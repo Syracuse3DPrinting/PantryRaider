@@ -59,6 +59,11 @@
   var SPEEDS = { slow: 18, normal: 32, fast: 60 };
   var SPEED = SPEEDS[cfg.getAttribute('data-speed') || 'normal'] || SPEEDS.normal;
   var MODE = cfg.getAttribute('data-mode') === 'photos' ? 'photos' : 'bounce';
+  // Timer pill size multiplier, from the per-device setting: small panels
+  // viewed across a kitchen want bigger countdowns.
+  var PILL_SCALES = { normal: 1, large: 1.35, xlarge: 1.7 };
+  var PILL_K = PILL_SCALES[cfg.getAttribute('data-pill-scale') || 'normal'] || 1;
+  function pv(n) { return (n * PILL_K).toFixed(2) + 'vmin'; }
   var PHOTO_MS = 25000;   // how long each slideshow photo stays up
   var FADE_MS = 2000;     // crossfade length between photos
   var lastActivity = Date.now();
@@ -255,25 +260,25 @@
     var face = document.createElement('div');
     face.className = 'ss-timer-face';
     face.style.cssText =
-      'display:flex;align-items:center;gap:1.4vmin;padding:1.1vmin 2.4vmin;' +
+      'display:flex;align-items:center;gap:' + pv(1.4) + ';padding:' + pv(1.1) + ' ' + pv(2.4) + ';' +
       'border-radius:999px;background:rgba(24,26,32,0.88);' +
       'border:1px solid rgba(255,255,255,0.18);color:#e8eaed;' +
       'white-space:nowrap;';
     var iconChar = timerFoodIcon(t.label);
     var icon = document.createElement('span');
     icon.className = 'ss-timer-icon';
-    icon.style.cssText = 'font-size:4.2vmin;line-height:1;';
+    icon.style.cssText = 'font-size:' + pv(4.2) + ';line-height:1;';
     icon.textContent = iconChar;
     var col = document.createElement('div');
     col.style.cssText = 'text-align:left;';
     var lab = document.createElement('div');
     lab.className = 'ss-timer-label';
-    lab.style.cssText = 'font-size:2.1vmin;opacity:0.75;max-width:34vmin;' +
+    lab.style.cssText = 'font-size:' + pv(2.1) + ';opacity:0.75;max-width:' + pv(34) + ';' +
       'overflow:hidden;text-overflow:ellipsis;';
     lab.textContent = t.label || 'Timer';
     var time = document.createElement('div');
     time.className = 'ss-timer-time';
-    time.style.cssText = 'font-size:3.4vmin;font-weight:600;line-height:1.15;' +
+    time.style.cssText = 'font-size:' + pv(3.4) + ';font-weight:600;line-height:1.15;' +
       'font-variant-numeric:tabular-nums;';
     col.appendChild(lab);
     col.appendChild(time);

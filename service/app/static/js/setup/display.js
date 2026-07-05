@@ -15,6 +15,7 @@ async function saveDisplaySettings() {
   const display_idle_timeout = parseInt(document.getElementById('display_idle_timeout')?.value || '0', 10);
   const screensaver_minutes = parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10);
   const screensaver_speed = document.getElementById('screensaver_speed')?.value || 'normal';
+  const screensaver_pill_scale = document.getElementById('screensaver_pill_scale')?.value || 'normal';
   const screensaver_mode = document.getElementById('screensaver_mode')?.value || 'bounce';
   const screensaver_all_clients = document.getElementById('screensaver_all_clients')?.checked || false;
   const osk_enabled = document.getElementById('osk_enabled')?.checked ?? true;
@@ -26,7 +27,7 @@ async function saveDisplaySettings() {
     });
     const saveResp = await (await fetch('setup/save', {
       method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_mode, screensaver_all_clients, osk_enabled, wake_on_motion}),
+      body: JSON.stringify({display_touch, display_type, display_idle_timeout, screensaver_minutes, screensaver_speed, screensaver_pill_scale, screensaver_mode, screensaver_all_clients, osk_enabled, wake_on_motion}),
     })).json();
     fetch('setup/kiosk/restart', {method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}'}).catch(() => {});
     if (saveResp && saveResp.touch_needs_reboot) {
@@ -55,6 +56,7 @@ async function saveScreensaverSettings() {
   const body = {
     screensaver_minutes: parseInt(document.getElementById('screensaver_minutes')?.value || '0', 10),
     screensaver_speed: document.getElementById('screensaver_speed')?.value || 'normal',
+    screensaver_pill_scale: document.getElementById('screensaver_pill_scale')?.value || 'normal',
     screensaver_mode: document.getElementById('screensaver_mode')?.value || 'bounce',
     screensaver_all_clients: document.getElementById('screensaver_all_clients')?.checked || false,
     osk_enabled: document.getElementById('osk_enabled')?.checked ?? true,

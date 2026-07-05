@@ -262,6 +262,7 @@ class SetupPayload(BaseModel):
     display_idle_timeout: int = 0
     screensaver_minutes: int = 0
     screensaver_speed: str | None = None
+    screensaver_pill_scale: str | None = None
     screensaver_mode: str | None = None
     screensaver_all_clients: bool = False
     streamdeck_logo_when_display_off: bool = True
@@ -1155,6 +1156,10 @@ async def save_setup(payload: SetupPayload):
     # 12/24-hour clock reading: only the known values persist.
     if "clock_format" in data and data["clock_format"] not in CLOCK_FORMATS:
         data["clock_format"] = _DEFAULT_CLOCK_FORMAT
+    # Screensaver pill size: only the known values persist.
+    if ("screensaver_pill_scale" in data
+            and data["screensaver_pill_scale"] not in ("normal", "large", "xlarge")):
+        data["screensaver_pill_scale"] = "normal"
     # AI token budget: non-negative integer (0 = no budget).
     if "ai_token_budget" in data:
         try:
