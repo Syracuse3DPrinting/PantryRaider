@@ -71,13 +71,16 @@ def render_kitchen_block(domain: str, tunnel_ip: str,
             f"}}\n")
 
 
-def render_caddy_config(peers, app_port: int = KITCHEN_APP_PORT) -> str:
+def render_caddy_config(peers, default_app_port: int = KITCHEN_APP_PORT) -> str:
     """The full forager-kitchens.caddy include from the peer list.
 
-    ``peers`` is an iterable of dicts with "domain" and "tunnel_ip". Sorted by
-    domain so the file is stable (no spurious reloads from dict ordering), and
-    peers missing a domain are skipped rather than rendered into a broken
-    block.
+    ``peers`` is an iterable of dicts with "domain" and "tunnel_ip", and an
+    optional "app_port" (the port the kitchen's app listens on behind the
+    tunnel). Sorted by domain so the file is stable (no spurious reloads from
+    dict ordering), and peers missing a domain are skipped rather than
+    rendered into a broken block. A peer without an "app_port" falls back to
+    ``default_app_port`` (9284), so peers stored before this field existed keep
+    working.
     """
     usable = [p for p in peers if p.get("domain") and p.get("tunnel_ip")]
     usable.sort(key=lambda p: p["domain"])
@@ -85,17 +88,21 @@ def render_caddy_config(peers, app_port: int = KITCHEN_APP_PORT) -> str:
               "# file is regenerated whenever a kitchen tunnel changes.\n")
     if not usable:
         return header
-    blocks = [render_kitchen_block(p["domain"], p["tunnel_ip"], app_port)
+    blocks = [render_kitchen_block(p["domain"], p["tunnel_ip"],
+                                   p.get("app_port", default_app_port))
               for p in usable]
     return header + "\n".join(blocks)
 
 
-def upsert_peer(peers, public_key: str, tunnel_ip: str, domain: str):
+def upsert_peer(peers, public_key: str, tunnel_ip: str, domain: str,
+                app_port: int = KITCHEN_APP_PORT):
     """Add or update a peer in the store (a list of dicts), keyed by public
-    key. Returns a new list, leaving the input untouched."""
+    key. Returns a new list, leaving the input untouched. ``app_port`` is the
+    port the kitchen's app listens on behind the tunnel (Caddy reverse-proxies
+    to tunnel_ip:app_port)."""
     out = [p for p in peers if p.get("public_key") != public_key]
     out.append({"public_key": public_key, "tunnel_ip": tunnel_ip,
-                "domain": domain})
+                "domain": domain, "app_port": app_port})
     return out
 
 
@@ -146,13 +153,14 @@ def write_caddy_config(peers, path: str = None) -> None:
     os.replace(tmp, path)
 
 
-def apply_add(public_key: str, tunnel_ip: str, domain: str) -> None:
+def apply_add(public_key: str, tunnel_ip: str, domain: str,
+              app_port: int = KITCHEN_APP_PORT) -> None:
     """Bring a peer fully online: wg peer, saved config, Caddy route, reload."""
     run_command(["wg", "set", WG_INTERFACE, "peer", public_key,
                  "allowed-ips", f"{tunnel_ip}/32",
                  "persistent-keepalive", "25"])
     run_command(["wg-quick", "save", WG_INTERFACE])
-    peers = upsert_peer(load_peers(), public_key, tunnel_ip, domain)
+    peers = upsert_peer(load_peers(), public_key, tunnel_ip, domain, app_port)
     save_peers(peers)
     write_caddy_config(peers)
     run_command(["systemctl", "reload", "caddy"])
@@ -213,11 +221,17 @@ class Handler(http.server.BaseHTTPRequestHandler):
         public_key = str(body.get("public_key", "")).strip()
         tunnel_ip = str(body.get("tunnel_ip", "")).strip()
         domain = str(body.get("domain", "")).strip()
+        # Older cloud apps omit app_port; default to 9284 so existing peers and
+        # a stale cloud both keep working.
+        try:
+            app_port = int(body.get("app_port", KITCHEN_APP_PORT))
+        except (TypeError, ValueError):
+            app_port = KITCHEN_APP_PORT
         if not public_key or not tunnel_ip:
             self._send(400, {"error": "public_key and tunnel_ip are required"})
             return
         try:
-            apply_add(public_key, tunnel_ip, domain)
+            apply_add(public_key, tunnel_ip, domain, app_port)
         except Exception as exc:  # noqa: BLE001 - report, do not crash the loop
             self.log_message("peer add failed: %s", exc)
             self._send(500, {"error": "peer_add_failed"})

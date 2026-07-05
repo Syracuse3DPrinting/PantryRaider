@@ -172,13 +172,49 @@ The app reads it to show and link its own remote address.
 
 ```json
 {"public_key": "<pk>", "tunnel_ip": "10.99.0.2",
- "domain": "kitchen-pi.forager.pantryraider.app"}
+ "domain": "kitchen-pi.forager.pantryraider.app", "app_port": 9284}
 ```
 
 `domain` is included beyond the minimal `{public_key, tunnel_ip}` so the
 agent can render the Caddy reverse-proxy block, which is keyed by the
-kitchen's public hostname. `DELETE /peer` takes `{"public_key": "<pk>"}`.
-Both answer `200 {"ok": true}`; `GET /health` needs no token.
+kitchen's public hostname. `app_port` is the port the kitchen's app listens
+on behind the tunnel; the agent points its `reverse_proxy` at
+`tunnel_ip:app_port` and stores it per peer. It is optional and defaults to
+`9284`, so a stale cloud or a peer stored before the field existed keeps
+working. `DELETE /peer` takes `{"public_key": "<pk>"}`. Both answer
+`200 {"ok": true}`; `GET /health` needs no token.
+
+## Server (non-Pi) remote access
+
+A Pi appliance runs WireGuard on the host through the bridge (only root there
+can create the interface) and publishes the app on the host at `:9284`, so
+its Caddy route targets `tunnel_ip:9284`. A plain Docker Compose `server`
+install has no bridge: the app runs in a container, so WireGuard runs inside
+that container instead.
+
+- The image ships `wireguard-tools`, `iproute2`, and `iptables`; the kernel
+  module comes from the host (present on virtually all modern Linux,
+  including Unraid).
+- `service/app/services/tunnel_local.py` is the in-container equivalent of
+  the bridge's `/tunnel/*` handlers: `keygen` (private key to a `0600` file
+  under `data_dir`, only the public key returned), a pure `render_config`,
+  `up`/`down` (write `/etc/wireguard/fa-forager.conf` and run `wg-quick`),
+  and `status` (parse `wg show ... latest-handshakes`). `wg_available()`
+  reports whether the tools plus `/dev/net/tun` are present.
+- The container needs the `NET_ADMIN` capability and the `/dev/net/tun`
+  device for `wg-quick` to create the interface, plus the
+  `net.ipv4.conf.all.src_valid_mark=1` sysctl to keep `wg-quick` happy about
+  its fwmark. The shipped `docker-compose.yml` and `docker-compose.prod.yml`
+  grant all three; they are inert when remote access is off. On Unraid,
+  where the template does not carry them, add
+  `--cap-add=NET_ADMIN --device=/dev/net/tun` under Extra Parameters and the
+  sysctl.
+- The app is reached over the tunnel on its internal `8000` (uvicorn), not
+  the host-published `9284`, so `POST /v1/tunnel/enable` sends
+  `app_port: 8000` and the cloud's Caddy route targets `tunnel_ip:8000`.
+- `routers/setup.py` picks the backend: a Pi appliance uses the bridge, a
+  server with `wg_available()` uses the local backend, and a server without
+  WireGuard support gets an honest error.
 
 ## IP and subdomain allocation
 
@@ -204,9 +240,9 @@ Pure helpers in `cloud/app/tunnel.py`:
   yet populated. A future agent `GET /handshakes` (reading `wg show`) polled
   by the cloud would fill it, so the status endpoint can show whether a
   kitchen is currently connected.
-- **Server (non-Pi) support.** The first target is the Pi appliance. A
-  Docker-Compose `server` install can dial out too, but its WireGuard setup
-  and app port mapping differ; treat that as a separate pass.
+- **Server (non-Pi) support.** Done: a Docker Compose `server` install runs
+  WireGuard inside the app container and its Caddy route targets the internal
+  `8000`. See "Server (non-Pi) remote access" above.
 - **Multiple kitchens per account naming.** One tunnel per instance is
   enforced; an account with several kitchens gets several subdomains. A
   friendlier naming scheme (letting the owner pick or rename the subdomain)

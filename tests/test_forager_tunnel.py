@@ -98,6 +98,60 @@ def test_wg_tools_present_needs_both():
         which=lambda n: "/usr/bin/wg" if n == "wg" else None) is False
 
 
+# --- in-container backend pure helpers (server remote access) ---------------
+
+from app.services import tunnel_local  # noqa: E402
+
+
+def test_local_config_renders_split_tunnel_without_dns():
+    text = tunnel_local.render_config(
+        private_key="PRIVKEY", address="10.99.4.7",
+        server_public_key="SRVPUB", endpoint="vps.example:51820",
+        allowed_ips="10.99.0.1/32", keepalive=25,
+    )
+    assert "[Interface]" in text and "[Peer]" in text
+    assert "PrivateKey = PRIVKEY" in text
+    # A bare tunnel IP is normalized to a /32 host address.
+    assert "Address = 10.99.4.7/32" in text
+    assert "PublicKey = SRVPUB" in text
+    assert "Endpoint = vps.example:51820" in text
+    # Split tunnel: only the server /32 is routed, never a 0.0.0.0/0 catch-all.
+    assert "AllowedIPs = 10.99.0.1/32" in text
+    assert "0.0.0.0/0" not in text
+    assert "PersistentKeepalive = 25" in text
+    # No DNS line ever (the container has no resolvconf).
+    assert "DNS" not in text
+
+
+def test_local_config_keeps_an_explicit_prefix():
+    text = tunnel_local.render_config(
+        private_key="k", address="10.99.4.7/32", server_public_key="s",
+        endpoint="h:51820", allowed_ips="10.99.0.1/32")
+    assert "Address = 10.99.4.7/32" in text
+
+
+def test_local_handshake_parser_picks_latest_epoch():
+    dump = "PEERONEKEY\t0\nPEERTWOKEY\t1720000000\n"
+    assert tunnel_local.parse_handshakes(dump) == 1720000000
+    assert tunnel_local.parse_handshakes("SOMEKEY\t0\n") == 0
+    assert tunnel_local.parse_handshakes("") == 0
+    assert tunnel_local.parse_handshakes("garbage line") == 0
+
+
+def test_wg_available_needs_tools_and_tun():
+    present = lambda n: "/usr/bin/" + n  # noqa: E731
+    # Both tools on PATH and the tun device present: this host can host a tunnel.
+    assert tunnel_local.wg_available(which=present, exists=lambda p: True) is True
+    # Missing the tun device: no tunnel here.
+    assert tunnel_local.wg_available(which=present, exists=lambda p: False) is False
+    # Missing a tool: no tunnel here, regardless of the device.
+    assert tunnel_local.wg_available(
+        which=lambda n: None, exists=lambda p: True) is False
+    assert tunnel_local.wg_available(
+        which=lambda n: "/usr/bin/wg" if n == "wg" else None,
+        exists=lambda p: True) is False
+
+
 # --- settings plumbing ------------------------------------------------------
 
 def test_tunnel_enabled_saveable_device_local_not_secret():
@@ -256,6 +310,85 @@ def test_enable_rolls_back_when_bridge_up_fails(client, monkeypatch):
     save.assert_not_called()
 
 
+# --- enable: the in-container server backend --------------------------------
+
+def _linked_server(monkeypatch, client=None):
+    monkeypatch.setattr(settings, "cloud_instance_token", "prc_token")
+    monkeypatch.setattr(settings, "cloud_base_url", "https://cloud.test")
+    monkeypatch.setattr(settings, "auth_password", hash_secret(_ADMIN_PW))
+    monkeypatch.setattr(settings, "deployment_mode", "server")
+    # This host can host an in-container tunnel.
+    monkeypatch.setattr("app.routers.setup.tunnel_local.wg_available",
+                        lambda: True)
+    if client is not None:
+        _login(client)
+
+
+def test_enable_on_a_server_uses_the_local_backend_and_internal_port(
+        client, monkeypatch):
+    _linked_server(monkeypatch, client)
+    monkeypatch.setattr(settings, "qr_public_url", "")
+    monkeypatch.setattr(settings, "tunnel_enabled", False)
+    # Stand in for the in-container wg helpers (no wg-quick in CI).
+    monkeypatch.setattr("app.routers.setup.tunnel_local.keygen",
+                        lambda: "SRVDEVPUB")
+    up_calls = []
+    monkeypatch.setattr("app.routers.setup.tunnel_local.up",
+                        lambda *a, **kw: up_calls.append((a, kw)))
+    calls = []
+    cloud_data = {
+        "server_public_key": "SRVPUB", "server_endpoint": "vps.test:51820",
+        "tunnel_ip": "10.99.4.9", "allowed_ips": "10.99.0.1/32",
+        "public_url": "https://srv.forager.pantryraider.app", "keepalive": 25,
+    }
+    cloud_routes = {"/v1/tunnel/enable": _Resp(200, cloud_data)}
+    p1, p2 = _patch_clients({}, cloud_routes, calls)
+    saved = {}
+    with p1, p2, patch.object(type(settings), "save",
+                              side_effect=lambda d: saved.update(d)):
+        r = client.post("/setup/tunnel/enable")
+    body = r.json()
+    assert body["ok"] is True
+    assert body["public_url"] == "https://srv.forager.pantryraider.app"
+    # The cloud enable carried the container's internal port (8000), not 9284.
+    enable_call = next(c for c in calls if c[1].endswith("/v1/tunnel/enable"))
+    assert enable_call[2]["public_key"] == "SRVDEVPUB"
+    assert enable_call[2]["app_port"] == 8000
+    # No host bridge was ever contacted; the local up() brought the tunnel up
+    # with the cloud's parameters.
+    assert not any("/tunnel/up" in (c[1] or "") for c in calls)
+    assert up_calls and up_calls[0][0][0] == "10.99.4.9"
+    assert saved.get("tunnel_enabled") is True
+    assert saved.get("qr_public_url") == "https://srv.forager.pantryraider.app"
+
+
+def test_enable_on_a_server_rolls_back_when_wg_up_fails(client, monkeypatch):
+    _linked_server(monkeypatch, client)
+    monkeypatch.setattr("app.routers.setup.tunnel_local.keygen",
+                        lambda: "SRVDEVPUB")
+
+    def boom(*a, **kw):
+        raise RuntimeError("wg-quick up failed")
+    monkeypatch.setattr("app.routers.setup.tunnel_local.up", boom)
+    down_calls = []
+    monkeypatch.setattr("app.routers.setup.tunnel_local.down",
+                        lambda: down_calls.append(True))
+    calls = []
+    cloud_routes = {
+        "/v1/tunnel/enable": _Resp(200, {"public_url": "https://x",
+                                         "tunnel_ip": "10.99.4.9"}),
+        "/v1/tunnel/disable": _Resp(200, {"disabled": True}),
+    }
+    p1, p2 = _patch_clients({}, cloud_routes, calls)
+    with p1, p2, patch.object(type(settings), "save") as save:
+        r = client.post("/setup/tunnel/enable")
+    assert r.json()["ok"] is False
+    # Rollback tore the local interface down and told the cloud to disable.
+    assert down_calls == [True]
+    assert any(c[1].endswith("/v1/tunnel/disable") for c in calls)
+    save.assert_not_called()
+
+
 # --- enable: safety gates ---------------------------------------------------
 
 def test_enable_gate_requires_link(client, monkeypatch):
@@ -279,15 +412,20 @@ def test_enable_gate_requires_password(client, monkeypatch):
     assert "password" in body["error"].lower()
 
 
-def test_enable_gate_requires_pi_appliance(client, monkeypatch):
+def test_enable_gate_rejects_a_server_without_wireguard(client, monkeypatch):
+    """A plain server that cannot host WireGuard (no wg tools or /dev/net/tun)
+    gets the honest error, not a silent Pi-only refusal."""
     monkeypatch.setattr(settings, "cloud_instance_token", "prc_token")
     monkeypatch.setattr(settings, "auth_password", hash_secret(_ADMIN_PW))
     monkeypatch.setattr(settings, "deployment_mode", "server")
+    monkeypatch.setattr("app.routers.setup.tunnel_local.wg_available",
+                        lambda: False)
     _login(client)
     r = client.post("/setup/tunnel/enable")
     body = r.json()
     assert body["ok"] is False
-    assert "Pi appliance" in body["error"]
+    assert "WireGuard" in body["error"]
+    assert "/dev/net/tun" in body["error"]
 
 
 def test_enable_402_returns_upgrade_message(client, monkeypatch):

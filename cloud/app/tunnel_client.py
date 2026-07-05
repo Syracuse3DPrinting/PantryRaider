@@ -25,17 +25,21 @@ def _headers() -> dict:
     return {"X-Tunnel-Token": settings.tunnel_agent_token}
 
 
-def add_peer(public_key: str, tunnel_ip: str, domain: str) -> None:
+def add_peer(public_key: str, tunnel_ip: str, domain: str,
+             app_port: int = 9284) -> None:
     """Add (or update) a WireGuard peer and its Caddy route on the VPS.
 
     ``domain`` is the kitchen's full public hostname (e.g.
     kitchen-pi.forager.pantryraider.app); the agent needs it to render the
-    Caddy reverse-proxy block, so it rides along with the peer add."""
+    Caddy reverse-proxy block, so it rides along with the peer add.
+    ``app_port`` is the port the kitchen's app listens on behind the tunnel
+    (9284 for a Pi appliance published on the host, 8000 for a server running
+    WireGuard in the app container); the agent points Caddy at it."""
     try:
         resp = httpx.post(
             f"{settings.tunnel_agent_url.rstrip('/')}/peer",
             json={"public_key": public_key, "tunnel_ip": tunnel_ip,
-                  "domain": domain},
+                  "domain": domain, "app_port": app_port},
             headers=_headers(),
             timeout=settings.tunnel_agent_timeout_seconds,
         )

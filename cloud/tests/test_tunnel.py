@@ -69,7 +69,8 @@ def stub_agent(monkeypatch):
     """Record agent calls instead of talking to a real VPS agent."""
     calls = {"add": [], "remove": []}
     monkeypatch.setattr(tunnel_client, "add_peer",
-                        lambda pk, ip, domain: calls["add"].append((pk, ip, domain)))
+                        lambda pk, ip, domain, app_port=9284:
+                        calls["add"].append((pk, ip, domain, app_port)))
     monkeypatch.setattr(tunnel_client, "remove_peer",
                         lambda pk: calls["remove"].append(pk))
     return calls
@@ -92,9 +93,42 @@ def test_enable_happy_path(client, instance_token, stub_agent):
     assert body["keepalive"] == 25
     assert body["allowed_ips"] == "10.99.0.1/32"
     assert body["server_endpoint"] == "forager.pantryraider.app:51820"
-    # The agent was asked to wire it up, with the full domain for Caddy.
+    # The agent was asked to wire it up, with the full domain for Caddy and the
+    # default 9284 app port (no app_port sent, so a Pi appliance is assumed).
     assert stub_agent["add"] == [
-        ("PUBKEYAAA=", "10.99.0.2", "kitchen-pi.forager.pantryraider.app")]
+        ("PUBKEYAAA=", "10.99.0.2", "kitchen-pi.forager.pantryraider.app", 9284)]
+
+
+def test_enable_forwards_the_app_port_and_stores_it(client, instance_token,
+                                                    stub_agent):
+    """A server sends its in-container port; it reaches the agent and persists
+    on the peer so a later Caddy regeneration keeps routing to it."""
+    from app.database import SessionLocal
+    from app.models import TunnelPeer
+    resp = client.post("/v1/tunnel/enable",
+                       json={"public_key": "SRVKEY", "hostname_hint": "Server",
+                             "app_port": 8000},
+                       headers=_auth(instance_token))
+    assert resp.status_code == 200
+    assert stub_agent["add"][-1] == (
+        "SRVKEY", "10.99.0.2", "server.forager.pantryraider.app", 8000)
+    db = SessionLocal()
+    peer = db.query(TunnelPeer).first()
+    assert peer.app_port == 8000
+    db.close()
+
+
+def test_enable_defaults_app_port_when_omitted(client, instance_token,
+                                               stub_agent):
+    from app.database import SessionLocal
+    from app.models import TunnelPeer
+    client.post("/v1/tunnel/enable",
+                json={"public_key": "PIKEY", "hostname_hint": "Kitchen Pi"},
+                headers=_auth(instance_token))
+    db = SessionLocal()
+    peer = db.query(TunnelPeer).first()
+    assert peer.app_port == 9284
+    db.close()
 
 
 def test_enable_reuses_the_existing_peer_and_updates_the_key(
@@ -123,7 +157,7 @@ def test_enable_requires_entitlement(client, instance_token, stub_agent):
 
 
 def test_enable_rolls_back_on_agent_failure(client, instance_token, monkeypatch):
-    def boom(pk, ip, domain):
+    def boom(pk, ip, domain, app_port=9284):
         raise tunnel_client.TunnelAgentError("down")
     monkeypatch.setattr(tunnel_client, "add_peer", boom)
     resp = client.post("/v1/tunnel/enable",

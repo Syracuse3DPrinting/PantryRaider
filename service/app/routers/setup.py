@@ -38,6 +38,7 @@ from ..hardware import is_raspberry_pi, board_model, supports_local_stack
 from ..models.db_models import StreamDeckProfile
 from ..navigation import all_tabs, default_tabs, normalize_custom_tabs, NAV_TABS, CUSTOM_PREFIX
 from ..services.bridge import bridge_client
+from ..services import tunnel_local
 from ..storage_categories import custom_categories, _normalize_custom, storable
 from ..templating import templates
 
@@ -1294,14 +1295,53 @@ _TUNNEL_UPGRADE_MSG = (
     "Remote access is part of a Forager plan. Add it to your account, then turn "
     "on remote access here.")
 
+# The honest error when a server cannot host a tunnel: no host bridge (not a Pi
+# appliance) and no in-container WireGuard support.
+_TUNNEL_UNSUPPORTED_MSG = (
+    "Remote access needs WireGuard support on this server. See the docs. The "
+    "container needs the NET_ADMIN capability and the /dev/net/tun device; the "
+    "shipped Docker Compose grants both.")
 
-async def _tunnel_rollback(base: str) -> None:
+# The port the app itself listens on inside the container (uvicorn binds
+# 0.0.0.0:8000; see the Dockerfile CMD). On a server the tunnel runs in this
+# container, so the cloud's Caddy route must target this internal port, not the
+# host-published 9284 a Pi appliance uses.
+SERVER_APP_PORT = 8000
+
+
+def _tunnel_backend() -> str:
+    """Which WireGuard backend brings the tunnel up on this device.
+
+    "bridge": a Pi appliance, where the host bridge (root) owns the interface.
+    "local":  a server with in-container WireGuard support (wg tools present and
+              /dev/net/tun available), where the app runs wg-quick itself.
+    "":       neither, so remote access cannot be hosted here.
+    """
+    if settings.is_pi_appliance():
+        return "bridge"
+    if tunnel_local.wg_available():
+        return "local"
+    return ""
+
+
+def _tunnel_app_port(backend: str) -> int:
+    """The port the cloud's Caddy route should target for this backend: the
+    host-published 9284 on a Pi appliance, the app's own internal port on a
+    server running WireGuard in-container."""
+    return 9284 if backend == "bridge" else SERVER_APP_PORT
+
+
+async def _tunnel_rollback(base: str, backend: str) -> None:
     """Undo a half-finished enable: take the interface down and tell the cloud
-    to disable, both best effort so a rollback never raises."""
+    to disable, both best effort so a rollback never raises. The interface is
+    torn down through whichever backend owns it."""
     try:
-        async with bridge_client(timeout=30.0) as c:
-            await c.post(f"{_HOST_BRIDGE}/tunnel/down")
-    except httpx.HTTPError:
+        if backend == "local":
+            await run_in_threadpool(tunnel_local.down)
+        else:
+            async with bridge_client(timeout=30.0) as c:
+                await c.post(f"{_HOST_BRIDGE}/tunnel/down")
+    except (httpx.HTTPError, OSError):
         pass
     try:
         async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
@@ -1314,11 +1354,13 @@ async def _tunnel_rollback(base: str) -> None:
 async def tunnel_enable():
     """Turn on Forager remote access for this device.
 
-    Safety gates come first: the device must be connected to Forager, must
-    have a login password set, and must be a Pi appliance (the only shape with
-    the host bridge that owns the WireGuard endpoint). Then keygen on the
-    bridge, enable on the cloud, and bring the interface up; any failure rolls
-    back and returns a plain-language error.
+    Safety gates come first: the device must be connected to Forager and must
+    have a login password set. Then the WireGuard endpoint is set up through
+    whichever backend fits this device: the host bridge on a Pi appliance, or
+    in-container wg-quick on a server that has WireGuard support. A device with
+    neither gets an honest error. Every path keygens, enables on the cloud (with
+    the port the cloud's Caddy route should target), and brings the interface
+    up; any failure rolls back and returns a plain-language error.
     """
     if not settings.cloud_linked():
         return {"ok": False, "error":
@@ -1327,34 +1369,45 @@ async def tunnel_enable():
         return {"ok": False, "error":
                 "Set a password under Settings, Security first, so your kitchen "
                 "is not open to the internet when you turn on remote access."}
-    if not settings.is_pi_appliance():
-        return {"ok": False, "error":
-                "Remote access needs the Pi appliance for now."}
+    backend = _tunnel_backend()
+    if not backend:
+        return {"ok": False, "error": _TUNNEL_UNSUPPORTED_MSG}
 
     base = settings.cloud_base_url.rstrip("/")
     hostname_hint = device_hostname() or APP_NAME
 
-    # 1. Generate the device keypair on the bridge (private key stays there).
-    try:
-        async with bridge_client(timeout=15.0) as c:
-            kr = await c.post(f"{_HOST_BRIDGE}/tunnel/keygen")
-    except httpx.HTTPError:
-        return {"ok": False, "error":
-                "The device helper could not be reached to set up remote access."}
-    if kr.status_code != 200:
-        return {"ok": False, "error":
-                "The device could not set up remote access. Try again in a moment."}
-    public_key = (kr.json() or {}).get("public_key", "")
+    # 1. Generate the device keypair. The private key stays on the device: on
+    #    the bridge (root) for a Pi, in the container's data_dir for a server.
+    if backend == "bridge":
+        try:
+            async with bridge_client(timeout=15.0) as c:
+                kr = await c.post(f"{_HOST_BRIDGE}/tunnel/keygen")
+        except httpx.HTTPError:
+            return {"ok": False, "error":
+                    "The device helper could not be reached to set up remote access."}
+        if kr.status_code != 200:
+            return {"ok": False, "error":
+                    "The device could not set up remote access. Try again in a moment."}
+        public_key = (kr.json() or {}).get("public_key", "")
+    else:
+        try:
+            public_key = await run_in_threadpool(tunnel_local.keygen)
+        except Exception:
+            return {"ok": False, "error":
+                    "The server could not set up remote access. Try again in a moment."}
     if not public_key:
         return {"ok": False, "error":
                 "The device could not set up remote access. Try again in a moment."}
 
-    # 2. Ask the cloud to admit this device (needs a plan that covers it).
+    # 2. Ask the cloud to admit this device (needs a plan that covers it). The
+    #    app_port tells the cloud which port its Caddy route should reach: the
+    #    host-published 9284 on a Pi, this container's internal port on a server.
     try:
         async with httpx.AsyncClient(timeout=_CLOUD_TIMEOUT) as c:
             cr = await c.post(
                 f"{base}/v1/tunnel/enable", headers=_cloud_headers(),
-                json={"public_key": public_key, "hostname_hint": hostname_hint})
+                json={"public_key": public_key, "hostname_hint": hostname_hint,
+                      "app_port": _tunnel_app_port(backend)})
     except httpx.HTTPError as e:
         return {"ok": False, "error": _safe_error(
             f"Forager could not be reached ({e.__class__.__name__}). "
@@ -1373,24 +1426,33 @@ async def tunnel_enable():
     public_url = (data.get("public_url") or "").strip().rstrip("/")
 
     # 3. Bring the interface up with the parameters the cloud handed back.
-    up_body = {
-        "address": data.get("tunnel_ip", ""),
-        "server_public_key": data.get("server_public_key", ""),
-        "endpoint": data.get("server_endpoint", ""),
-        "allowed_ips": data.get("allowed_ips", ""),
-        "dns": data.get("dns", ""),
-        "keepalive": data.get("keepalive", 25),
-    }
-    try:
-        async with bridge_client(timeout=45.0) as c:
-            ur = await c.post(f"{_HOST_BRIDGE}/tunnel/up", json=up_body)
-    except httpx.HTTPError:
-        await _tunnel_rollback(base)
-        return {"ok": False, "error":
-                "The device could not finish turning on remote access. "
-                "It has been switched back off."}
-    if ur.status_code != 200:
-        await _tunnel_rollback(base)
+    if backend == "bridge":
+        up_body = {
+            "address": data.get("tunnel_ip", ""),
+            "server_public_key": data.get("server_public_key", ""),
+            "endpoint": data.get("server_endpoint", ""),
+            "allowed_ips": data.get("allowed_ips", ""),
+            "dns": data.get("dns", ""),
+            "keepalive": data.get("keepalive", 25),
+        }
+        try:
+            async with bridge_client(timeout=45.0) as c:
+                ur = await c.post(f"{_HOST_BRIDGE}/tunnel/up", json=up_body)
+            up_ok = ur.status_code == 200
+        except httpx.HTTPError:
+            up_ok = False
+    else:
+        try:
+            await run_in_threadpool(
+                tunnel_local.up,
+                data.get("tunnel_ip", ""), data.get("server_public_key", ""),
+                data.get("server_endpoint", ""), data.get("allowed_ips", ""),
+                data.get("keepalive", 25))
+            up_ok = True
+        except Exception:
+            up_ok = False
+    if not up_ok:
+        await _tunnel_rollback(base, backend)
         return {"ok": False, "error":
                 "The device could not finish turning on remote access. "
                 "It has been switched back off."}
@@ -1428,10 +1490,15 @@ async def tunnel_disable():
         except httpx.HTTPError:
             tunnel_public = ""
 
+    # Take the interface down through whichever backend owns it (bridge on a Pi,
+    # in-container wg-quick on a server), best effort.
     try:
-        async with bridge_client(timeout=30.0) as c:
-            await c.post(f"{_HOST_BRIDGE}/tunnel/down")
-    except httpx.HTTPError:
+        if _tunnel_backend() == "local":
+            await run_in_threadpool(tunnel_local.down)
+        else:
+            async with bridge_client(timeout=30.0) as c:
+                await c.post(f"{_HOST_BRIDGE}/tunnel/down")
+    except (httpx.HTTPError, OSError):
         pass
     if settings.cloud_linked():
         try:
@@ -1476,7 +1543,8 @@ async def tunnel_status():
                     out["last_handshake_seconds"] = body.get("last_handshake")
         except httpx.HTTPError:
             out["reachable"] = False
-    if settings.is_pi_appliance():
+    backend = _tunnel_backend()
+    if backend == "bridge":
         try:
             async with bridge_client(timeout=10.0) as c:
                 br = await c.get(f"{_HOST_BRIDGE}/tunnel/status")
@@ -1486,6 +1554,14 @@ async def tunnel_status():
                 if bbody.get("last_handshake_seconds") is not None:
                     out["last_handshake_seconds"] = bbody.get("last_handshake_seconds")
         except httpx.HTTPError:
+            pass
+    elif backend == "local":
+        try:
+            local = await run_in_threadpool(tunnel_local.status)
+            out["up"] = bool(local.get("up"))
+            if local.get("last_handshake_seconds") is not None:
+                out["last_handshake_seconds"] = local.get("last_handshake_seconds")
+        except OSError:
             pass
     return out
 

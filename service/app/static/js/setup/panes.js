@@ -312,8 +312,11 @@ async function _loadCloudStatus() {
 }
 
 // Forager remote access (FoodAssistant-uczr). Fill the card, then let the
-// user turn the WireGuard hub tunnel on or off. The card only exists on a Pi
-// appliance, so every function is a no-op when its section is absent.
+// user turn the WireGuard hub tunnel on or off. It works on a Pi appliance
+// (the host bridge owns the interface) and on a server with WireGuard support
+// (the app runs the tunnel in its own container); a server without that
+// support gets an honest error from the enable route. Every function is a
+// no-op when its section is absent.
 async function _loadTunnelStatus() {
   const section = document.getElementById('tunnel-section');
   if (!section) return;

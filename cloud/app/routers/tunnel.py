@@ -44,6 +44,12 @@ def _public_url(subdomain: str) -> str:
 class EnableRequest(BaseModel):
     public_key: str
     hostname_hint: str = ""
+    # The port the kitchen's app listens on behind the tunnel. A Pi appliance
+    # publishes on the host at 9284 (the default); a plain server runs
+    # WireGuard inside the app container and is reached on its internal 8000.
+    # Older installs omit it, so it defaults to 9284 and existing peers keep
+    # working unchanged.
+    app_port: int = 9284
 
 
 def _entitled(db: Session, account_id: int) -> bool:
@@ -97,11 +103,15 @@ def enable_tunnel(payload: EnableRequest,
     if not public_key:
         raise HTTPException(400, detail="A WireGuard public key is required")
 
+    app_port = int(payload.app_port or 9284)
+
     peer = db.query(TunnelPeer).filter_by(instance_id=inst.id).first()
     if peer:
         # This kitchen already has a tunnel: keep its IP and subdomain stable,
-        # just refresh the public key (the app may have rotated its keypair).
+        # just refresh the public key (the app may have rotated its keypair)
+        # and the app port (a device can move between Pi and server shapes).
         peer.public_key = public_key
+        peer.app_port = app_port
         tunnel_ip, subdomain = peer.tunnel_ip, peer.subdomain
     else:
         existing_ips = [ip for (ip,) in db.query(TunnelPeer.tunnel_ip).all()]
@@ -112,7 +122,8 @@ def enable_tunnel(payload: EnableRequest,
 
     # Program the VPS first; only persist once the peer is really in place.
     try:
-        tunnel_client.add_peer(public_key, tunnel_ip, _dns_name(subdomain))
+        tunnel_client.add_peer(public_key, tunnel_ip, _dns_name(subdomain),
+                               app_port=app_port)
     except tunnel_client.TunnelAgentError as exc:
         raise HTTPException(503, detail={
             "error": "tunnel_agent_unavailable",
@@ -123,7 +134,8 @@ def enable_tunnel(payload: EnableRequest,
     if not peer:
         peer = TunnelPeer(instance_id=inst.id, account_id=inst.account_id,
                           public_key=public_key, tunnel_ip=tunnel_ip,
-                          subdomain=subdomain, created_at=utc_now_iso())
+                          app_port=app_port, subdomain=subdomain,
+                          created_at=utc_now_iso())
         db.add(peer)
     inst.public_url = _public_url(subdomain)
     db.commit()

@@ -187,6 +187,12 @@ class TunnelPeer(Base):
     public_key: Mapped[str] = mapped_column(String(64), default="")
     # The stable /32 assigned inside 10.99.0.0/16, e.g. "10.99.4.7".
     tunnel_ip: Mapped[str] = mapped_column(String(40), index=True)
+    # The port the kitchen's app listens on behind the tunnel. A Pi appliance
+    # publishes on the host at 9284 (the default); a plain server runs
+    # WireGuard inside the app container and is reached on its internal 8000.
+    # Caddy reverse-proxies to tunnel_ip:app_port, so the port rides along to
+    # the VPS agent. Existing peers default to 9284.
+    app_port: Mapped[int] = mapped_column(Integer, default=9284)
     # The public subdomain, sanitized from the hostname hint and made unique,
     # e.g. "kitchen-pi" for kitchen-pi.forager.pantryraider.app.
     subdomain: Mapped[str] = mapped_column(String(63), unique=True, index=True)

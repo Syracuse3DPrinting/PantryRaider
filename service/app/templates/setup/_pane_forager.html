@@ -182,7 +182,9 @@
 
             {# Forager sub-controls (WireGuard hub tunnel). No token: it uses the
                account link. Turn on/off is gated server-side (linked, login
-               password set, Pi appliance). _loadTunnelStatus fills this in. #}
+               password set, and the device can host a tunnel: a Pi appliance,
+               or a server with WireGuard support). _loadTunnelStatus fills this
+               in. #}
             <div id="tunnel-section" style="display:none">
               <div id="tunnel-status" class="small text-secondary mb-2">Checking remote access…</div>
               <div id="tunnel-controls" class="d-none">

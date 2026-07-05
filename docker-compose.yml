@@ -13,6 +13,16 @@ services:
       - ./service/data:/app/data
     ports:
       - "9284:8000"
+    # These enable Forager remote access (a WireGuard hub tunnel run inside this
+    # container) and are otherwise inert: NET_ADMIN plus /dev/net/tun let
+    # wg-quick create the interface, and the src_valid_mark sysctl keeps
+    # wg-quick happy about the fwmark it sets for the split-tunnel route.
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - "/dev/net/tun:/dev/net/tun"
+    sysctls:
+      - net.ipv4.conf.all.src_valid_mark=1
     restart: unless-stopped
     depends_on:
       grocy:
