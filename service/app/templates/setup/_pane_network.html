@@ -1,0 +1,116 @@
+{% from "setup/_macros.html" import info, secret_input, extra_keys, ai_model_field, satellite_keys, upstream_cards, recipe_connection_cards, ds_toggle with context %}
+<!-- Network: this device's Wi-Fi and Ethernet, its network name, and the
+             name it uses when it links you to Grocy and Mealie. Wi-Fi lives
+             here, on its own page, so it is easy to find. -->
+        <div class="tab-pane fade" id="pane-network">
+          <p class="pane-intro">This device's connection: Wi-Fi and Ethernet, its network name, and the attached hardware it can see.</p>
+
+          {% if is_pi %}
+          {# Pi system warnings (FoodAssistant-y06w): filled by
+             loadSystemWarnings() in setup/hardware.js from the host bridge's
+             continuous monitor (undervoltage, throttling, heat, storage). #}
+          <div id="system-warnings-banner" class="alert alert-warning alert-dismissible d-none" role="alert">
+            <div class="fw-semibold mb-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>This device needs attention</div>
+            <ul class="mb-1 ps-4" id="system-warnings-list"></ul>
+            <div class="small" id="system-warnings-help"></div>
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Dismiss"></button>
+          </div>
+
+          <div class="section-card mb-3">
+            <div class="section-title"><i class="bi bi-wifi text-info"></i> Wi-Fi</div>
+            <div id="wifi-status-row" class="mb-3">
+              <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Checking connection...</span>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Network name (SSID)</label>
+              <div class="input-group">
+                <input type="text" class="form-control" id="wifi_ssid" placeholder="Your Wi-Fi network name" autocomplete="off">
+                <button class="btn btn-outline-secondary" type="button" onclick="scanWifi()" id="wifi-scan-btn" title="Scan for networks">
+                  <i class="bi bi-search me-1"></i>Scan
+                </button>
+              </div>
+              <div id="wifi-scan-results" class="mt-2"></div>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Password</label>
+              <div class="input-group">
+                <input type="password" class="form-control" id="wifi_password" placeholder="Leave blank for open networks" autocomplete="new-password">
+                <button class="btn btn-outline-secondary" type="button" onclick="toggleVis('wifi_password')" title="Show/hide">
+                  <i class="bi bi-eye"></i>
+                </button>
+              </div>
+            </div>
+            <button class="btn btn-outline-warning btn-sm" onclick="changeWifi()">
+              <i class="bi bi-wifi me-1"></i>Switch Network{{ info('The device briefly disconnects while it switches networks. If you are on Wi-Fi you may need to reconnect on the new network to reach the web UI. A wired Ethernet connection avoids this.') }}
+            </button>
+            <div class="test-result mt-2" id="wifi-result"></div>
+          </div>
+
+          <div class="section-card mb-3">
+            <div class="section-title"><i class="bi bi-pc-display text-info"></i> This device's name on the network</div>
+            <div id="hostname-status-row" class="mb-3">
+              <span class="text-secondary small">Checking...</span>
+            </div>
+            <div class="mb-3">
+              <label class="form-label">Network hostname{{ info('The real hostname this device broadcasts. After you change it, the device is reachable at <hostname>.local. Lowercase letters, digits, and hyphens only. Takes effect immediately.') }}</label>
+              <input type="text" class="form-control" id="new_hostname" placeholder="foodassistant" autocomplete="off" style="max-width:320px">
+              <div class="form-text">Reachable at <code>&lt;hostname&gt;.local</code>.</div>
+            </div>
+            <button class="btn btn-outline-info btn-sm" onclick="changeHostname()">
+              <i class="bi bi-check-lg me-1"></i>Update Hostname
+            </button>
+            <div class="test-result mt-2" id="hostname-result"></div>
+          </div>
+          {% endif %}
+
+          <div class="section-card{% if is_pi %} mb-3{% endif %}">
+            <div class="section-title"><i class="bi bi-link-45deg text-info"></i> Name used in on-screen links</div>
+            <div class="mb-3">
+              <label class="form-label">Link name <span class="text-secondary small">(optional)</span>{{ info('Only shapes the <hostname>.local links the app shows you for Grocy and Mealie on this device. It does not rename the device on the network. Empty means auto-detect. Set it when several Pantry Raider devices share one network.') }}</label>
+              <input type="text" class="form-control" id="device_hostname" name="device_hostname"
+                     placeholder="kitchen-pi" style="max-width:320px"
+                     value="{{ s.device_hostname }}">
+              <div class="form-text">Used to build the <span class="text-info">&lt;hostname&gt;.local</span> links the app shows. This is display-only and does not change the device's network name{% if is_pi %} (that is the card above){% endif %}.</div>
+            </div>
+            <button type="button" class="btn btn-outline-info btn-sm" onclick="saveDeviceHostname(this)">
+              <i class="bi bi-check-lg me-1"></i>Save link name
+            </button>
+            <div class="test-result mt-2" id="device-hostname-result"></div>
+          </div>
+
+          {% if is_pi %}
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-hdd-stack text-info"></i> Attached hardware</div>
+            <div class="form-text mb-2">Live detection from the appliance host. Plug hardware in, then use Refresh.</div>
+            <div class="d-flex flex-column gap-2 mb-2" style="max-width:480px">
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-display me-1"></i>Display</span>
+                <span id="hwdetect-display"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+              <div class="d-flex align-items-center justify-content-between">
+                <span><i class="bi bi-grid-3x3-gap me-1"></i>Stream Deck</span>
+                <span id="hwdetect-streamdeck"><span class="badge bg-secondary">Checking...</span></span>
+              </div>
+            </div>
+            {# Detected-but-not-set-up hints: shown only when the hardware is
+               attached and the matching service was never provisioned, with a
+               one-click enable (FoodAssistant-92e.3). #}
+            <div id="hwdetect-kiosk-hint" class="d-none mb-2">
+              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Display detected, but the kiosk is not set up.</div>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('kiosk', this, 'hwdetect-enable-result')">
+                <i class="bi bi-display me-1"></i>Enable kiosk
+              </button>
+            </div>
+            <div id="hwdetect-streamdeck-hint" class="d-none mb-2">
+              <div class="text-warning small mb-1"><i class="bi bi-exclamation-circle me-1"></i>Stream Deck detected, but its service is not set up.</div>
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="_installHw('streamdeck', this, 'hwdetect-enable-result')">
+                <i class="bi bi-grid-3x3-gap me-1"></i>Enable Stream Deck
+              </button>
+            </div>
+            <div class="test-result mb-2" id="hwdetect-enable-result"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm" onclick="loadHardwareDetect()">
+              <i class="bi bi-arrow-repeat me-1"></i>Refresh
+            </button>
+          </div>
+          {% endif %}
+        </div>

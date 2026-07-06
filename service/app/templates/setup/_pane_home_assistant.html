@@ -1,0 +1,128 @@
+{% from "setup/_macros.html" import info, secret_input, extra_keys, ai_model_field, satellite_keys, upstream_cards, recipe_connection_cards, ds_toggle with context %}
+<!-- Home Assistant: the connection to a Home Assistant server, plus the
+             on-screen notifications and camera pop-ups it can push. On its own
+             page so the connection is easy to find. Cameras live under
+             Connections, Cameras. -->
+        <div class="tab-pane fade" id="pane-home-assistant">
+          <p class="pane-intro">Connect a Home Assistant server to power the Stream Deck Home Assistant keys, camera discovery, and on-screen notifications. Home Assistant is optional: everything else works without it.</p>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-house-gear text-success"></i> Home Assistant Connection
+              {% if s.streamdeck_ha_base_url and has.streamdeck_ha_token %}
+              <span class="badge bg-success ms-2" id="ha-conn-status"><i class="bi bi-check-circle me-1"></i>Configured</span>
+              {% else %}
+              <span class="badge bg-secondary ms-2" id="ha-conn-status">Not configured</span>
+              {% endif %}
+            </div>
+            <div class="row g-2 mb-2">
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="streamdeck_ha_base_url">Base URL{{ info('Your Home Assistant address, for example http://homeassistant.local:8123.') }}</label>
+                <input type="text" class="form-control form-control-sm" id="streamdeck_ha_base_url"
+                       placeholder="http://homeassistant.local:8123" value="{{ s.streamdeck_ha_base_url or '' }}"
+                       {% if features.satellite %}readonly{% endif %}>
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small mb-1" for="streamdeck_ha_token">Long-lived access token{{ info('Create a token in Home Assistant under your profile, Security, Long-lived access tokens, then paste it here.') }}</label>
+                <input type="password" class="form-control form-control-sm" id="streamdeck_ha_token" autocomplete="off"
+                       {% if features.satellite %}disabled{% endif %}
+                       placeholder="{% if has.streamdeck_ha_token %}(unchanged){% else %}(token){% endif %}">
+              </div>
+            </div>
+            {% if features.satellite %}
+            <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Home Assistant is configured on the main server and syncs here automatically. Change it there.</div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="_haTestConnection(this)">
+              <i class="bi bi-plug me-1"></i>Test connection
+            </button>
+            <div class="test-result mt-2" id="ha-result"></div>
+            {% else %}
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneHomeAssistant(this)">
+                <i class="bi bi-check-lg me-1"></i>Save Home Assistant
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_haTestConnection(this)">
+                <i class="bi bi-plug me-1"></i>Test connection
+              </button>
+            </div>
+            <div class="test-result mt-2" id="ha-result"></div>
+            {% endif %}
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-bell text-success"></i> On-screen notifications &amp; camera pop-ups</div>
+            <p class="text-secondary small">Show messages and camera pop-ups pushed from Home Assistant on this device's screen
+              (the kiosk and any open browser tab). A Home Assistant automation calls Pantry Raider with a <code>rest_command</code>,
+              for example to pop up the doorbell camera when a person is detected.</p>
+            <div class="form-check form-switch mb-2">
+              <input class="form-check-input" type="checkbox" role="switch" id="ha_events_enabled"
+                     {% if s.ha_events_enabled %}checked{% endif %} {% if features.satellite %}disabled{% endif %}>
+              <label class="form-check-label" for="ha_events_enabled">Show Home Assistant notifications and camera pop-ups on screen{% if not features.satellite %} (default for all devices){% endif %}</label>
+            </div>
+            {# Per-device override (FoodAssistant-vcuz): each device (the server,
+               each Pi Remote) decides for itself whether to show events, since
+               the server may be headless and there can be several displays. #}
+            <div class="form-check form-switch mb-2">
+              <select class="form-select form-select-sm" id="ha_events_device" style="max-width:320px" onchange="_haSetDeviceEvents(this.value)">
+                <option value="default">This device: follow the default above</option>
+                <option value="1">This device: always show</option>
+                <option value="0">This device: never show</option>
+              </select>
+              <div class="form-text">A per-device choice, stored on this device only. Use it on a headless server (never show) or to pick which Pi Remote displays pop-ups.</div>
+            </div>
+            <div class="row g-2 mb-2" style="max-width:360px">
+              <div class="col-auto">
+                <label class="form-label small mb-1" for="ha_camera_popup_seconds">Camera pop-up seconds</label>
+                <input type="number" min="3" max="300" class="form-control form-control-sm" style="max-width:120px"
+                       id="ha_camera_popup_seconds" value="{{ s.ha_camera_popup_seconds }}" {% if features.satellite %}disabled{% endif %}>
+              </div>
+            </div>
+            {% if features.satellite %}
+            <div class="form-text"><i class="bi bi-hdd-network me-1"></i>Configured on the main server and synced here. Point your Home Assistant automation at <strong>this device</strong> (the one with the screen).</div>
+            {% else %}
+            <div class="d-flex gap-2">
+              <button type="button" class="btn btn-outline-info btn-sm" onclick="savePaneNotifications(this)">
+                <i class="bi bi-check-lg me-1"></i>Save notifications
+              </button>
+              <button type="button" class="btn btn-outline-secondary btn-sm" onclick="_haSendTestEvent(this)">
+                <i class="bi bi-send me-1"></i>Send test notification
+              </button>
+            </div>
+            <div class="test-result mt-2" id="ha-events-result"></div>
+            {% endif %}
+            <details class="mt-3" id="ha-setup-details">
+              <summary class="small text-info" style="cursor:pointer">Home Assistant setup (rest_command + automation)</summary>
+              <p class="text-secondary small mt-2 mb-1">This device's URL is filled in below. Paste an API key from
+                <a href="#" onclick="document.querySelector('[data-bs-target=&quot;#pane-security&quot;]')?.click();return false;">Settings &gt; Security</a>
+                where the placeholder is, then add this to your Home Assistant <code>configuration.yaml</code>:
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="_haCopySnippet('ha-snippet-rest', this)"><i class="bi bi-clipboard"></i> Copy</button></p>
+<pre class="small bg-body-tertiary border rounded p-2" id="ha-snippet-rest" style="white-space:pre-wrap">rest_command:
+  foodassistant_notify:
+    url: "http://THIS-DEVICE:9284/events/notify"
+    method: POST
+    headers:
+      X-API-Key: "YOUR_FOODASSISTANT_API_KEY"
+    content_type: "application/json"
+    payload: '{"title":"{{ title }}","message":"{{ message }}","level":"{{ level }}"}'
+  foodassistant_camera_popup:
+    url: "http://THIS-DEVICE:9284/events/camera-popup"
+    method: POST
+    headers:
+      X-API-Key: "YOUR_FOODASSISTANT_API_KEY"
+    content_type: "application/json"
+    payload: '{"camera":"{{ camera }}","seconds":{{ seconds }}}'</pre>
+              <p class="text-secondary small mt-2 mb-1">Then an automation, for example pop up the door camera on a person:
+                <button type="button" class="btn btn-outline-secondary btn-sm ms-1" onclick="_haCopySnippet('ha-snippet-auto', this)"><i class="bi bi-clipboard"></i> Copy</button></p>
+<pre class="small bg-body-tertiary border rounded p-2" id="ha-snippet-auto" style="white-space:pre-wrap">automation:
+  - alias: "Person at door -> pop up camera"
+    trigger:
+      - platform: state
+        entity_id: binary_sensor.front_door_person
+        to: "on"
+    action:
+      - service: rest_command.foodassistant_camera_popup
+        data:
+          camera: "Front Door"
+          seconds: 20</pre>
+              <p class="text-secondary small mb-0">The <code>camera</code> name must match one configured on the Cameras page. Notifications take <code>message</code>, optional <code>title</code>, and <code>level</code> (info/success/warning/error).</p>
+            </details>
+          </div>
+        </div>

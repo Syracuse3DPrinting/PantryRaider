@@ -1,0 +1,35 @@
+{% from "setup/_macros.html" import info, secret_input, extra_keys, ai_model_field, satellite_keys, upstream_cards, recipe_connection_cards, ds_toggle with context %}
+<!-- Fleet & Remote Access: the satellite fleet registry (main install) or the
+             main-server link (satellite). This device's own Wi-Fi, hostname, and
+             attached hardware moved to This Device, Network. -->
+        <div class="tab-pane fade" id="pane-devices">
+          {% if features.satellite %}
+          <p class="pane-intro">This device is a satellite: it runs the full app but pulls its backend config (Grocy, Mealie, AI keys, and expiry defaults) from your main Pantry Raider server.</p>
+          {{ upstream_cards() }}
+          {% else %}
+          <p class="pane-intro">Any Pi Remote satellites that pull their config from this server. Each satellite checks in on every config sync, so the list updates itself.</p>
+          <div class="section-card mb-3">
+            <div class="section-title d-flex align-items-center">
+              <i class="bi bi-hdd-stack text-info"></i> Known Devices
+              <button class="btn btn-outline-secondary btn-sm ms-auto" onclick="loadDevices()" title="Refresh">
+                <i class="bi bi-arrow-clockwise"></i>
+              </button>
+            </div>
+            <div id="devices-list">
+              <span class="text-secondary small"><span class="spinner-border spinner-border-sm me-2"></span>Loading...</span>
+            </div>
+          </div>
+
+          <div class="section-card">
+            <div class="section-title"><i class="bi bi-search text-info"></i> Find Devices on the LAN</div>
+            <p class="text-secondary small">Scan your local network for Pantry Raider instances that have not checked in yet. Leave the range blank to scan this server's own subnet.</p>
+            <div class="input-group mb-2" style="max-width:420px">
+              <input type="text" class="form-control" id="scan_cidr" placeholder="192.168.1.0/24 (optional)" autocomplete="off">
+              <button class="btn btn-outline-info" type="button" onclick="scanLan()" id="scan-lan-btn">
+                <i class="bi bi-search me-1"></i>Scan LAN
+              </button>
+            </div>
+            <div class="test-result" id="scan-result"></div>
+          </div>
+          {% endif %}
+        </div>
