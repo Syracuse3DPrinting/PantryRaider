@@ -28,7 +28,7 @@ anthropic>=0.45.0            # Anthropic Claude vision/enrichment provider
 # OpenAI is accessed via httpx directly - no SDK needed
 
 # Image resizing before sending to AI providers (required for photo analysis)
-Pillow==10.4.0
+Pillow==12.3.0
 
 # PDF text extraction for the "Import from PDF" recipe upload. Pure Python (no
 # poppler or other system deps); the recipe's text is handed to the same LLM
